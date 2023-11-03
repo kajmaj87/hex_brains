@@ -1,17 +1,12 @@
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Instant;
 use bevy_ecs::prelude::*;
+use rand::Rng;
 
 #[derive(Component)]
 pub struct Position {
-    pub x: f32,
-    pub y: f32,
-}
-
-#[derive(Component)]
-pub struct Velocity {
-    x: f32,
-    y: f32,
+    pub x: i32,
+    pub y: i32,
 }
 
 pub struct Simulation {
@@ -26,6 +21,13 @@ pub struct Simulation {
 #[derive(Debug, Clone)]
 pub enum EngineEvent {
     SimulationFinished { steps: u32, name: String, duration: u128 },
+    FrameDrawn { updates_left: f32, updates_done: u32 },
+}
+
+#[derive(Debug, Resource)]
+pub struct SimulationConfig {
+    pub rows: u32,
+    pub columns: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -44,14 +46,18 @@ pub struct EngineState {
     pub running: bool,
     pub frames_left: f32,
     pub frames: u32,
+    pub updates_done: u32,
 }
 
 // This system moves each entity with a Position and Velocity component
-fn movement(mut query: Query<(&mut Position, &Velocity)>) {
+fn movement(mut query: Query<&mut Position>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
-    for (mut position, velocity) in &mut query {
-        position.x += velocity.x;
-        position.y += velocity.y;
+    let mut rng = rand::thread_rng();
+    let rows = config.rows as i32;
+    let columns = config.columns as i32;
+    for mut position in &mut query {
+        position.x = (position.x + rng.gen_range(-1..=1) + columns) % columns;
+        position.y = (position.y + rng.gen_range(-1..=1) + rows) % rows;
     }
 }
 
@@ -60,6 +66,7 @@ fn turn_counter(mut engine_state: ResMut<EngineState>) {
     if engine_state.speed_limit.is_some() {
         engine_state.frames_left -= 1.0;
     }
+    engine_state.updates_done += 1;
     engine_state.frames += 1;
 }
 
@@ -70,10 +77,10 @@ fn should_simulate_frame(engine_state: Res<EngineState>) -> bool {
 impl Simulation {
     pub fn new(name: String, engine_events: Sender<EngineEvent>, engine_commands: Option<Receiver<EngineCommand>>) -> Self {
         let mut world = World::new();
-        world.spawn((
-            Position { x: 0.0, y: 0.0 },
-            Velocity { x: 1.0, y: 0.0 },
-        ));
+        for i in 0..10000 {
+            world.spawn(Position { x: 50, y: 50 });
+        }
+        world.insert_resource(SimulationConfig { rows: 100, columns: 100 });
         let mut schedule = Schedule::default();
         schedule.add_systems((movement, turn_counter).run_if(should_simulate_frame));
         Simulation { schedule, world, name, engine_events, engine_commands }
@@ -85,7 +92,7 @@ impl Simulation {
     }
 
     pub fn is_done(&mut self) -> bool {
-        self.world.query::<&Position>().iter(&self.world).next().unwrap().x > 10_000.0
+        self.world.query::<&Position>().iter(&self.world).next().unwrap().x > 10_000
     }
 
     pub fn run(&mut self) -> EngineEvent {
@@ -117,6 +124,8 @@ impl Simulation {
             let mut engine_state = self.world.get_resource_mut::<EngineState>().unwrap();
             if engine_state.repaint_needed && engine_state.running {
                 engine_state.frames_left += engine_state.speed_limit.unwrap_or(0.00);
+                self.engine_events.send(EngineEvent::FrameDrawn { updates_left: engine_state.frames_left, updates_done: engine_state.updates_done }).unwrap();
+                engine_state.updates_done = 0;
             }
             engine_state.repaint_needed = false;
         }

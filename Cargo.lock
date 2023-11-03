@@ -1538,6 +1538,7 @@ version = "0.1.0"
 dependencies = [
  "bevy_ecs",
  "puffin 0.17.0",
+ "rand",
  "rayon",
 ]
 

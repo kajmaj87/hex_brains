@@ -1,9 +1,14 @@
+use std::iter::once;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
-use bevy_ecs::prelude::{IntoSystemConfigs, Query, Res, Resource};
-use eframe::egui;
-use egui::{Key, ScrollArea};
+use bevy_ecs::prelude::{IntoSystemConfigs, Query, Res, ResMut, Resource};
+use eframe::{egui, emath};
+use eframe::emath::{Pos2, Rect, Vec2};
+use eframe::epaint::Color32;
+use egui::{Frame, Key, Response, ScrollArea, Sense, Shape, Stroke};
+use egui::epaint::CircleShape;
+use egui::Shape::Circle;
 use hex_brains_engine::simulation::{Position, Simulation, EngineEvent, EngineCommand, EngineState};
 use hex_brains_engine::simulation_manager::simulate_batch;
 
@@ -17,13 +22,21 @@ fn main() {
         let egui_context = EguiEcsContext {
             context,
         };
+        let config = Config {
+            rows: 100,
+            columns: 100,
+            bg_color: Stroke::new(1.0, Color32::LIGHT_GREEN),
+            snake_color: Stroke::new(1.0, Color32::RED),
+        };
         simulation.insert_resource(egui_context);
+        simulation.insert_resource(config);
         simulation.insert_resource(EngineState {
             repaint_needed: false,
             speed_limit: Some(0.1),
             running: true,
             frames_left: 0.0,
-            frames: 0
+            frames: 0,
+            updates_done: 0,
         });
         simulation.add_system(draw_simulation.run_if(should_draw_simulation));
         thread::spawn(move || {
@@ -33,13 +46,64 @@ fn main() {
     }));
 }
 
-fn draw_simulation(context: Res<EguiEcsContext>, positions: Query<&Position>) {
+fn draw_simulation(context: Res<EguiEcsContext>, mut config: ResMut<Config>, positions: Query<&Position>) {
     egui::Window::new("Main Simulation").show(&context.context, |ui| {
-        ui.heading("Positions: ");
-        positions.for_each(|position| {
-            ui.label(format!("Position: ({}, {})", position.x, position.y));
+        ui.add(egui::Slider::new(&mut config.rows, 1..=100));
+        ui.add(egui::Slider::new(&mut config.columns, 1..=100));
+        egui::stroke_ui(ui, &mut config.bg_color, "Background Color");
+        egui::stroke_ui(ui, &mut config.snake_color, "Snake Color");
+        Frame::canvas(ui.style()).show(ui, |ui| {
+            let (mut response, painter) =
+                ui.allocate_painter(ui.available_size_before_wrap(), Sense::drag());
+
+            let to_screen = emath::RectTransform::from_to(
+                Rect::from_min_size(Pos2::ZERO, response.rect.square_proportions()),
+                response.rect,
+            );
+            let from_screen = to_screen.inverse();
+
+            let snakes: Vec<Shape> = positions.iter().map(|position| {
+                let p = Pos2 { x: position.x as f32, y: position.y as f32 };
+                transform_to_circle(&p, &to_screen, &response, &config, config.snake_color.color)
+            }).collect();
+
+            let positions: Vec<Pos2> = (0..config.rows)
+                .flat_map(|x| (0..config.columns).map(move |y| Pos2 { x: x as f32, y: y as f32 }))
+                .collect();
+
+            let mut ground: Vec<Shape> = positions.iter().map(|position| {
+                transform_to_circle(position, &to_screen, &response, &config, config.bg_color.color)
+            }).collect();
+            ground.extend(snakes);
+            painter.extend(ground);
+
+            response
         });
     });
+}
+
+fn transform_to_circle(game_position: &Pos2, to_screen: &emath::RectTransform, response: &Response, config: &Config, color: Color32) -> Shape {
+    // Radius is based on window's dimensions and the desired number of circles.
+    let radius = 1.0 / (2.0 * config.rows as f32);
+
+    // Offset every second row
+    let offset = if game_position.y as i32 % 2 == 0 { radius } else { 0.0 };
+
+    // Normalize the game position
+    let normalized_position = Pos2 {
+        x: game_position.x / config.columns as f32 + offset + radius,
+        y: game_position.y / config.rows as f32 + radius,
+    };
+
+    // Convert normalized position to screen position
+    let screen_position = to_screen * normalized_position;
+
+    Circle(CircleShape {
+        center: screen_position,
+        radius: radius * response.rect.height(), // Using the normalized radius for the screen
+        fill: color,
+        stroke: Default::default(),
+    })
 }
 
 fn should_draw_simulation(engine_state: Res<EngineState>) -> bool {
@@ -49,6 +113,14 @@ fn should_draw_simulation(engine_state: Res<EngineState>) -> bool {
 #[derive(Resource)]
 struct EguiEcsContext {
     context: egui::Context,
+}
+
+#[derive(Resource)]
+struct Config {
+    rows: usize,
+    columns: usize,
+    bg_color: Stroke,
+    snake_color: Stroke,
 }
 
 struct MyEguiApp {
@@ -88,6 +160,9 @@ impl eframe::App for MyEguiApp {
                 EngineEvent::SimulationFinished { steps, name, duration } => {
                     self.text.push_str(&format!("\nSimulation {} finished in {} steps in {} ms", name, steps, duration));
                 }
+                EngineEvent::FrameDrawn { updates_left, updates_done } => {
+                    self.text = format!("{:.1} updates left, {} updates done", updates_left, updates_done);
+                }
             }
         });
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -105,7 +180,8 @@ impl eframe::App for MyEguiApp {
                             speed_limit: None,
                             running: true,
                             frames_left: 0.0,
-                            frames: 0
+                            frames: 0,
+                            updates_done: 0,
                         });
                         result
                     })
@@ -132,13 +208,6 @@ impl eframe::App for MyEguiApp {
             }
             if ctx.input(|i| i.key_pressed(Key::Space)) {
                 self.engine_commands_sender.send(EngineCommand::FlipRunningState).unwrap();
-            }
-            if ctx.input(|i| i.key_down(Key::A)) {
-                self.text.push_str("\nHeld");
-                ui.ctx().request_repaint(); // make sure we note the holding.
-            }
-            if ctx.input(|i| i.key_released(Key::A)) {
-                self.text.push_str("\nReleased");
             }
         });
         ctx.request_repaint();
