@@ -1,15 +1,14 @@
-use std::iter::once;
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
-use bevy_ecs::prelude::{IntoSystemConfigs, Query, Res, ResMut, Resource};
+use bevy_ecs::prelude::{IntoSystemConfigs, Query, Res, ResMut, Resource, With, Without};
 use eframe::{egui, emath};
 use eframe::emath::{Pos2, Rect, Vec2};
 use eframe::epaint::Color32;
 use egui::{Frame, Key, Response, ScrollArea, Sense, Shape, Stroke};
 use egui::epaint::CircleShape;
 use egui::Shape::Circle;
-use hex_brains_engine::simulation::{Position, Simulation, EngineEvent, EngineCommand, EngineState};
+use hex_brains_engine::core::{Food, Position};
+use hex_brains_engine::simulation::{Simulation, EngineEvent, EngineCommand, EngineState};
 use hex_brains_engine::simulation_manager::simulate_batch;
 
 fn main() {
@@ -18,15 +17,15 @@ fn main() {
     let (engine_events_sender, engine_events_receiver) = std::sync::mpsc::channel();
     eframe::run_native("My egui App", native_options, Box::new(|cc| {
         let context = cc.egui_ctx.clone();
-        let mut simulation = Simulation::new("Main".to_string(), engine_events_sender.clone(), Some(engine_commands_receiver));
-        let egui_context = EguiEcsContext {
-            context,
-        };
         let config = Config {
             rows: 100,
             columns: 100,
             bg_color: Stroke::new(1.0, Color32::LIGHT_GREEN),
             snake_color: Stroke::new(1.0, Color32::RED),
+        };
+        let mut simulation = Simulation::new("Main".to_string(), engine_events_sender.clone(), Some(engine_commands_receiver), config.rows, config.columns);
+        let egui_context = EguiEcsContext {
+            context,
         };
         simulation.insert_resource(egui_context);
         simulation.insert_resource(config);
@@ -46,36 +45,46 @@ fn main() {
     }));
 }
 
-fn draw_simulation(context: Res<EguiEcsContext>, mut config: ResMut<Config>, positions: Query<&Position>) {
+fn draw_simulation(context: Res<EguiEcsContext>, mut config: ResMut<Config>, snakes: Query<&Position, Without<Food>>, food: Query<&Position, With<Food>>) {
+    puffin::profile_function!();
     egui::Window::new("Main Simulation").show(&context.context, |ui| {
-        ui.add(egui::Slider::new(&mut config.rows, 1..=100));
-        ui.add(egui::Slider::new(&mut config.columns, 1..=100));
         egui::stroke_ui(ui, &mut config.bg_color, "Background Color");
         egui::stroke_ui(ui, &mut config.snake_color, "Snake Color");
         Frame::canvas(ui.style()).show(ui, |ui| {
-            let (mut response, painter) =
+            let (mut response, _) =
                 ui.allocate_painter(ui.available_size_before_wrap(), Sense::drag());
 
             let to_screen = emath::RectTransform::from_to(
                 Rect::from_min_size(Pos2::ZERO, response.rect.square_proportions()),
                 response.rect,
             );
-            let from_screen = to_screen.inverse();
+            // let from_screen = to_screen.inverse();
 
-            let snakes: Vec<Shape> = positions.iter().map(|position| {
+            let snakes: Vec<Shape> = snakes.iter().map(|position| {
                 let p = Pos2 { x: position.x as f32, y: position.y as f32 };
                 transform_to_circle(&p, &to_screen, &response, &config, config.snake_color.color)
             }).collect();
+            let food: Vec<Shape> = food.iter().map(|position| {
+                let p = Pos2 { x: position.x as f32, y: position.y as f32 };
+                transform_to_circle(&p, &to_screen, &response, &config, Color32::YELLOW)
+            }).collect();
 
-            let positions: Vec<Pos2> = (0..config.rows)
-                .flat_map(|x| (0..config.columns).map(move |y| Pos2 { x: x as f32, y: y as f32 }))
+            let positions: Vec<Pos2> = (0..config.columns)
+                .flat_map(|x| (0..config.rows).map(move |y| Pos2 { x: x as f32, y: y as f32 }))
                 .collect();
 
             let mut ground: Vec<Shape> = positions.iter().map(|position| {
                 transform_to_circle(position, &to_screen, &response, &config, config.bg_color.color)
             }).collect();
+            ground.extend(food);
             ground.extend(snakes);
+            // println!("Drawing {} shapes", ground.len());
+            response.mark_changed();
+            let painter = ui.painter();
             painter.extend(ground);
+            // ground.iter().for_each(|shape| {
+            //     painter.add(shape.clone());
+            // });
 
             response
         });
@@ -174,7 +183,7 @@ impl eframe::App for MyEguiApp {
             if ui.button("Simulate Batch").clicked() {
                 let simulations = (0..64)
                     .map(|i| {
-                        let mut result = Simulation::new(format!("Simulation {}", i), self.engine_events_sender.clone(), None);
+                        let mut result = Simulation::new(format!("Simulation {}", i), self.engine_events_sender.clone(), None, 200, 200);
                         result.insert_resource(EngineState {
                             repaint_needed: false,
                             speed_limit: None,
@@ -189,6 +198,9 @@ impl eframe::App for MyEguiApp {
                 thread::spawn(move || {
                     simulate_batch(simulations);
                 });
+            }
+            if ui.button("Create Snakes").clicked() {
+                self.engine_commands_sender.send(EngineCommand::CreateSnakes(10)).unwrap();
             }
             ScrollArea::vertical()
                 .auto_shrink([false; 2])

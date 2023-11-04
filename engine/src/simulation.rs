@@ -1,21 +1,18 @@
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Instant;
 use bevy_ecs::prelude::*;
-use rand::Rng;
-
-#[derive(Component)]
-pub struct Position {
-    pub x: i32,
-    pub y: i32,
-}
+use rand::{Rng, thread_rng};
+use crate::core::{create_food, eat_food, Energy, EntityMap, movement, Position, reproduce, starve};
 
 pub struct Simulation {
     schedule: Schedule,
+    gui_schedule: Schedule,
     world: World,
     pub name: String,
     engine_events: Sender<EngineEvent>,
     // only the main simulation may receive commands
     engine_commands: Option<Receiver<EngineCommand>>,
+    has_gui: bool
 }
 
 #[derive(Debug, Clone)]
@@ -26,8 +23,10 @@ pub enum EngineEvent {
 
 #[derive(Debug, Resource)]
 pub struct SimulationConfig {
-    pub rows: u32,
-    pub columns: u32,
+    pub rows: usize,
+    pub columns: usize,
+    pub food_per_step: usize,
+    pub energy_per_food: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -37,6 +36,7 @@ pub enum EngineCommand {
     DecreaseSpeed,
     RemoveSpeedLimit,
     FlipRunningState,
+    CreateSnakes(usize),
 }
 
 #[derive(Debug, Resource)]
@@ -47,18 +47,6 @@ pub struct EngineState {
     pub frames_left: f32,
     pub frames: u32,
     pub updates_done: u32,
-}
-
-// This system moves each entity with a Position and Velocity component
-fn movement(mut query: Query<&mut Position>, config: Res<SimulationConfig>) {
-    puffin::profile_function!();
-    let mut rng = rand::thread_rng();
-    let rows = config.rows as i32;
-    let columns = config.columns as i32;
-    for mut position in &mut query {
-        position.x = (position.x + rng.gen_range(-1..=1) + columns) % columns;
-        position.y = (position.y + rng.gen_range(-1..=1) + rows) % rows;
-    }
 }
 
 fn turn_counter(mut engine_state: ResMut<EngineState>) {
@@ -75,20 +63,43 @@ fn should_simulate_frame(engine_state: Res<EngineState>) -> bool {
 }
 
 impl Simulation {
-    pub fn new(name: String, engine_events: Sender<EngineEvent>, engine_commands: Option<Receiver<EngineCommand>>) -> Self {
+    pub fn new(name: String, engine_events: Sender<EngineEvent>, engine_commands: Option<Receiver<EngineCommand>>, rows: usize, columns: usize) -> Self {
         let mut world = World::new();
-        for i in 0..10000 {
-            world.spawn(Position { x: 50, y: 50 });
+        for i in 0..100 {
+            world.spawn((Position { x: 50, y: 50 }, Energy { amount: 10 }));
         }
-        world.insert_resource(SimulationConfig { rows: 100, columns: 100 });
+        world.insert_resource(SimulationConfig { rows, columns, food_per_step: 50, energy_per_food: 10 });
+        world.insert_resource(EntityMap { map: vec![vec![None; columns]; rows] });
         let mut schedule = Schedule::default();
-        schedule.add_systems((movement, turn_counter).run_if(should_simulate_frame));
-        Simulation { schedule, world, name, engine_events, engine_commands }
+        schedule.add_systems((movement, create_food, eat_food, starve, reproduce, turn_counter).run_if(should_simulate_frame));
+        let gui_schedule = Schedule::default();
+        Simulation { schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
     }
 
     pub fn step(&mut self) {
         puffin::profile_function!();
         self.schedule.run(&mut self.world);
+        // if self.has_gui {
+        //     let updates = {
+        //         let mut engine_state = self.world.get_resource_mut::<EngineState>().unwrap();
+        //         if engine_state.repaint_needed && engine_state.running {
+        //             engine_state.frames_left += engine_state.speed_limit.unwrap_or(0.00);
+        //             let updates_left = engine_state.frames_left;
+        //             let updates_done = engine_state.updates_done;
+        //             Some((updates_left, updates_done))
+        //         } else {
+        //             None
+        //         }
+        //     };
+        //
+        //     if let Some((updates_left, updates_done)) = updates {
+        //         self.gui_schedule.run(&mut self.world);
+        //         let mut engine_state = self.world.get_resource_mut::<EngineState>().unwrap();
+        //         engine_state.updates_done = 0;
+        //         engine_state.repaint_needed = false;
+        //         self.engine_events.send(EngineEvent::FrameDrawn { updates_left, updates_done }).unwrap();
+        //     }
+        // }
     }
 
     pub fn is_done(&mut self) -> bool {
@@ -117,6 +128,15 @@ impl Simulation {
                         EngineCommand::FlipRunningState => {
                             engine_state.running = !engine_state.running;
                         }
+                        EngineCommand::CreateSnakes(amount) => {
+                           // let config = self.world.get_resource::<SimulationConfig>().unwrap();
+                           for _ in 0..amount {
+                               let mut rng = rand::thread_rng();
+                               let x = rng.gen_range(0..100);
+                               let y = rng.gen_range(0..100);
+                               self.world.spawn((Position { x, y }, Energy { amount: 10 }));
+                           }
+                        }
                     }
                 });
             }
@@ -139,6 +159,11 @@ impl Simulation {
 
     pub fn add_system<M>(&mut self, system: impl IntoSystemConfigs<M>) {
         self.schedule.add_systems(system);
+    }
+
+    pub fn add_gui_system<M>(&mut self, system: impl IntoSystemConfigs<M>) {
+        self.gui_schedule.add_systems(system);
+        self.has_gui = true;
     }
 
     pub fn insert_resource<T: Resource>(&mut self, resource: T) {
