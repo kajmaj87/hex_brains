@@ -2,7 +2,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::time::Instant;
 use bevy_ecs::prelude::*;
 use rand::{Rng, thread_rng};
-use crate::core::{create_food, eat_food, Energy, EntityMap, movement, Position, reproduce, starve};
+use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, EntityMap, Head, movement, Position, RandomBrain, reproduce, starve};
 
 pub struct Simulation {
     schedule: Schedule,
@@ -26,7 +26,10 @@ pub struct SimulationConfig {
     pub rows: usize,
     pub columns: usize,
     pub food_per_step: usize,
-    pub energy_per_food: usize,
+    pub energy_per_food: i32,
+    pub wait_cost: i32,
+    pub move_cost: i32,
+    pub energy_to_breed: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -65,13 +68,14 @@ fn should_simulate_frame(engine_state: Res<EngineState>) -> bool {
 impl Simulation {
     pub fn new(name: String, engine_events: Sender<EngineEvent>, engine_commands: Option<Receiver<EngineCommand>>, rows: usize, columns: usize) -> Self {
         let mut world = World::new();
+        let config = SimulationConfig { rows, columns, food_per_step: 1, energy_per_food: 100, wait_cost: 1, move_cost: 10, energy_to_breed: 120 };
         for i in 0..100 {
-            world.spawn((Position { x: 50, y: 50 }, Energy { amount: 10 }));
+            world.spawn(create_snake(config.energy_per_food, (50, 50), Box::new(RandomBrain {})));
         }
-        world.insert_resource(SimulationConfig { rows, columns, food_per_step: 50, energy_per_food: 10 });
+        world.insert_resource(config);
         world.insert_resource(EntityMap { map: vec![vec![None; columns]; rows] });
         let mut schedule = Schedule::default();
-        schedule.add_systems((movement, create_food, eat_food, starve, reproduce, turn_counter).run_if(should_simulate_frame));
+        schedule.add_systems((movement, (eat_food, create_food).chain(), starve, reproduce, turn_counter).run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();
         Simulation { schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
     }
@@ -131,10 +135,10 @@ impl Simulation {
                         EngineCommand::CreateSnakes(amount) => {
                            // let config = self.world.get_resource::<SimulationConfig>().unwrap();
                            for _ in 0..amount {
-                               let mut rng = rand::thread_rng();
+                               let mut rng = thread_rng();
                                let x = rng.gen_range(0..100);
                                let y = rng.gen_range(0..100);
-                               self.world.spawn((Position { x, y }, Energy { amount: 10 }));
+                               self.world.spawn(create_snake(100, (x, y), Box::new(RandomBrain {})));
                            }
                         }
                     }
