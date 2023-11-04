@@ -1,18 +1,19 @@
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
-use bevy_ecs::prelude::{IntoSystemConfigs, Query, Res, ResMut, Resource, With, Without};
+use bevy_ecs::prelude::{Entity, IntoSystemConfigs, Query, Res, ResMut, Resource, With, Without};
 use eframe::{egui, emath};
 use eframe::emath::{Pos2, Rect, Vec2};
 use eframe::epaint::Color32;
 use egui::{Frame, Key, Response, ScrollArea, Sense, Shape, Stroke};
 use egui::epaint::CircleShape;
 use egui::Shape::Circle;
-use hex_brains_engine::core::{Food, Position};
+use hex_brains_engine::core::{Food, Head, Position, Solid, Tail};
 use hex_brains_engine::simulation::{Simulation, EngineEvent, EngineCommand, EngineState};
 use hex_brains_engine::simulation_manager::simulate_batch;
 
 fn main() {
-    let native_options = eframe::NativeOptions::default();
+    let mut native_options = eframe::NativeOptions::default();
+    native_options.initial_window_size = Some(Vec2 { x: 1200.0, y: 1200.0 });
     let (engine_commands_sender, engine_commands_receiver) = std::sync::mpsc::channel();
     let (engine_events_sender, engine_events_receiver) = std::sync::mpsc::channel();
     eframe::run_native("My egui App", native_options, Box::new(|cc| {
@@ -45,9 +46,9 @@ fn main() {
     }));
 }
 
-fn draw_simulation(context: Res<EguiEcsContext>, mut config: ResMut<Config>, snakes: Query<&Position, Without<Food>>, food: Query<&Position, With<Food>>) {
+fn draw_simulation(context: Res<EguiEcsContext>, mut config: ResMut<Config>, positions: Query<&Position>, heads: Query<(Entity, &Head)>, tails: Query<(Entity, &Tail)>, solids: Query<(Entity, &Solid)>, food: Query<(Entity, &Food)>) {
     puffin::profile_function!();
-    egui::Window::new("Main Simulation").show(&context.context, |ui| {
+    egui::Window::new("Main Simulation").default_size(Vec2 { x: 1200.0, y: 1200.0 }).show(&context.context, |ui| {
         egui::stroke_ui(ui, &mut config.bg_color, "Background Color");
         egui::stroke_ui(ui, &mut config.snake_color, "Snake Color");
         Frame::canvas(ui.style()).show(ui, |ui| {
@@ -60,11 +61,23 @@ fn draw_simulation(context: Res<EguiEcsContext>, mut config: ResMut<Config>, sna
             );
             // let from_screen = to_screen.inverse();
 
-            let snakes: Vec<Shape> = snakes.iter().map(|position| {
+            let heads: Vec<Shape> = heads.iter().map(|(head, _)| {
+                let position = positions.get(head).unwrap();
                 let p = Pos2 { x: position.x as f32, y: position.y as f32 };
                 transform_to_circle(&p, &to_screen, &response, &config, config.snake_color.color)
             }).collect();
-            let food: Vec<Shape> = food.iter().map(|position| {
+            let tails: Vec<Shape> = tails.iter().map(|(tail, _)| {
+                let position = positions.get(tail).unwrap();
+                let p = Pos2 { x: position.x as f32, y: position.y as f32 };
+                transform_to_circle(&p, &to_screen, &response, &config, Color32::LIGHT_BLUE)
+            }).collect();
+            let solids: Vec<Shape> = solids.iter().map(|(solid, _)| {
+                let position = positions.get(solid).unwrap();
+                let p = Pos2 { x: position.x as f32, y: position.y as f32 };
+                transform_to_circle(&p, &to_screen, &response, &config, Color32::BLACK)
+            }).collect();
+            let food: Vec<Shape> = food.iter().map(|(food, _)| {
+                let position = positions.get(food).unwrap();
                 let p = Pos2 { x: position.x as f32, y: position.y as f32 };
                 transform_to_circle(&p, &to_screen, &response, &config, Color32::YELLOW)
             }).collect();
@@ -77,8 +90,10 @@ fn draw_simulation(context: Res<EguiEcsContext>, mut config: ResMut<Config>, sna
                 transform_to_circle(position, &to_screen, &response, &config, config.bg_color.color)
             }).collect();
             ground.extend(food);
-            ground.extend(snakes);
-            // println!("Drawing {} shapes", ground.len());
+            ground.extend(solids);
+            ground.extend(tails);
+            ground.extend(heads);
+
             response.mark_changed();
             let painter = ui.painter();
             painter.extend(ground);
@@ -138,6 +153,7 @@ struct MyEguiApp {
     engine_commands_sender: Sender<EngineCommand>,
     engine_events_sender: Sender<EngineEvent>,
     engine_events_receiver: Receiver<EngineEvent>,
+    can_draw_frame: bool
 }
 
 impl MyEguiApp {
@@ -152,6 +168,7 @@ impl MyEguiApp {
             engine_commands_sender,
             engine_events_sender,
             engine_events_receiver,
+            can_draw_frame: true,
         }
     }
 }
@@ -171,6 +188,7 @@ impl eframe::App for MyEguiApp {
                 }
                 EngineEvent::FrameDrawn { updates_left, updates_done } => {
                     self.text = format!("{:.1} updates left, {} updates done", updates_left, updates_done);
+                    self.can_draw_frame = true;
                 }
             }
         });
@@ -222,7 +240,10 @@ impl eframe::App for MyEguiApp {
                 self.engine_commands_sender.send(EngineCommand::FlipRunningState).unwrap();
             }
         });
-        ctx.request_repaint();
+        if self.can_draw_frame {
+            ctx.request_repaint();
+            self.can_draw_frame = false;
+        }
         self.engine_commands_sender.send(EngineCommand::RepaintRequested);
     }
 }
