@@ -23,6 +23,7 @@ fn main() {
             columns: 100,
             bg_color: Stroke::new(1.0, Color32::LIGHT_GREEN),
             snake_color: Stroke::new(1.0, Color32::RED),
+            tail_color: Stroke::new(1.0, Color32::LIGHT_RED),
             food_color: Stroke::new(1.0, Color32::YELLOW),
         };
         let mut simulation = Simulation::new("Main".to_string(), engine_events_sender.clone(), Some(engine_commands_receiver), config.rows, config.columns);
@@ -52,6 +53,7 @@ fn draw_simulation(context: Res<EguiEcsContext>, mut config: ResMut<Config>, pos
     egui::Window::new("Main Simulation").default_size(Vec2 { x: 1200.0, y: 1200.0 }).show(&context.context, |ui| {
         egui::stroke_ui(ui, &mut config.bg_color, "Background Color");
         egui::stroke_ui(ui, &mut config.snake_color, "Snake Color");
+        egui::stroke_ui(ui, &mut config.tail_color, "Tail Color");
         egui::stroke_ui(ui, &mut config.food_color, "Food Color");
         Frame::canvas(ui.style()).show(ui, |ui| {
             let (mut response, _) =
@@ -77,8 +79,8 @@ fn draw_simulation(context: Res<EguiEcsContext>, mut config: ResMut<Config>, pos
             let solids: Vec<Shape> = solids.iter().map(|(solid, _)| {
                 let position = positions.get(solid).unwrap();
                 let p = Pos2 { x: position.x as f32, y: position.y as f32 };
-                transform_to_circle(&p, &to_screen, &response, &config, config.snake_color.color)
-                // transform_to_circle(&p, &to_screen, &response, &config, Color32::BLACK)
+                // transform_to_circle(&p, &to_screen, &response, &config, config.snake_color.color)
+                transform_to_circle(&p, &to_screen, &response, &config, Color32::LIGHT_RED)
             }).collect();
             let food: Vec<Shape> = food.iter().map(|(food, _)| {
                 let position = positions.get(food).unwrap();
@@ -151,6 +153,7 @@ struct Config {
     bg_color: Stroke,
     snake_color: Stroke,
     food_color: Stroke,
+    tail_color: Stroke
 }
 
 struct MyEguiApp {
@@ -223,7 +226,7 @@ impl eframe::App for MyEguiApp {
                     simulate_batch(simulations);
                 });
             }
-            if ui.button("Create Snakes").clicked() {
+            if ui.button("Create Snakes").on_hover_text("Click to add 10 snakes. Press 's' to add one snake").clicked() {
                 self.engine_commands_sender.send(EngineCommand::CreateSnakes(10)).unwrap();
             }
             ScrollArea::vertical()
@@ -244,6 +247,9 @@ impl eframe::App for MyEguiApp {
             }
             if ctx.input(|i| i.key_pressed(Key::Space)) {
                 self.engine_commands_sender.send(EngineCommand::FlipRunningState).unwrap();
+            }
+            if ctx.input(|i| i.key_pressed(Key::S)) {
+                self.engine_commands_sender.send(EngineCommand::CreateSnakes(1)).unwrap();
             }
         });
         if self.can_draw_frame {

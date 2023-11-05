@@ -31,8 +31,8 @@ pub struct SimulationConfig {
     pub energy_per_segment: i32,
     pub wait_cost: i32,
     pub move_cost: i32,
-    pub energy_to_breed: i32,
     pub energy_to_grow: i32,
+    pub size_to_split: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -71,7 +71,7 @@ fn should_simulate_frame(engine_state: Res<EngineState>) -> bool {
 impl Simulation {
     pub fn new(name: String, engine_events: Sender<EngineEvent>, engine_commands: Option<Receiver<EngineCommand>>, rows: usize, columns: usize) -> Self {
         let mut world = World::new();
-        let config = SimulationConfig { rows, columns, food_per_step: 10, energy_per_segment: 100, wait_cost: 1, move_cost: 10, energy_to_breed: 120, energy_to_grow: 120 };
+        let config = SimulationConfig { rows, columns, food_per_step: 1, energy_per_segment: 100, wait_cost: 1, move_cost: 10, size_to_split: 12, energy_to_grow: 200 };
         for i in 0..6 {
             world.spawn(create_snake(config.energy_per_segment, (50, 50), Box::new(RandomBrain {})));
         }
@@ -82,7 +82,7 @@ impl Simulation {
         let mut secondary_schedule = Schedule::default();
         first_schedule.add_systems(assign_missing_segments.run_if(should_simulate_frame));
         core_schedule.add_systems((think, (movement, update_positions, split).chain(), (eat_food, create_food).chain()).run_if(should_simulate_frame));
-        secondary_schedule.add_systems((grow, /*starve,*/ turn_counter).run_if(should_simulate_frame));
+        secondary_schedule.add_systems((grow, starve, turn_counter).run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();
         Simulation { first_schedule, core_schedule, secondary_schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
     }
