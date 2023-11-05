@@ -2,9 +2,10 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::time::Instant;
 use bevy_ecs::prelude::*;
 use rand::{Rng, thread_rng};
-use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, EntityMap, grow, Head, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions};
+use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, EntityMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments};
 
 pub struct Simulation {
+    first_schedule: Schedule,
     core_schedule: Schedule,
     secondary_schedule: Schedule,
     gui_schedule: Schedule,
@@ -13,7 +14,7 @@ pub struct Simulation {
     engine_events: Sender<EngineEvent>,
     // only the main simulation may receive commands
     engine_commands: Option<Receiver<EngineCommand>>,
-    has_gui: bool
+    has_gui: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -76,19 +77,20 @@ impl Simulation {
         }
         world.insert_resource(config);
         world.insert_resource(EntityMap { map: vec![vec![None; columns]; rows] });
+        let mut first_schedule = Schedule::default();
         let mut core_schedule = Schedule::default();
-        core_schedule.add_systems((think, (movement, update_positions, split).chain(), (eat_food, create_food).chain()).run_if(should_simulate_frame));
         let mut secondary_schedule = Schedule::default();
+        first_schedule.add_systems(assign_missing_segments.run_if(should_simulate_frame));
+        core_schedule.add_systems((think, (movement, update_positions, split).chain(), (eat_food, create_food).chain()).run_if(should_simulate_frame));
         secondary_schedule.add_systems((grow, /*starve,*/ turn_counter).run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();
-        Simulation { core_schedule, secondary_schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
+        Simulation { first_schedule, core_schedule, secondary_schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
     }
 
     pub fn step(&mut self) {
         puffin::profile_function!();
-        println!("core_schedule");
+        self.first_schedule.run(&mut self.world);
         self.core_schedule.run(&mut self.world);
-        println!("secondary_schedule");
         self.secondary_schedule.run(&mut self.world);
         // if self.has_gui {
         //     let updates = {

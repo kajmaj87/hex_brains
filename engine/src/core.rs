@@ -19,6 +19,7 @@ pub enum Direction {
     NorthWest,
 }
 
+#[derive(Debug)]
 pub enum Decision {
     MoveForward,
     MoveLeft,
@@ -30,19 +31,14 @@ pub trait Brain: Sync + Send {
     fn decide(&self) -> Decision;
 }
 
+// Snake represents the head segment of snake and info about its other segments
 #[derive(Component)]
-pub struct Head {
+pub struct Snake {
     pub direction: Direction,
     pub decision: Decision,
     pub brain: Box<dyn Brain>,
     pub new_position: (i32, i32),
-}
-
-#[derive(Component, Clone)]
-pub struct Tail {
     pub last_position: (i32, i32),
-    // all segments consist of whole snake, first element is the head, last element is the tail itself
-    // TODO pack segment operations into wrapper functions
     pub segments: Vec<Entity>,
 }
 
@@ -77,36 +73,34 @@ pub struct EntityMap {
 }
 
 // This system moves each entity with a Position and Velocity component
-pub fn movement(mut snakes: Query<(Entity, &mut Energy, &mut Tail)>, mut heads: Query<(&mut Head, &Position)>, config: Res<SimulationConfig>) {
+pub fn movement(mut snakes: Query<(Entity, &mut Energy, &mut Snake, &Position)>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
-    for (_, mut energy, mut tail) in &mut snakes {
-        if tail.segments.len() == 0 {
-            // panic!("tail has no segments");
-            continue;
-        }
-        let (mut head, position) = heads.get_mut(*tail.segments.get(0).unwrap()).unwrap();
-        match head.decision {
+    println!("move: start");
+    for (_, mut energy, mut snake, head_position) in &mut snakes {
+        print!("move: snake has {} segments, decides: {:?}", snake.segments.len(), snake.decision);
+        match snake.decision {
             Decision::MoveForward => {
+                println!("move forward");
                 energy.amount -= config.move_cost;
-                let new_position = move_to_direction(head.direction.clone(), &position, &config);
-                head.new_position.0 = new_position.x;
-                head.new_position.1 = new_position.y;
+                let new_position = move_to_direction(snake.direction.clone(), &head_position, &config);
+                snake.new_position.0 = new_position.x;
+                snake.new_position.1 = new_position.y;
             }
             Decision::MoveLeft => {
                 energy.amount -= config.move_cost;
-                head.direction = turn_left(head.direction.clone());
+                snake.direction = turn_left(snake.direction.clone());
 
-                let new_position = move_to_direction(head.direction.clone(), &position, &config);
-                head.new_position.0 = new_position.x;
-                head.new_position.1 = new_position.y;
+                let new_position = move_to_direction(snake.direction.clone(), &head_position, &config);
+                snake.new_position.0 = new_position.x;
+                snake.new_position.1 = new_position.y;
             }
             Decision::MoveRight => {
                 energy.amount -= config.move_cost;
-                head.direction = turn_right(head.direction.clone());
+                snake.direction = turn_right(snake.direction.clone());
 
-                let new_position = move_to_direction(head.direction.clone(), &position, &config);
-                head.new_position.0 = new_position.x;
-                head.new_position.1 = new_position.y;
+                let new_position = move_to_direction(snake.direction.clone(), &head_position, &config);
+                snake.new_position.0 = new_position.x;
+                snake.new_position.1 = new_position.y;
             }
             Decision::Wait => {
                 energy.amount -= config.wait_cost;
@@ -118,37 +112,27 @@ pub fn movement(mut snakes: Query<(Entity, &mut Energy, &mut Tail)>, mut heads: 
     }
 }
 
-pub fn update_positions(mut commands: Commands, mut tails: Query<(Entity, &mut Tail)>, mut positions: Query<&mut Position>, mut heads: Query<&mut Head>) {
+pub fn update_positions(mut commands: Commands, mut positions: Query<&mut Position>, mut snakes: Query<(Entity, &mut Snake)>) {
     puffin::profile_function!();
-    for (tail_id, mut tail) in &mut tails {
-        if tail.segments.len() == 0 {
-            // panic!("tail has no segments");
-            continue;
-        }
-
-        let head_id = *tail.segments.get(0).unwrap();
-        let head = heads.get_mut(head_id).unwrap();
-        let mut new_position = head.new_position;
+    for (head_id, mut snake) in &mut snakes {
+        let mut new_position = snake.new_position;
         let mut head_position = positions.get_mut(head_id).unwrap();
         let old_head_position = (head_position.x, head_position.y);
         if new_position == old_head_position {
+            println!("update_positions: snake {:?} is waiting", head_id);
             continue;
         }
         head_position.x = new_position.0;
         head_position.y = new_position.1;
-        if tail.segments.len() >= 2 {
-            let mut position = positions.get_mut(tail_id).unwrap();
-            let last_position = (position.x, position.y);
-            position.x = old_head_position.0;
-            position.y = old_head_position.1;
-            tail.segments.pop();
-            // move the tail right behind the head to avoid recalculating all positions
-            tail.segments.insert(1, tail_id);
-            // this is no longer the tail
-            commands.entity(tail_id).remove::<Tail>();
-            // last element becomes the new tail, remembering his last position for the next potential growth event
-            println!("Entity {:?} will get tail", tail.segments.last().unwrap());
-            commands.entity(*tail.segments.last().unwrap()).insert(Tail { segments: tail.segments.clone(), last_position });
+        if snake.segments.len() >= 2 {
+            let tail_id = snake.segments.pop().unwrap();
+            let mut tail_position = positions.get_mut(tail_id).unwrap();
+            let last_position = (tail_position.x, tail_position.y);
+            tail_position.x = old_head_position.0;
+            tail_position.y = old_head_position.1;
+            // move the snake right behind the head to avoid recalculating all positions
+            snake.segments.insert(1, tail_id);
+            snake.last_position = last_position;
         }
     }
 }
@@ -217,7 +201,7 @@ fn move_to_direction(direction: Direction, position: &Position, config: &Res<Sim
     Position { x, y }
 }
 
-pub fn think(mut heads: Query<&mut Head>) {
+pub fn think(mut heads: Query<&mut Snake>) {
     puffin::profile_function!();
     for mut head in &mut heads {
         head.decision = head.brain.decide();
@@ -251,20 +235,20 @@ pub fn eat_food(mut commands: Commands, mut food: ResMut<EntityMap>, mut snakes:
     }
 }
 
-pub fn starve(mut commands: Commands, mut snakes: Query<(Entity, &mut Energy, &mut Tail, &Position)>) {
+pub fn starve(mut commands: Commands, mut snakes: Query<(Entity, &mut Energy, &mut Snake, &Position)>) {
     puffin::profile_function!();
-    for (tail_id, mut energy, mut tail, position) in &mut snakes {
-        if energy.amount <= 0 {
-            commands.entity(tail_id).despawn();
-            println!("Entity {:?} died at position ({}, {})\n", tail_id, position.x, position.y);
-            tail.segments.pop();
-            if tail.segments.len() == 0 {
-                continue;
-            }
-            let new_tail_id = *tail.segments.last().unwrap();
-            commands.entity(new_tail_id).insert(Tail { segments: tail.segments.clone(), last_position: (position.x, position.y) });
-        }
-    }
+    // for (tail_id, mut energy, mut tail, position) in &mut snakes {
+    //     if energy.amount <= 0 {
+    //         commands.entity(tail_id).despawn();
+    //         println!("Entity {:?} died at position ({}, {})\n", tail_id, position.x, position.y);
+    //         tail.segments.pop();
+    //         if tail.segments.len() == 0 {
+    //             continue;
+    //         }
+    //         let new_tail_id = *tail.segments.last().unwrap();
+    //         commands.entity(new_tail_id).insert(Tail { segments: tail.segments.clone(), last_position: (position.x, position.y) });
+    //     }
+    // }
 }
 
 pub fn reproduce(mut commands: Commands, mut snakes: Query<(&mut Energy, &Position)>, config: Res<SimulationConfig>) {
@@ -279,7 +263,7 @@ pub fn reproduce(mut commands: Commands, mut snakes: Query<(&mut Energy, &Positi
     }
 }
 
-pub fn split(mut commands: Commands, mut tails: Query<(Entity, &mut Tail, &Position)>, config: Res<SimulationConfig>) {
+pub fn split(mut commands: Commands, mut tails: Query<(Entity, &mut Snake, &Position)>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     for (tail_id, mut tail, position) in &mut tails {
         // total snake length is 1 + segments.len()
@@ -308,33 +292,32 @@ pub fn split(mut commands: Commands, mut tails: Query<(Entity, &mut Tail, &Posit
     }
 }
 
-pub fn grow(mut commands: Commands, mut tails: Query<(Entity, &mut Tail)>, mut heads: Query<(Entity, &Head, &mut Energy)>, config: Res<SimulationConfig>) {
+pub fn grow(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake, &mut Energy)>, positions: Query<&Position>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
-    for (tail_id, mut tail) in &mut tails {
-        if tail.segments.len() > 0 {
-            let (_, _, mut energy) = heads.get_mut(*tail.segments.get(0).unwrap()).unwrap();
-            // tail always takes energy from head when growing
-            if energy.amount >= config.energy_to_grow {
-                let energy_for_tail = energy.amount - config.energy_to_grow / 2;
-                energy.amount -= energy_for_tail;
-                let new_tail = commands.spawn((Position { x: tail.last_position.0, y: tail.last_position.1 }, Solid, Energy { amount: energy_for_tail })).id();
-                let mut segments = tail.segments.clone();
-                segments.push(new_tail);
-                commands.entity(new_tail).insert(Tail { segments, last_position: (tail.last_position.0, tail.last_position.1) });
-                commands.entity(tail_id).remove::<Tail>();
-            }
-        } else {
-            // tail does not now its head yet so initialize it to itself, this must be a small snake
-            tail.segments.push(tail_id);
+    for (snake_id, mut snake, mut energy) in &mut snakes {
+        // tail always takes energy from head when growing
+        if energy.amount >= config.energy_to_grow {
+            let energy_for_tail = energy.amount - config.energy_to_grow / 2;
+            energy.amount -= energy_for_tail;
+            let new_tail = commands.spawn((Position { x: snake.last_position.0, y: snake.last_position.1 }, Solid, Energy { amount: energy_for_tail })).id();
+            snake.segments.push(new_tail);
         }
     }
 }
 
-
-pub fn create_snake(energy: i32, position: (i32, i32), brain: Box<dyn Brain>) -> (Position, Energy, Head, Tail, Solid) {
-    (Position { x: position.0, y: position.1 }, Energy { amount: energy }, create_head(position, brain), Tail { segments: vec![], last_position: position }, Solid)
+pub fn assign_missing_segments(mut snakes: Query<(Entity, &mut Snake), Added<Snake>>) {
+    puffin::profile_function!();
+    for (snake_id, mut snake) in &mut snakes {
+        if snake.segments.len() == 0 {
+            snake.segments.push(snake_id);
+        }
+    }
 }
 
-fn create_head(position: (i32, i32), brain: Box<dyn Brain>) -> Head {
-    Head { direction: Direction::West, decision: Decision::Wait, brain, new_position: position }
+pub fn create_snake(energy: i32, position: (i32, i32), brain: Box<dyn Brain>) -> (Position, Energy, Snake, Solid) {
+    (Position { x: position.0, y: position.1 }, Energy { amount: energy }, create_head(position, brain), Solid)
+}
+
+fn create_head(position: (i32, i32), brain: Box<dyn Brain>) -> Snake {
+    Snake { direction: Direction::West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position }
 }
