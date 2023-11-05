@@ -79,14 +79,16 @@ impl Simulation {
         let mut core_schedule = Schedule::default();
         core_schedule.add_systems((think, (movement, update_positions, split).chain(), (eat_food, create_food).chain()).run_if(should_simulate_frame));
         let mut secondary_schedule = Schedule::default();
-        secondary_schedule.add_systems((grow, turn_counter).run_if(should_simulate_frame));
+        secondary_schedule.add_systems((grow, /*starve,*/ turn_counter).run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();
         Simulation { core_schedule, secondary_schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
     }
 
     pub fn step(&mut self) {
         puffin::profile_function!();
+        println!("core_schedule");
         self.core_schedule.run(&mut self.world);
+        println!("secondary_schedule");
         self.secondary_schedule.run(&mut self.world);
         // if self.has_gui {
         //     let updates = {

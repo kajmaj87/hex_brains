@@ -23,6 +23,7 @@ fn main() {
             columns: 100,
             bg_color: Stroke::new(1.0, Color32::LIGHT_GREEN),
             snake_color: Stroke::new(1.0, Color32::RED),
+            food_color: Stroke::new(1.0, Color32::YELLOW),
         };
         let mut simulation = Simulation::new("Main".to_string(), engine_events_sender.clone(), Some(engine_commands_receiver), config.rows, config.columns);
         let egui_context = EguiEcsContext {
@@ -51,6 +52,7 @@ fn draw_simulation(context: Res<EguiEcsContext>, mut config: ResMut<Config>, pos
     egui::Window::new("Main Simulation").default_size(Vec2 { x: 1200.0, y: 1200.0 }).show(&context.context, |ui| {
         egui::stroke_ui(ui, &mut config.bg_color, "Background Color");
         egui::stroke_ui(ui, &mut config.snake_color, "Snake Color");
+        egui::stroke_ui(ui, &mut config.food_color, "Food Color");
         Frame::canvas(ui.style()).show(ui, |ui| {
             let (mut response, _) =
                 ui.allocate_painter(ui.available_size_before_wrap(), Sense::drag());
@@ -69,17 +71,20 @@ fn draw_simulation(context: Res<EguiEcsContext>, mut config: ResMut<Config>, pos
             let tails: Vec<Shape> = tails.iter().map(|(tail, _)| {
                 let position = positions.get(tail).unwrap();
                 let p = Pos2 { x: position.x as f32, y: position.y as f32 };
-                transform_to_circle(&p, &to_screen, &response, &config, Color32::LIGHT_BLUE)
+                transform_to_circle(&p, &to_screen, &response, &config, config.snake_color.color)
+                // transform_to_circle(&p, &to_screen, &response, &config, Color32::LIGHT_BLUE)
             }).collect();
             let solids: Vec<Shape> = solids.iter().map(|(solid, _)| {
                 let position = positions.get(solid).unwrap();
                 let p = Pos2 { x: position.x as f32, y: position.y as f32 };
-                transform_to_circle(&p, &to_screen, &response, &config, Color32::BLACK)
+                transform_to_circle(&p, &to_screen, &response, &config, config.snake_color.color)
+                // transform_to_circle(&p, &to_screen, &response, &config, Color32::BLACK)
             }).collect();
             let food: Vec<Shape> = food.iter().map(|(food, _)| {
                 let position = positions.get(food).unwrap();
                 let p = Pos2 { x: position.x as f32, y: position.y as f32 };
-                transform_to_circle(&p, &to_screen, &response, &config, Color32::YELLOW)
+                transform_to_circle(&p, &to_screen, &response, &config, config.food_color.color)
+                // transform_to_circle(&p, &to_screen, &response, &config, Color32::YELLOW)
             }).collect();
 
             let positions: Vec<Pos2> = (0..config.columns)
@@ -145,6 +150,7 @@ struct Config {
     columns: usize,
     bg_color: Stroke,
     snake_color: Stroke,
+    food_color: Stroke,
 }
 
 struct MyEguiApp {
