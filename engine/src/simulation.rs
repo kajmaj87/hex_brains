@@ -2,10 +2,11 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::time::Instant;
 use bevy_ecs::prelude::*;
 use rand::{Rng, thread_rng};
-use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, EntityMap, grow, Head, movement, Position, RandomBrain, reproduce, starve, think, update_positions};
+use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, EntityMap, grow, Head, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions};
 
 pub struct Simulation {
-    schedule: Schedule,
+    core_schedule: Schedule,
+    secondary_schedule: Schedule,
     gui_schedule: Schedule,
     world: World,
     pub name: String,
@@ -75,15 +76,18 @@ impl Simulation {
         }
         world.insert_resource(config);
         world.insert_resource(EntityMap { map: vec![vec![None; columns]; rows] });
-        let mut schedule = Schedule::default();
-        schedule.add_systems((think, (movement, update_positions, grow).chain(), (eat_food, create_food).chain(), turn_counter).run_if(should_simulate_frame));
+        let mut core_schedule = Schedule::default();
+        core_schedule.add_systems((think, (movement, update_positions, split).chain(), (eat_food, create_food).chain()).run_if(should_simulate_frame));
+        let mut secondary_schedule = Schedule::default();
+        secondary_schedule.add_systems((grow, turn_counter).run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();
-        Simulation { schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
+        Simulation { core_schedule, secondary_schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
     }
 
     pub fn step(&mut self) {
         puffin::profile_function!();
-        self.schedule.run(&mut self.world);
+        self.core_schedule.run(&mut self.world);
+        self.secondary_schedule.run(&mut self.world);
         // if self.has_gui {
         //     let updates = {
         //         let mut engine_state = self.world.get_resource_mut::<EngineState>().unwrap();
@@ -163,7 +167,7 @@ impl Simulation {
     }
 
     pub fn add_system<M>(&mut self, system: impl IntoSystemConfigs<M>) {
-        self.schedule.add_systems(system);
+        self.core_schedule.add_systems(system);
     }
 
     pub fn add_gui_system<M>(&mut self, system: impl IntoSystemConfigs<M>) {
