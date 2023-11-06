@@ -56,7 +56,7 @@ fn create_simulation_config(columns: usize, rows: usize) -> SimulationConfig{
         columns,
         starting_snakes: 10,
         starting_food: 100,
-        food_per_step: 1,
+        food_per_step: 5,
         energy_per_segment: 100,
         wait_cost: 1,
         move_cost: 10,
@@ -230,7 +230,9 @@ impl eframe::App for MyEguiApp {
                 ui.label(format!("FPS : {:.1}", self.frames_per_second));
                 ui.label(format!("UPS : {}", self.updates_per_second));
                 ui.label(format!("Speed : x{:.1}", self.updates_per_second as f32 / self.frames_per_second as f32));
-                ui.label(format!("Oldest entity : {}", self.stats.oldest_snake));
+                ui.label(format!("Oldest snake : {}", self.stats.oldest_snake));
+                ui.label(format!("Total snakes/segments : {}/{}", self.stats.total_snakes, self.stats.total_solids));
+                ui.label(format!("Total food : {}", self.stats.total_food));
             });
             draw_hexes(ui, &self.hexes, &self.config);
             ScrollArea::vertical()

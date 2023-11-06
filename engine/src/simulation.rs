@@ -38,6 +38,7 @@ pub struct Stats {
     pub total_energy: i32,
     pub oldest_snake: u32,
     pub food: usize,
+    pub total_solids: usize
 }
 
 #[derive(Debug, Clone)]

@@ -303,10 +303,13 @@ pub fn increase_age(mut agables: Query<&mut Age>) {
     }
 }
 
-pub fn calculate_stats(mut snakes: Query<&Age>, mut stats: ResMut<Stats>) {
+pub fn calculate_stats(food: Query<&Food>, snakes: Query<&Age>, solids: Query<&Solid>, mut stats: ResMut<Stats>) {
     puffin::profile_function!();
     let max_age= snakes.iter().map(|a| a.0).reduce(|a, b| a.max(b));
     stats.oldest_snake = max_age.unwrap_or(0);
+    stats.total_snakes = snakes.iter().count();
+    stats.total_food = food.iter().count();
+    stats.total_solids = solids.iter().count();
 }
 
 pub fn grow(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake, &mut Energy)>, positions: Query<&Position>, config: Res<SimulationConfig>) {
