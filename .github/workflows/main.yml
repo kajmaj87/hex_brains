@@ -41,15 +41,15 @@ jobs:
         env:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_HEAD_REF: ${{ github.head_ref }}
-      - run: mv target/${{ matrix.target}}/release/sb3* .
+      - run: mv target/${{ matrix.target}}/release/hex_brains_gui* .
       - name: Upload Artifact
         id: upload-artifact
         uses: actions/upload-artifact@v2
         with:
           name: hex-brains-${{ matrix.target }}
           path: |
-            hex-brains-gui*
-            !hex-brains-gui.d
+            hex_brains_gui*
+            !hex_brains_gui.d
   notify:
     name: Notify
     runs-on: ubuntu-latest
