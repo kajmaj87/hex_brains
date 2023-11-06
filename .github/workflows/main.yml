@@ -1,0 +1,95 @@
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+name: Continuous integration
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    container:
+      image: docker://kajmaj87/rust-builder:latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt,clippy
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ runner.os }}-cargo-check-step
+      - name: Clippy and Test
+        run: |
+          cargo clippy --workspace -- -D warnings
+          cargo test --workspace
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    container:
+      image: docker://kajmaj87/rust-builder:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust:
+          - stable
+        target:
+          - x86_64-unknown-linux-gnu
+#          - wasm32-unknown-unknown
+          - x86_64-pc-windows-gnu
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          target: ${{ matrix.target }}
+          override: true
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ runner.os }}-cargo-build-target-${{ matrix.target }}
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --workspace --release --target ${{ matrix.target }}
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+      - run: mv target/${{ matrix.target}}/release/sb3* .
+      - name: Upload Artifact
+        id: upload-artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: hex-brains-${{ matrix.target }}
+          path: |
+            hex-brains-gui*
+            !hex-brains-gui.d
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: [check, build]  # notify job depends on check and build jobs
+    steps:
+      - name: Notify success on Discord
+        uses: Ilshidur/action-discord@0.3.2
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_SUCCESS }}
+        with:
+          args: |
+            Build succeeded! :white_check_mark:
+            Commit Message: "${{ github.event.head_commit.message }}"
+            Artifacts: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            Status: ${{ job.status }}
