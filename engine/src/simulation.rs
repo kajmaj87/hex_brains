@@ -1,4 +1,5 @@
 use std::sync::mpsc::{Receiver, Sender};
+use std::sync::Mutex;
 use std::time::Instant;
 use bevy_ecs::prelude::*;
 use rand::{Rng, thread_rng};
@@ -18,8 +19,22 @@ pub struct Simulation {
 }
 
 #[derive(Debug, Clone)]
+pub struct Hex {
+    pub x: usize,
+    pub y: usize,
+    pub hex_type: HexType,
+}
+#[derive(Debug, Clone)]
+pub enum HexType {
+    Food,
+    SnakeHead,
+    SnakeTail,
+}
+
+#[derive(Debug, Clone)]
 pub enum EngineEvent {
     SimulationFinished { steps: u32, name: String, duration: u128 },
+    DrawData { hexes: Vec<Hex> },
     FrameDrawn { updates_left: f32, updates_done: u32 },
 }
 
@@ -55,6 +70,11 @@ pub struct EngineState {
     pub updates_done: u32,
 }
 
+#[derive(Resource)]
+pub struct EngineEvents {
+    pub events: Mutex<Sender<EngineEvent>>,
+}
+
 fn turn_counter(mut engine_state: ResMut<EngineState>) {
     puffin::profile_function!();
     if engine_state.speed_limit.is_some() {
@@ -77,6 +97,7 @@ impl Simulation {
         }
         world.insert_resource(config);
         world.insert_resource(EntityMap { map: vec![vec![None; columns]; rows] });
+        world.insert_resource(EngineEvents { events: Mutex::new(engine_events.clone()) });
         let mut first_schedule = Schedule::default();
         let mut core_schedule = Schedule::default();
         let mut secondary_schedule = Schedule::default();
@@ -92,27 +113,6 @@ impl Simulation {
         self.first_schedule.run(&mut self.world);
         self.core_schedule.run(&mut self.world);
         self.secondary_schedule.run(&mut self.world);
-        // if self.has_gui {
-        //     let updates = {
-        //         let mut engine_state = self.world.get_resource_mut::<EngineState>().unwrap();
-        //         if engine_state.repaint_needed && engine_state.running {
-        //             engine_state.frames_left += engine_state.speed_limit.unwrap_or(0.00);
-        //             let updates_left = engine_state.frames_left;
-        //             let updates_done = engine_state.updates_done;
-        //             Some((updates_left, updates_done))
-        //         } else {
-        //             None
-        //         }
-        //     };
-        //
-        //     if let Some((updates_left, updates_done)) = updates {
-        //         self.gui_schedule.run(&mut self.world);
-        //         let mut engine_state = self.world.get_resource_mut::<EngineState>().unwrap();
-        //         engine_state.updates_done = 0;
-        //         engine_state.repaint_needed = false;
-        //         self.engine_events.send(EngineEvent::FrameDrawn { updates_left, updates_done }).unwrap();
-        //     }
-        // }
     }
 
     pub fn is_done(&mut self) -> bool {

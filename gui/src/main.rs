@@ -4,11 +4,11 @@ use bevy_ecs::prelude::{Entity, IntoSystemConfigs, Query, Res, ResMut, Resource,
 use eframe::{egui, emath};
 use eframe::emath::{Pos2, Rect, Vec2};
 use eframe::epaint::Color32;
-use egui::{Frame, Key, Response, ScrollArea, Sense, Shape, Stroke};
+use egui::{Frame, Key, Response, ScrollArea, Sense, Shape, Stroke, Ui};
 use egui::epaint::CircleShape;
 use egui::Shape::Circle;
 use hex_brains_engine::core::{Food, Snake, Position, Solid};
-use hex_brains_engine::simulation::{Simulation, EngineEvent, EngineCommand, EngineState};
+use hex_brains_engine::simulation::{Simulation, EngineEvent, EngineCommand, EngineState, EngineEvents, Hex, HexType};
 use hex_brains_engine::simulation_manager::simulate_batch;
 
 fn main() {
@@ -44,73 +44,85 @@ fn main() {
         thread::spawn(move || {
             simulation.run();
         });
-        Box::new(MyEguiApp::new(cc, engine_commands_sender, engine_events_sender, engine_events_receiver))
+        Box::new(MyEguiApp::new(cc, engine_commands_sender, engine_events_sender, engine_events_receiver, config))
     }));
 }
 
-fn draw_simulation(context: Res<EguiEcsContext>, mut config: ResMut<Config>, positions: Query<&Position>, snakes: Query<(Entity, &Snake)>, solids: Query<(Entity, &Solid)>, food: Query<(Entity, &Food)>) {
+fn draw_simulation(context: Res<EguiEcsContext>, mut engine_events: ResMut<EngineEvents>, mut config: ResMut<Config>, positions: Query<&Position>, snakes: Query<(Entity, &Snake)>, solids: Query<(Entity, &Solid)>, food: Query<(Entity, &Food)>) {
     puffin::profile_function!();
-    egui::Window::new("Main Simulation").default_size(Vec2 { x: 1200.0, y: 1200.0 }).show(&context.context, |ui| {
-        egui::stroke_ui(ui, &mut config.bg_color, "Background Color");
-        egui::stroke_ui(ui, &mut config.snake_color, "Snake Color");
-        egui::stroke_ui(ui, &mut config.tail_color, "Tail Color");
-        egui::stroke_ui(ui, &mut config.food_color, "Food Color");
-        Frame::canvas(ui.style()).show(ui, |ui| {
-            let (mut response, _) =
-                ui.allocate_painter(ui.available_size_before_wrap(), Sense::drag());
-
-            let to_screen = emath::RectTransform::from_to(
-                Rect::from_min_size(Pos2::ZERO, response.rect.square_proportions()),
-                response.rect,
-            );
-            // let from_screen = to_screen.inverse();
-
-            let heads: Vec<Shape> = snakes.iter().map(|(head, _)| {
-                let position = positions.get(head).unwrap();
-                let p = Pos2 { x: position.x as f32, y: position.y as f32 };
-                transform_to_circle(&p, &to_screen, &response, &config, config.snake_color.color)
-            }).collect();
-            // let tails: Vec<Shape> = tails.iter().map(|(tail, _)| {
-            //     let position = positions.get(tail).unwrap();
-            //     let p = Pos2 { x: position.x as f32, y: position.y as f32 };
-            //     transform_to_circle(&p, &to_screen, &response, &config, config.snake_color.color)
-            //     // transform_to_circle(&p, &to_screen, &response, &config, Color32::LIGHT_BLUE)
-            // }).collect();
-            let solids: Vec<Shape> = solids.iter().map(|(solid, _)| {
-                let position = positions.get(solid).unwrap();
-                let p = Pos2 { x: position.x as f32, y: position.y as f32 };
-                // transform_to_circle(&p, &to_screen, &response, &config, config.snake_color.color)
-                transform_to_circle(&p, &to_screen, &response, &config, Color32::LIGHT_RED)
-            }).collect();
-            let food: Vec<Shape> = food.iter().map(|(food, _)| {
-                let position = positions.get(food).unwrap();
-                let p = Pos2 { x: position.x as f32, y: position.y as f32 };
-                transform_to_circle(&p, &to_screen, &response, &config, config.food_color.color)
-                // transform_to_circle(&p, &to_screen, &response, &config, Color32::YELLOW)
-            }).collect();
-
-            let positions: Vec<Pos2> = (0..config.columns)
-                .flat_map(|x| (0..config.rows).map(move |y| Pos2 { x: x as f32, y: y as f32 }))
-                .collect();
-
-            let mut ground: Vec<Shape> = positions.iter().map(|position| {
-                transform_to_circle(position, &to_screen, &response, &config, config.bg_color.color)
-            }).collect();
-            ground.extend(food);
-            ground.extend(solids);
-            // ground.extend(tails);
-            ground.extend(heads);
-
-            response.mark_changed();
-            let painter = ui.painter();
-            painter.extend(ground);
-            // ground.iter().for_each(|shape| {
-            //     painter.add(shape.clone());
-            // });
-
-            response
-        });
-    });
+    let all_hexes: Vec<Hex> = snakes.iter().map(|(head, _)| {
+        let position = positions.get(head).unwrap();
+        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::SnakeHead }
+    }).chain(solids.iter().map(|(solid, _)| {
+        let position = positions.get(solid).unwrap();
+        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::SnakeTail }
+    })).chain(food.iter().map(|(food, _)| {
+        let position = positions.get(food).unwrap();
+        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Food }
+        // transform_to_circle(&p, &to_screen, &response, &config, Color32::YELLOW)
+    })).collect();
+    engine_events.events.lock().unwrap().send(EngineEvent::DrawData { hexes: all_hexes });
+    // egui::Window::new("Main Simulation").default_size(Vec2 { x: 1200.0, y: 1200.0 }).show(&context.context, |ui| {
+    //     egui::stroke_ui(ui, &mut config.bg_color, "Background Color");
+    //     egui::stroke_ui(ui, &mut config.snake_color, "Snake Color");
+    //     egui::stroke_ui(ui, &mut config.tail_color, "Tail Color");
+    //     egui::stroke_ui(ui, &mut config.food_color, "Food Color");
+    //     Frame::canvas(ui.style()).show(ui, |ui| {
+    //         let (mut response, _) =
+    //             ui.allocate_painter(ui.available_size_before_wrap(), Sense::drag());
+    //
+    //         let to_screen = emath::RectTransform::from_to(
+    //             Rect::from_min_size(Pos2::ZERO, response.rect.square_proportions()),
+    //             response.rect,
+    //         );
+    //         // let from_screen = to_screen.inverse();
+    //
+    //         let heads: Vec<Shape> = snakes.iter().map(|(head, _)| {
+    //             let position = positions.get(head).unwrap();
+    //             let p = Pos2 { x: position.x as f32, y: position.y as f32 };
+    //             transform_to_circle(&p, &to_screen, &response, &config, config.snake_color.color)
+    //         }).collect();
+    //         // let tails: Vec<Shape> = tails.iter().map(|(tail, _)| {
+    //         //     let position = positions.get(tail).unwrap();
+    //         //     let p = Pos2 { x: position.x as f32, y: position.y as f32 };
+    //         //     transform_to_circle(&p, &to_screen, &response, &config, config.snake_color.color)
+    //         //     // transform_to_circle(&p, &to_screen, &response, &config, Color32::LIGHT_BLUE)
+    //         // }).collect();
+    //         let solids: Vec<Shape> = solids.iter().map(|(solid, _)| {
+    //             let position = positions.get(solid).unwrap();
+    //             let p = Pos2 { x: position.x as f32, y: position.y as f32 };
+    //             // transform_to_circle(&p, &to_screen, &response, &config, config.snake_color.color)
+    //             transform_to_circle(&p, &to_screen, &response, &config, Color32::LIGHT_RED)
+    //         }).collect();
+    //         let food: Vec<Shape> = food.iter().map(|(food, _)| {
+    //             let position = positions.get(food).unwrap();
+    //             let p = Pos2 { x: position.x as f32, y: position.y as f32 };
+    //             transform_to_circle(&p, &to_screen, &response, &config, config.food_color.color)
+    //             // transform_to_circle(&p, &to_screen, &response, &config, Color32::YELLOW)
+    //         }).collect();
+    //
+    //         let positions: Vec<Pos2> = (0..config.columns)
+    //             .flat_map(|x| (0..config.rows).map(move |y| Pos2 { x: x as f32, y: y as f32 }))
+    //             .collect();
+    //
+    //         let mut ground: Vec<Shape> = positions.iter().map(|position| {
+    //             transform_to_circle(position, &to_screen, &response, &config, config.bg_color.color)
+    //         }).collect();
+    //         ground.extend(food);
+    //         ground.extend(solids);
+    //         // ground.extend(tails);
+    //         ground.extend(heads);
+    //
+    //         response.mark_changed();
+    //         let painter = ui.painter();
+    //         painter.extend(ground);
+    //         // ground.iter().for_each(|shape| {
+    //         //     painter.add(shape.clone());
+    //         // });
+    //
+    //         response
+    //     });
+    // });
 }
 
 fn transform_to_circle(game_position: &Pos2, to_screen: &emath::RectTransform, response: &Response, config: &Config, color: Color32) -> Shape {
@@ -146,14 +158,14 @@ struct EguiEcsContext {
     context: egui::Context,
 }
 
-#[derive(Resource)]
+#[derive(Resource, Clone, Copy)]
 struct Config {
     rows: usize,
     columns: usize,
     bg_color: Stroke,
     snake_color: Stroke,
     food_color: Stroke,
-    tail_color: Stroke
+    tail_color: Stroke,
 }
 
 struct MyEguiApp {
@@ -162,11 +174,12 @@ struct MyEguiApp {
     engine_commands_sender: Sender<EngineCommand>,
     engine_events_sender: Sender<EngineEvent>,
     engine_events_receiver: Receiver<EngineEvent>,
-    can_draw_frame: bool
+    can_draw_frame: bool,
+    config: Config,
 }
 
 impl MyEguiApp {
-    fn new(cc: &eframe::CreationContext<'_>, engine_commands_sender: Sender<EngineCommand>, engine_events_sender: Sender<EngineEvent>, engine_events_receiver: Receiver<EngineEvent>) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>, engine_commands_sender: Sender<EngineCommand>, engine_events_sender: Sender<EngineEvent>, engine_events_receiver: Receiver<EngineEvent>, config: Config) -> Self {
         // Customize egui here with cc.egui_ctx.set_fonts and cc.egui_ctx.set_visuals.
         // Restore app state using cc.storage (requires the "persistence" feature).
         // Use the cc.gl (a glow::Context) to create graphics shaders and buffers that you can use
@@ -178,6 +191,7 @@ impl MyEguiApp {
             engine_events_sender,
             engine_events_receiver,
             can_draw_frame: true,
+            config
         }
     }
 }
@@ -189,18 +203,6 @@ impl eframe::App for MyEguiApp {
             puffin_egui::profiler_window(ctx);
             puffin::GlobalProfiler::lock().new_frame();
         }
-        self.engine_events_receiver.try_iter().for_each(|result| {
-            self.total_finished += 1;
-            match result {
-                EngineEvent::SimulationFinished { steps, name, duration } => {
-                    self.text.push_str(&format!("\nSimulation {} finished in {} steps in {} ms", name, steps, duration));
-                }
-                EngineEvent::FrameDrawn { updates_left, updates_done } => {
-                    self.text = format!("{:.1} updates left, {} updates done", updates_left, updates_done);
-                    self.can_draw_frame = true;
-                }
-            }
-        });
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Hello World!");
             ui.heading("Press/Hold/Release example. Press A to test.");
@@ -229,6 +231,21 @@ impl eframe::App for MyEguiApp {
             if ui.button("Create Snakes").on_hover_text("Click to add 10 snakes. Press 's' to add one snake").clicked() {
                 self.engine_commands_sender.send(EngineCommand::CreateSnakes(10)).unwrap();
             }
+            self.engine_events_receiver.try_iter().for_each(|result| {
+                self.total_finished += 1;
+                match result {
+                    EngineEvent::SimulationFinished { steps, name, duration } => {
+                        self.text.push_str(&format!("\nSimulation {} finished in {} steps in {} ms", name, steps, duration));
+                    }
+                    EngineEvent::FrameDrawn { updates_left, updates_done } => {
+                        self.text = format!("{:.1} updates left, {} updates done", updates_left, updates_done);
+                        self.can_draw_frame = true;
+                    }
+                    EngineEvent::DrawData { hexes } => {
+                        draw_hexes(ui, hexes, &self.config);
+                    }
+                }
+            });
             ScrollArea::vertical()
                 .auto_shrink([false; 2])
                 .stick_to_bottom(true)
@@ -258,4 +275,41 @@ impl eframe::App for MyEguiApp {
         }
         self.engine_commands_sender.send(EngineCommand::RepaintRequested);
     }
+}
+
+fn draw_hexes(ui: &mut Ui, hexes: Vec<Hex>, config: &Config) {
+        Frame::canvas(ui.style()).show(ui, |ui| {
+            let (mut response, _) =
+                ui.allocate_painter(ui.available_size_before_wrap(), Sense::drag());
+
+            let to_screen = emath::RectTransform::from_to(
+                Rect::from_min_size(Pos2::ZERO, response.rect.square_proportions()),
+                response.rect,
+            );
+            // let from_screen = to_screen.inverse();
+
+            let shapes: Vec<Shape> = hexes.iter().map(|hex| {
+                let position = Pos2 { x: hex.x as f32, y: hex.y as f32 };
+                let color = match hex.hex_type {
+                    HexType::SnakeHead => Color32::RED,
+                    HexType::SnakeTail => Color32::LIGHT_RED,
+                    HexType::Food => Color32::YELLOW,
+                };
+                transform_to_circle(&position, &to_screen, &response, &config, color)
+            }).collect();
+
+            let positions: Vec<Pos2> = (0..config.columns)
+                .flat_map(|x| (0..config.rows).map(move |y| Pos2 { x: x as f32, y: y as f32 }))
+                .collect();
+
+            let mut ground: Vec<Shape> = positions.iter().map(|position| {
+                transform_to_circle(position, &to_screen, &response, &config, config.bg_color.color)
+            }).collect();
+            ground.extend(shapes);
+            response.mark_changed();
+            let painter = ui.painter();
+            painter.extend(ground);
+            response
+        });
+
 }
