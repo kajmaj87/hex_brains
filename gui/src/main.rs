@@ -1,5 +1,6 @@
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
+use std::time::Instant;
 use bevy_ecs::prelude::{Entity, IntoSystemConfigs, Query, Res, ResMut, Resource, With, Without};
 use eframe::{egui, emath};
 use eframe::emath::{Pos2, Rect, Vec2};
@@ -50,12 +51,12 @@ fn main() {
 
 fn draw_simulation(context: Res<EguiEcsContext>, mut engine_events: ResMut<EngineEvents>, mut config: ResMut<Config>, positions: Query<&Position>, snakes: Query<(Entity, &Snake)>, solids: Query<(Entity, &Solid)>, food: Query<(Entity, &Food)>) {
     puffin::profile_function!();
-    let all_hexes: Vec<Hex> = snakes.iter().map(|(head, _)| {
-        let position = positions.get(head).unwrap();
-        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::SnakeHead }
-    }).chain(solids.iter().map(|(solid, _)| {
+    let all_hexes: Vec<Hex> = solids.iter().map(|(solid, _)| {
         let position = positions.get(solid).unwrap();
         Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::SnakeTail }
+    }).chain(snakes.iter().map(|(head, _)| {
+        let position = positions.get(head).unwrap();
+        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::SnakeHead }
     })).chain(food.iter().map(|(food, _)| {
         let position = positions.get(food).unwrap();
         Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Food }
@@ -170,12 +171,19 @@ struct Config {
 
 struct MyEguiApp {
     text: String,
-    total_finished: usize,
+    total_frames: usize,
+    last_frame: Instant,
     engine_commands_sender: Sender<EngineCommand>,
     engine_events_sender: Sender<EngineEvent>,
     engine_events_receiver: Receiver<EngineEvent>,
     can_draw_frame: bool,
     config: Config,
+    hexes: Vec<Hex>,
+    updates_last_second: u32,
+    last_second: Instant,
+    frames_last_second: u32,
+    frames_per_second: u32,
+    updates_per_second: u32
 }
 
 impl MyEguiApp {
@@ -186,12 +194,19 @@ impl MyEguiApp {
         // for e.g. egui::PaintCallback.
         Self {
             text: String::new(),
-            total_finished: 0,
+            total_frames: 0,
+            updates_last_second: 0,
+            frames_last_second: 0,
+            frames_per_second: 0,
+            updates_per_second: 0,
+            last_frame: Instant::now(),
+            last_second: Instant::now(),
             engine_commands_sender,
             engine_events_sender,
             engine_events_receiver,
             can_draw_frame: true,
-            config
+            config,
+            hexes: vec![],
         }
     }
 }
@@ -203,49 +218,63 @@ impl eframe::App for MyEguiApp {
             puffin_egui::profiler_window(ctx);
             puffin::GlobalProfiler::lock().new_frame();
         }
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Hello World!");
-            ui.heading("Press/Hold/Release example. Press A to test.");
-            if ui.button("Start profiling").clicked() {
-                puffin::set_scopes_on(true); // tell puffin to collect data
-            }
-            if ui.button("Simulate Batch").clicked() {
-                let simulations = (0..64)
-                    .map(|i| {
-                        let mut result = Simulation::new(format!("Simulation {}", i), self.engine_events_sender.clone(), None, 200, 200);
-                        result.insert_resource(EngineState {
-                            repaint_needed: false,
-                            speed_limit: None,
-                            running: true,
-                            frames_left: 0.0,
-                            frames: 0,
-                            updates_done: 0,
-                        });
-                        result
-                    })
-                    .collect();
-                thread::spawn(move || {
-                    simulate_batch(simulations);
-                });
-            }
-            if ui.button("Create Snakes").on_hover_text("Click to add 10 snakes. Press 's' to add one snake").clicked() {
-                self.engine_commands_sender.send(EngineCommand::CreateSnakes(10)).unwrap();
-            }
-            self.engine_events_receiver.try_iter().for_each(|result| {
-                self.total_finished += 1;
-                match result {
-                    EngineEvent::SimulationFinished { steps, name, duration } => {
-                        self.text.push_str(&format!("\nSimulation {} finished in {} steps in {} ms", name, steps, duration));
-                    }
-                    EngineEvent::FrameDrawn { updates_left, updates_done } => {
-                        self.text = format!("{:.1} updates left, {} updates done", updates_left, updates_done);
-                        self.can_draw_frame = true;
-                    }
-                    EngineEvent::DrawData { hexes } => {
-                        draw_hexes(ui, hexes, &self.config);
-                    }
+        self.engine_events_receiver.try_iter().for_each(|result| {
+            match result {
+                EngineEvent::SimulationFinished { steps, name, duration } => {
+                    self.text.push_str(&format!("\nSimulation {} finished in {} steps in {} ms", name, steps, duration));
                 }
+                EngineEvent::FrameDrawn { updates_left, updates_done } => {
+                    self.text = format!("{:.1} updates left, {} updates done", updates_left, updates_done);
+                    self.can_draw_frame = true;
+                    self.total_frames += 1;
+                    self.updates_last_second += updates_done;
+                    self.frames_last_second += 1;
+                }
+                EngineEvent::DrawData { hexes } => {
+                    self.hexes = hexes;
+                }
+            }
+        });
+        if self.last_second.elapsed().as_millis() > 1000 {
+            self.last_second = Instant::now();
+            self.updates_per_second = self.updates_last_second;
+            self.frames_per_second = self.frames_last_second;
+            self.updates_last_second = 0;
+            self.frames_last_second = 0;
+        }
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                if ui.button("Start profiling").clicked() {
+                    puffin::set_scopes_on(true); // tell puffin to collect data
+                }
+                if ui.button("Simulate Batch").clicked() {
+                    let simulations = (0..64)
+                        .map(|i| {
+                            let mut result = Simulation::new(format!("Simulation {}", i), self.engine_events_sender.clone(), None, 200, 200);
+                            result.insert_resource(EngineState {
+                                repaint_needed: false,
+                                speed_limit: None,
+                                running: true,
+                                frames_left: 0.0,
+                                frames: 0,
+                                updates_done: 0,
+                            });
+                            result
+                        })
+                        .collect();
+                    thread::spawn(move || {
+                        simulate_batch(simulations);
+                    });
+                }
+                if ui.button("Create Snakes").on_hover_text("Click to add 10 snakes. Press 's' to add one snake").clicked() {
+                    self.engine_commands_sender.send(EngineCommand::CreateSnakes(10)).unwrap();
+                }
+                ui.label(format!("Total : {} ({:.1}ms/frame)", self.total_frames, (Instant::now().duration_since(self.last_frame)).as_millis()));
+                ui.label(format!("FPS : {:.1}", self.frames_per_second));
+                ui.label(format!("UPS : {}", self.updates_per_second));
+                ui.label(format!("Speed : x{:.1}", self.updates_per_second as f32 / self.frames_per_second as f32));
             });
+            draw_hexes(ui, &self.hexes, &self.config);
             ScrollArea::vertical()
                 .auto_shrink([false; 2])
                 .stick_to_bottom(true)
@@ -273,11 +302,12 @@ impl eframe::App for MyEguiApp {
             ctx.request_repaint();
             self.can_draw_frame = false;
         }
+        self.last_frame = Instant::now();
         self.engine_commands_sender.send(EngineCommand::RepaintRequested);
     }
 }
 
-fn draw_hexes(ui: &mut Ui, hexes: Vec<Hex>, config: &Config) {
+fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
         Frame::canvas(ui.style()).show(ui, |ui| {
             let (mut response, _) =
                 ui.allocate_painter(ui.available_size_before_wrap(), Sense::drag());
