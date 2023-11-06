@@ -40,6 +40,7 @@ pub struct Snake {
     pub new_position: (i32, i32),
     pub last_position: (i32, i32),
     pub segments: Vec<Entity>,
+    pub generation: u32,
 }
 
 #[derive(Component)]
@@ -287,7 +288,7 @@ pub fn split(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, po
             let new_head_id = new_snake_segments.last().unwrap();
             let new_head_position = positions.get(*new_head_id).unwrap();
             new_snake_segments.reverse();
-            let mut new_head = create_head((new_head_position.x, new_head_position.y), Box::new(RandomBrain {}));
+            let mut new_head = create_head((new_head_position.x, new_head_position.y), Box::new(RandomBrain {}), snake.generation + 1);
             new_head.0.segments = new_snake_segments;
             let new_head_id = new_head.0.segments[0];
             new_head.0.direction = flip_direction(snake.direction.clone());
@@ -303,13 +304,15 @@ pub fn increase_age(mut agables: Query<&mut Age>) {
     }
 }
 
-pub fn calculate_stats(food: Query<&Food>, snakes: Query<&Age>, solids: Query<&Solid>, mut stats: ResMut<Stats>) {
+pub fn calculate_stats(food: Query<&Food>, snakes: Query<(&Snake, &Age)>, solids: Query<&Solid>, mut stats: ResMut<Stats>) {
     puffin::profile_function!();
-    let max_age= snakes.iter().map(|a| a.0).reduce(|a, b| a.max(b));
+    let max_age= snakes.iter().map(|(_, a)| a.0).reduce(|a, b| a.max(b));
+    let max_generation = snakes.iter().map(|(s, _)| s.generation).reduce(|a, b| a.max(b));
     stats.oldest_snake = max_age.unwrap_or(0);
     stats.total_snakes = snakes.iter().count();
     stats.total_food = food.iter().count();
     stats.total_solids = solids.iter().count();
+    stats.max_generation = max_generation.unwrap_or(0);
 }
 
 pub fn grow(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake, &mut Energy)>, positions: Query<&Position>, config: Res<SimulationConfig>) {
@@ -336,10 +339,10 @@ pub fn assign_missing_segments(mut snakes: Query<(Entity, &mut Snake), Added<Sna
 }
 
 pub fn create_snake(energy: i32, position: (i32, i32), brain: Box<dyn Brain>) -> (Position, Energy, Snake, Age, Solid) {
-    let (head, age) = create_head(position, brain);
+    let (head, age) = create_head(position, brain, 0);
     (Position { x: position.0, y: position.1 }, Energy { amount: energy }, head, age, Solid)
 }
 
-fn create_head(position: (i32, i32), brain: Box<dyn Brain>) -> (Snake, Age) {
-    (Snake { direction: Direction::West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position }, Age(0))
+fn create_head(position: (i32, i32), brain: Box<dyn Brain>, generation: u32) -> (Snake, Age) {
+    (Snake { direction: Direction::West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position, generation }, Age(0))
 }

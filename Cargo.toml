@@ -1,2 +1,10 @@
 [workspace]
 members = ["engine", "gui"]
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+debug = false
+overflow-checks = false
+panic = "abort"

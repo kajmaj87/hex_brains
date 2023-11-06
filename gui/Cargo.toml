@@ -3,6 +3,7 @@ name = "hex_brains_gui"
 version = "0.1.0"
 edition = "2021"
 
+
 [dependencies]
 hex_brains_engine = { path = "../engine" }
 bevy_ecs = "0.11.3"
