@@ -56,7 +56,7 @@ fn create_simulation_config(columns: usize, rows: usize) -> SimulationConfig{
         columns,
         starting_snakes: 10,
         starting_food: 100,
-        food_per_step: 5,
+        food_per_step: 3,
         energy_per_segment: 100,
         wait_cost: 1,
         move_cost: 10,
