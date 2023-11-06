@@ -1,7 +1,7 @@
 use std::collections::LinkedList;
 use rand::Rng;
 use bevy_ecs::prelude::*;
-use crate::simulation::SimulationConfig;
+use crate::simulation::{SimulationConfig, Stats};
 
 #[derive(Component)]
 pub struct Position {
@@ -46,6 +46,9 @@ pub struct Snake {
 pub struct Solid;
 
 pub struct RandomBrain;
+
+#[derive(Component)]
+pub struct Age(u32);
 
 impl Brain for RandomBrain {
     fn decide(&self) -> Decision {
@@ -231,7 +234,6 @@ pub fn create_food(mut commands: Commands, mut entities: ResMut<EntityMap>, conf
     }
 }
 
-
 pub fn eat_food(mut commands: Commands, mut food: ResMut<EntityMap>, mut snakes: Query<(&Position, &mut Energy), Without<Food>>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     for (position, mut energy) in &mut snakes {
@@ -250,15 +252,12 @@ pub fn starve(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, m
         if *tail_id == head_id {
             let head_energy = energies.get_mut(head_id).unwrap();
             if head_energy.amount <= 0 {
-
                 commands.entity(head_id).despawn();
             }
         } else {
             if let Ok([mut head_energy, mut tail_energy]) = energies.get_many_mut([head_id, *tail_id]) {
-
                 if head_energy.amount <= 0 {
                     head_energy.amount += tail_energy.amount;
-
                     commands.entity(*tail_id).despawn();
                     snake.segments.pop();
                 }
@@ -289,12 +288,25 @@ pub fn split(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, po
             let new_head_position = positions.get(*new_head_id).unwrap();
             new_snake_segments.reverse();
             let mut new_head = create_head((new_head_position.x, new_head_position.y), Box::new(RandomBrain {}));
-            new_head.segments = new_snake_segments;
-            let new_head_id = new_head.segments[0];
-            new_head.direction = flip_direction(snake.direction.clone());
+            new_head.0.segments = new_snake_segments;
+            let new_head_id = new_head.0.segments[0];
+            new_head.0.direction = flip_direction(snake.direction.clone());
             commands.entity(new_head_id).insert(new_head);
         }
     }
+}
+
+pub fn increase_age(mut agables: Query<&mut Age>) {
+    puffin::profile_function!();
+    for mut age in &mut agables {
+        age.0 += 1;
+    }
+}
+
+pub fn calculate_stats(mut snakes: Query<&Age>, mut stats: ResMut<Stats>) {
+    puffin::profile_function!();
+    let max_age= snakes.iter().map(|a| a.0).reduce(|a, b| a.max(b));
+    stats.oldest_snake = max_age.unwrap_or(0);
 }
 
 pub fn grow(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake, &mut Energy)>, positions: Query<&Position>, config: Res<SimulationConfig>) {
@@ -320,10 +332,11 @@ pub fn assign_missing_segments(mut snakes: Query<(Entity, &mut Snake), Added<Sna
     }
 }
 
-pub fn create_snake(energy: i32, position: (i32, i32), brain: Box<dyn Brain>) -> (Position, Energy, Snake, Solid) {
-    (Position { x: position.0, y: position.1 }, Energy { amount: energy }, create_head(position, brain), Solid)
+pub fn create_snake(energy: i32, position: (i32, i32), brain: Box<dyn Brain>) -> (Position, Energy, Snake, Age, Solid) {
+    let (head, age) = create_head(position, brain);
+    (Position { x: position.0, y: position.1 }, Energy { amount: energy }, head, age, Solid)
 }
 
-fn create_head(position: (i32, i32), brain: Box<dyn Brain>) -> Snake {
-    Snake { direction: Direction::West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position }
+fn create_head(position: (i32, i32), brain: Box<dyn Brain>) -> (Snake, Age) {
+    (Snake { direction: Direction::West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position }, Age(0))
 }

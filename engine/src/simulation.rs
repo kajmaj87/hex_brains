@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 use bevy_ecs::prelude::*;
 use rand::{Rng, thread_rng};
-use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, EntityMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments};
+use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, EntityMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments, increase_age, calculate_stats};
 
 pub struct Simulation {
     first_schedule: Schedule,
@@ -31,17 +31,28 @@ pub enum HexType {
     SnakeTail,
 }
 
+#[derive(Resource, Default, Debug, Clone)]
+pub struct Stats {
+    pub total_snakes: usize,
+    pub total_food: usize,
+    pub total_energy: i32,
+    pub oldest_snake: u32,
+    pub food: usize,
+}
+
 #[derive(Debug, Clone)]
 pub enum EngineEvent {
     SimulationFinished { steps: u32, name: String, duration: u128 },
-    DrawData { hexes: Vec<Hex> },
+    DrawData { hexes: Vec<Hex>, stats: Stats },
     FrameDrawn { updates_left: f32, updates_done: u32 },
 }
 
-#[derive(Debug, Resource)]
+#[derive(Debug, Resource, Clone, Copy)]
 pub struct SimulationConfig {
     pub rows: usize,
     pub columns: usize,
+    pub starting_snakes: usize,
+    pub starting_food: usize,
     pub food_per_step: usize,
     pub energy_per_segment: i32,
     pub wait_cost: i32,
@@ -89,20 +100,23 @@ fn should_simulate_frame(engine_state: Res<EngineState>) -> bool {
 }
 
 impl Simulation {
-    pub fn new(name: String, engine_events: Sender<EngineEvent>, engine_commands: Option<Receiver<EngineCommand>>, rows: usize, columns: usize) -> Self {
+    pub fn new(name: String, engine_events: Sender<EngineEvent>, engine_commands: Option<Receiver<EngineCommand>>, config: SimulationConfig) -> Self {
         let mut world = World::new();
-        let config = SimulationConfig { rows, columns, food_per_step: 1, energy_per_segment: 100, wait_cost: 1, move_cost: 10, size_to_split: 12, energy_to_grow: 200 };
-        for i in 0..6 {
+        for _ in 0..config.starting_snakes {
             world.spawn(create_snake(config.energy_per_segment, (50, 50), Box::new(RandomBrain {})));
         }
+        // for _ in 0..config.starting_food {
+        //     world.spawn(
+        // }
         world.insert_resource(config);
-        world.insert_resource(EntityMap { map: vec![vec![None; columns]; rows] });
+        world.insert_resource(Stats::default());
+        world.insert_resource(EntityMap { map: vec![vec![None; config.columns]; config.rows] });
         world.insert_resource(EngineEvents { events: Mutex::new(engine_events.clone()) });
         let mut first_schedule = Schedule::default();
         let mut core_schedule = Schedule::default();
         let mut secondary_schedule = Schedule::default();
-        first_schedule.add_systems(assign_missing_segments.run_if(should_simulate_frame));
-        core_schedule.add_systems((think, (movement, update_positions, split).chain(), (eat_food, create_food).chain()).run_if(should_simulate_frame));
+        first_schedule.add_systems((assign_missing_segments).run_if(should_simulate_frame));
+        core_schedule.add_systems((think, increase_age, calculate_stats, (movement, update_positions, split).chain(), (eat_food, create_food).chain()).run_if(should_simulate_frame));
         secondary_schedule.add_systems((grow, starve, turn_counter).run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();
         Simulation { first_schedule, core_schedule, secondary_schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
