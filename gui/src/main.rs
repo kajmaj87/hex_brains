@@ -50,7 +50,7 @@ fn main() {
     }));
 }
 
-fn create_simulation_config(columns: usize, rows: usize) -> SimulationConfig{
+fn create_simulation_config(columns: usize, rows: usize) -> SimulationConfig {
     SimulationConfig {
         rows,
         columns,
@@ -64,6 +64,7 @@ fn create_simulation_config(columns: usize, rows: usize) -> SimulationConfig{
         size_to_split: 10,
     }
 }
+
 fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Position>, snakes: Query<(Entity, &Snake)>, solids: Query<(Entity, &Solid)>, food: Query<(Entity, &Food)>, stats: Res<Stats>) {
     puffin::profile_function!();
     let all_hexes: Vec<Hex> = solids.iter().map(|(solid, _)| {
@@ -138,7 +139,7 @@ struct MyEguiApp {
     frames_last_second: u32,
     frames_per_second: u32,
     updates_per_second: u32,
-    stats: Stats
+    stats: Stats,
 }
 
 impl MyEguiApp {
@@ -235,6 +236,12 @@ impl eframe::App for MyEguiApp {
                 ui.label(format!("Total snakes/segments : {}/{}", self.stats.total_snakes, self.stats.total_solids));
                 ui.label(format!("Total food : {}", self.stats.total_food));
             });
+            ui.horizontal(|ui| {
+                egui::stroke_ui(ui, &mut self.config.bg_color, "Background Color");
+                egui::stroke_ui(ui, &mut self.config.snake_color, "Snake Color");
+                egui::stroke_ui(ui, &mut self.config.tail_color, "Tail Color");
+                egui::stroke_ui(ui, &mut self.config.food_color, "Food Color");
+            });
             draw_hexes(ui, &self.hexes, &self.config);
             ScrollArea::vertical()
                 .auto_shrink([false; 2])
@@ -269,38 +276,37 @@ impl eframe::App for MyEguiApp {
 }
 
 fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
-        Frame::canvas(ui.style()).show(ui, |ui| {
-            let (mut response, _) =
-                ui.allocate_painter(ui.available_size_before_wrap(), Sense::drag());
+    Frame::canvas(ui.style()).show(ui, |ui| {
+        let (mut response, _) =
+            ui.allocate_painter(ui.available_size_before_wrap(), Sense::drag());
 
-            let to_screen = emath::RectTransform::from_to(
-                Rect::from_min_size(Pos2::ZERO, response.rect.square_proportions()),
-                response.rect,
-            );
-            // let from_screen = to_screen.inverse();
+        let to_screen = emath::RectTransform::from_to(
+            Rect::from_min_size(Pos2::ZERO, response.rect.square_proportions()),
+            response.rect,
+        );
+        // let from_screen = to_screen.inverse();
 
-            let shapes: Vec<Shape> = hexes.iter().map(|hex| {
-                let position = Pos2 { x: hex.x as f32, y: hex.y as f32 };
-                let color = match hex.hex_type {
-                    HexType::SnakeHead => Color32::RED,
-                    HexType::SnakeTail => Color32::LIGHT_RED,
-                    HexType::Food => Color32::YELLOW,
-                };
-                transform_to_circle(&position, &to_screen, &response, &config, color)
-            }).collect();
+        let shapes: Vec<Shape> = hexes.iter().map(|hex| {
+            let position = Pos2 { x: hex.x as f32, y: hex.y as f32 };
+            let color = match hex.hex_type {
+                HexType::SnakeHead => config.snake_color.color,
+                HexType::SnakeTail => config.tail_color.color,
+                HexType::Food => config.food_color.color,
+            };
+            transform_to_circle(&position, &to_screen, &response, &config, color)
+        }).collect();
 
-            let positions: Vec<Pos2> = (0..config.columns)
-                .flat_map(|x| (0..config.rows).map(move |y| Pos2 { x: x as f32, y: y as f32 }))
-                .collect();
+        let positions: Vec<Pos2> = (0..config.columns)
+            .flat_map(|x| (0..config.rows).map(move |y| Pos2 { x: x as f32, y: y as f32 }))
+            .collect();
 
-            let mut ground: Vec<Shape> = positions.iter().map(|position| {
-                transform_to_circle(position, &to_screen, &response, &config, config.bg_color.color)
-            }).collect();
-            ground.extend(shapes);
-            response.mark_changed();
-            let painter = ui.painter();
-            painter.extend(ground);
-            response
-        });
-
+        let mut ground: Vec<Shape> = positions.iter().map(|position| {
+            transform_to_circle(position, &to_screen, &response, &config, config.bg_color.color)
+        }).collect();
+        ground.extend(shapes);
+        response.mark_changed();
+        let painter = ui.painter();
+        painter.extend(ground);
+        response
+    });
 }
