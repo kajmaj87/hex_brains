@@ -1,6 +1,8 @@
 use std::collections::LinkedList;
 use rand::Rng;
 use bevy_ecs::prelude::*;
+use bevy_ecs::query::QueryParIter;
+use crate::neural::{InnovationTracker, NeuralNetwork, SensorInput};
 use crate::simulation::{SimulationConfig, Stats};
 
 #[derive(Component)]
@@ -28,7 +30,7 @@ pub enum Decision {
 }
 
 pub trait Brain: Sync + Send {
-    fn decide(&self) -> Decision;
+    fn decide(&self, sensory_input: Vec<SensorInput>) -> Decision;
 }
 
 // Snake represents the head segment of snake and info about its other segments
@@ -48,13 +50,47 @@ pub struct Solid;
 
 pub struct RandomBrain;
 
+pub struct RandomNeuralBrain {
+    neural_network: NeuralNetwork,
+}
+
 #[derive(Component)]
 pub struct Age(u32);
 
 impl Brain for RandomBrain {
-    fn decide(&self) -> Decision {
+    fn decide(&self, _: Vec<SensorInput>) -> Decision {
         let mut rng = rand::thread_rng();
         match rng.gen_range(0..=3) {
+            0 => Decision::MoveForward,
+            1 => Decision::MoveLeft,
+            2 => Decision::MoveRight,
+            _ => Decision::Wait
+        }
+    }
+}
+
+impl RandomNeuralBrain {
+    pub(crate) fn new(innovation_tracker: &mut InnovationTracker) -> Self {
+        let neural_network = NeuralNetwork::random_brain(2, 0.5, innovation_tracker);
+        Self {
+            neural_network
+        }
+    }
+}
+
+impl Brain for RandomNeuralBrain {
+    fn decide(&self, sensor_input: Vec<SensorInput>) -> Decision {
+        let output = self.neural_network.run(sensor_input);
+        // return the index with the maximum value of the output vector
+        let mut max_index = 0;
+        let mut max_value = 0.0;
+        for (index, value) in output.iter().enumerate() {
+            if *value > max_value {
+                max_value = *value;
+                max_index = index;
+            }
+        }
+        match max_index {
             0 => Decision::MoveForward,
             1 => Decision::MoveLeft,
             2 => Decision::MoveRight,
@@ -215,8 +251,9 @@ fn move_to_direction(direction: Direction, position: &Position, config: &Res<Sim
 
 pub fn think(mut heads: Query<&mut Snake>) {
     puffin::profile_function!();
+    let mut rng = rand::thread_rng();
     for mut head in &mut heads {
-        head.decision = head.brain.decide();
+        head.decision = head.brain.decide(vec![SensorInput{ value: 1.0, index: 0 }, SensorInput{ value: rng.gen_range(0.0..1.0), index: 1 }]);
     }
 }
 
@@ -279,7 +316,7 @@ pub fn reproduce(mut commands: Commands, mut snakes: Query<(&mut Energy, &Positi
     // }
 }
 
-pub fn split(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, positions: Query<&Position>, config: Res<SimulationConfig>) {
+pub fn split(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, positions: Query<&Position>, config: Res<SimulationConfig>, mut innovation_tracker: ResMut<InnovationTracker>) {
     puffin::profile_function!();
     for (head_id, mut snake) in &mut snakes {
         let snake_length = snake.segments.len();
@@ -288,7 +325,7 @@ pub fn split(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, po
             let new_head_id = new_snake_segments.last().unwrap();
             let new_head_position = positions.get(*new_head_id).unwrap();
             new_snake_segments.reverse();
-            let mut new_head = create_head((new_head_position.x, new_head_position.y), Box::new(RandomBrain {}), snake.generation + 1);
+            let mut new_head = create_head((new_head_position.x, new_head_position.y), Box::new(RandomNeuralBrain::new(&mut *innovation_tracker)), snake.generation + 1);
             new_head.0.segments = new_snake_segments;
             let new_head_id = new_head.0.segments[0];
             new_head.0.direction = flip_direction(snake.direction.clone());
@@ -306,7 +343,7 @@ pub fn increase_age(mut agables: Query<&mut Age>) {
 
 pub fn calculate_stats(food: Query<&Food>, snakes: Query<(&Snake, &Age)>, solids: Query<&Solid>, mut stats: ResMut<Stats>) {
     puffin::profile_function!();
-    let max_age= snakes.iter().map(|(_, a)| a.0).reduce(|a, b| a.max(b));
+    let max_age = snakes.iter().map(|(_, a)| a.0).reduce(|a, b| a.max(b));
     let max_generation = snakes.iter().map(|(s, _)| s.generation).reduce(|a, b| a.max(b));
     stats.oldest_snake = max_age.unwrap_or(0);
     stats.total_snakes = snakes.iter().count();

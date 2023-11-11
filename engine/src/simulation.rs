@@ -3,7 +3,8 @@ use std::sync::Mutex;
 use std::time::Instant;
 use bevy_ecs::prelude::*;
 use rand::{Rng, thread_rng};
-use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, EntityMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments, increase_age, calculate_stats};
+use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, EntityMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments, increase_age, calculate_stats, RandomNeuralBrain};
+use crate::neural::InnovationTracker;
 
 pub struct Simulation {
     first_schedule: Schedule,
@@ -104,8 +105,9 @@ fn should_simulate_frame(engine_state: Res<EngineState>) -> bool {
 impl Simulation {
     pub fn new(name: String, engine_events: Sender<EngineEvent>, engine_commands: Option<Receiver<EngineCommand>>, config: SimulationConfig) -> Self {
         let mut world = World::new();
+        let mut innovation_tracker = InnovationTracker::new();
         for _ in 0..config.starting_snakes {
-            world.spawn(create_snake(config.energy_per_segment, (50, 50), Box::new(RandomBrain {})));
+            world.spawn(create_snake(config.energy_per_segment, (50, 50), Box::new(RandomNeuralBrain::new(&mut innovation_tracker))));
         }
         // for _ in 0..config.starting_food {
         //     world.spawn(
@@ -114,6 +116,7 @@ impl Simulation {
         world.insert_resource(Stats::default());
         world.insert_resource(EntityMap { map: vec![vec![None; config.columns]; config.rows] });
         world.insert_resource(EngineEvents { events: Mutex::new(engine_events.clone()) });
+        world.insert_resource(innovation_tracker);
         let mut first_schedule = Schedule::default();
         let mut core_schedule = Schedule::default();
         let mut secondary_schedule = Schedule::default();
@@ -159,11 +162,18 @@ impl Simulation {
                         }
                         EngineCommand::CreateSnakes(amount) => {
                            // let config = self.world.get_resource::<SimulationConfig>().unwrap();
-                           for _ in 0..amount {
+                            let mut brains = vec![];
+                            for _ in 0..amount {
+                                let mut innovation_tracker = self.world.get_resource_mut::<InnovationTracker>().unwrap();
+                                brains.push(RandomNeuralBrain::new(&mut innovation_tracker));
+                            }
+                           for brain in brains {
                                let mut rng = thread_rng();
                                let x = rng.gen_range(0..100);
                                let y = rng.gen_range(0..100);
-                               self.world.spawn(create_snake(100, (x, y), Box::new(RandomBrain {})));
+                               {
+                                   self.world.spawn(create_snake(100, (x, y), Box::new(brain)));
+                               }
                            }
                         }
                     }
