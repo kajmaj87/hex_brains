@@ -487,7 +487,7 @@ pub fn assign_species(new_borns: Query<Entity, Added<JustBorn>>, mut snakes: Que
         for specie in species.species.iter_mut() {
             if let Ok([(snake_id, mut snake), (leader_id, leader_snake)]) = snakes.get_many_mut([baby_id, specie.leader]) {
                 let compatibility = calculate_gene_difference(&leader_snake.brain.get_neural_network().unwrap(), &snake.brain.get_neural_network().unwrap());
-                info!("Difference: {}", compatibility);
+                debug!("Difference: {}", compatibility);
                 if compatibility < config.species_threshold {
                     debug!("Snake {:?} is in specie {:?}", snake_id, specie.id);
                     snake.species = Some(specie.id);
@@ -531,7 +531,7 @@ fn calculate_gene_difference(leader: &NeuralNetwork, new_snake: &NeuralNetwork) 
     let max_genes = leader_genes.len().max(new_snake_genes.len());
     let gene_difference = (max_genes - matching_genes_count) as f32 / max_genes as f32;
     let weight_difference = weight_difference / matching_genes_count as f32;
-    info!("Matching genes: {}, max genes: {}, gene difference: {}, weight difference: {}", matching_genes_count, max_genes, gene_difference, weight_difference);
+    debug!("Matching genes: {}, max genes: {}, gene difference: {}, weight difference: {}", matching_genes_count, max_genes, gene_difference, weight_difference);
     0.6 * gene_difference + 0.4 * weight_difference
 }
 
