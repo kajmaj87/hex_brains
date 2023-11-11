@@ -36,13 +36,13 @@ impl InnovationTracker {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ConnectionGene {
     in_node: usize,
     out_node: usize,
-    weight: f32,
-    enabled: bool,
-    innovation_number: InnovationNumber,
+    pub(crate) weight: f32,
+    pub(crate) enabled: bool,
+    pub(crate) innovation_number: InnovationNumber,
 }
 
 #[derive(Clone, Debug)]
@@ -91,7 +91,7 @@ impl NodeGene {
 #[derive(Clone, Debug)]
 pub struct NeuralNetwork {
     nodes: Vec<NodeGene>,
-    connections: Vec<ConnectionGene>,
+    pub connections: Vec<ConnectionGene>,
 }
 
 impl NeuralNetwork {

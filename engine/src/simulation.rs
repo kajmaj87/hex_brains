@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 use bevy_ecs::prelude::*;
 use rand::{Rng, thread_rng};
-use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, EntityMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments, increase_age, calculate_stats, RandomNeuralBrain};
+use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, EntityMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments, increase_age, calculate_stats, RandomNeuralBrain, assign_species, Species};
 use crate::neural::InnovationTracker;
 
 pub struct Simulation {
@@ -25,11 +25,14 @@ pub struct Hex {
     pub y: usize,
     pub hex_type: HexType,
 }
+
 #[derive(Debug, Clone)]
 pub enum HexType {
     Food,
-    SnakeHead,
-    SnakeTail,
+    SnakeHead {
+        specie: u32,
+    },
+    SnakeTail
 }
 
 #[derive(Resource, Default, Debug, Clone)]
@@ -42,6 +45,7 @@ pub struct Stats {
     pub total_solids: usize,
     pub max_generation: u32,
     pub max_mutations: u32,
+    pub species: Species
 }
 
 #[derive(Debug, Clone)]
@@ -63,6 +67,7 @@ pub struct SimulationConfig {
     pub move_cost: i32,
     pub energy_to_grow: i32,
     pub size_to_split: usize,
+    pub species_threshold: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -118,10 +123,11 @@ impl Simulation {
         world.insert_resource(EntityMap { map: vec![vec![None; config.columns]; config.rows] });
         world.insert_resource(EngineEvents { events: Mutex::new(engine_events.clone()) });
         world.insert_resource(innovation_tracker);
+        world.insert_resource(Species::default());
         let mut first_schedule = Schedule::default();
         let mut core_schedule = Schedule::default();
         let mut secondary_schedule = Schedule::default();
-        first_schedule.add_systems((assign_missing_segments).run_if(should_simulate_frame));
+        first_schedule.add_systems((assign_missing_segments, assign_species).run_if(should_simulate_frame));
         core_schedule.add_systems((think, increase_age, calculate_stats, (movement, update_positions, split).chain(), (eat_food, create_food).chain()).run_if(should_simulate_frame));
         secondary_schedule.add_systems((grow, starve, turn_counter).run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();
@@ -162,20 +168,20 @@ impl Simulation {
                             engine_state.running = !engine_state.running;
                         }
                         EngineCommand::CreateSnakes(amount) => {
-                           // let config = self.world.get_resource::<SimulationConfig>().unwrap();
+                            // let config = self.world.get_resource::<SimulationConfig>().unwrap();
                             let mut brains = vec![];
                             for _ in 0..amount {
                                 let mut innovation_tracker = self.world.get_resource_mut::<InnovationTracker>().unwrap();
                                 brains.push(RandomNeuralBrain::new(&mut innovation_tracker));
                             }
-                           for brain in brains {
-                               let mut rng = thread_rng();
-                               let x = rng.gen_range(0..100);
-                               let y = rng.gen_range(0..100);
-                               {
-                                   self.world.spawn(create_snake(100, (x, y), Box::new(brain)));
-                               }
-                           }
+                            for brain in brains {
+                                let mut rng = thread_rng();
+                                let x = rng.gen_range(0..100);
+                                let y = rng.gen_range(0..100);
+                                {
+                                    self.world.spawn(create_snake(100, (x, y), Box::new(brain)));
+                                }
+                            }
                         }
                     }
                 });

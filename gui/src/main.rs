@@ -1,3 +1,5 @@
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::Instant;
@@ -67,6 +69,7 @@ fn create_simulation_config(columns: usize, rows: usize) -> SimulationConfig {
         move_cost: 10,
         energy_to_grow: 200,
         size_to_split: 10,
+        species_threshold: 0.05,
     }
 }
 
@@ -75,9 +78,9 @@ fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Po
     let all_hexes: Vec<Hex> = solids.iter().map(|(solid, _)| {
         let position = positions.get(solid).unwrap();
         Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::SnakeTail }
-    }).chain(snakes.iter().map(|(head, _)| {
+    }).chain(snakes.iter().map(|(head, snake)| {
         let position = positions.get(head).unwrap();
-        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::SnakeHead }
+        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::SnakeHead { specie: snake.species.unwrap_or(0) } }
     })).chain(food.iter().map(|(food, _)| {
         let position = positions.get(food).unwrap();
         Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Food }
@@ -241,6 +244,7 @@ impl eframe::App for MyEguiApp {
                 ui.label(format!("Max mutations : {}", self.stats.max_mutations));
                 ui.label(format!("Total snakes/segments : {}/{}", self.stats.total_snakes, self.stats.total_solids));
                 ui.label(format!("Total food : {}", self.stats.total_food));
+                ui.label(format!("Total species : {}", self.stats.species.species.len()));
             });
             ui.horizontal(|ui| {
                 egui::stroke_ui(ui, &mut self.config.bg_color, "Background Color");
@@ -295,7 +299,7 @@ fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
         let shapes: Vec<Shape> = hexes.iter().map(|hex| {
             let position = Pos2 { x: hex.x as f32, y: hex.y as f32 };
             let color = match hex.hex_type {
-                HexType::SnakeHead => config.snake_color.color,
+                HexType::SnakeHead{ specie } => u32_to_color(specie),
                 HexType::SnakeTail => config.tail_color.color,
                 HexType::Food => config.food_color.color,
             };
@@ -315,4 +319,16 @@ fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
         painter.extend(ground);
         response
     });
+}
+
+fn u32_to_color(u: u32) -> Color32 {
+    let mut hasher = DefaultHasher::new();
+    u.hash(&mut hasher);
+    let hash = hasher.finish();
+
+    let r = (hash >> 16) as u8;
+    let g = (hash >> 8) as u8;
+    let b = hash as u8;
+
+    Color32::from_rgb(r, g, b)
 }

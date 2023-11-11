@@ -1,9 +1,10 @@
+use std::cell::RefCell;
 use std::collections::LinkedList;
 use rand::Rng;
 use bevy_ecs::prelude::*;
 use bevy_ecs::query::QueryParIter;
-use tracing::debug;
-use crate::neural::{InnovationTracker, NeuralNetwork, SensorInput};
+use tracing::{debug, info};
+use crate::neural::{ConnectionGene, InnovationTracker, NeuralNetwork, SensorInput};
 use crate::simulation::{SimulationConfig, Stats};
 
 #[derive(Component, Clone)]
@@ -36,6 +37,20 @@ pub trait Brain: Sync + Send {
 }
 
 // Snake represents the head segment of snake and info about its other segments
+#[derive(Debug)]
+#[derive(Clone)]
+pub struct Specie {
+    pub id: u32,
+    pub leader: Entity,
+    pub members: Vec<Entity>,
+}
+
+#[derive(Resource, Default, Debug, Clone)]
+pub struct Species {
+    pub last_id: u32,
+    pub species: Vec<Specie>,
+}
+
 #[derive(Component)]
 pub struct Snake {
     pub direction: Direction,
@@ -46,10 +61,14 @@ pub struct Snake {
     pub segments: Vec<Entity>,
     pub generation: u32,
     pub mutations: u32,
+    pub species: Option<u32>,
 }
 
 #[derive(Component)]
 pub struct Solid;
+
+#[derive(Component)]
+pub struct JustBorn;
 
 pub struct RandomBrain;
 
@@ -286,7 +305,7 @@ pub fn think(mut heads: Query<(&Position, &mut Snake)>, foodMap: Res<EntityMap>,
 }
 
 fn see_food(head_direction: &Direction, position: &Position, range: u32, food_map: &Res<EntityMap>, config: &Res<SimulationConfig>, index: usize) -> SensorInput {
-    let mut current_vision_position= position.clone();
+    let mut current_vision_position = position.clone();
     let mut current_range = 0;
     while current_range < range {
         current_vision_position = position_at_direction(head_direction, &current_vision_position, &config).clone();
@@ -332,7 +351,7 @@ pub fn eat_food(mut commands: Commands, mut food: ResMut<EntityMap>, mut snakes:
     }
 }
 
-pub fn starve(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, mut energies: Query<&mut Energy>) {
+pub fn starve(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, mut energies: Query<&mut Energy>, mut species: ResMut<Species>) {
     puffin::profile_function!();
     for (head_id, mut snake) in &mut snakes {
         let tail_id = snake.segments.last().unwrap();
@@ -340,6 +359,22 @@ pub fn starve(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, m
             let head_energy = energies.get_mut(head_id).unwrap();
             if head_energy.amount <= 0 {
                 commands.entity(head_id).despawn();
+                let specie = snake.species.unwrap();
+                let mut specie = species.species.iter_mut().find(|s| s.id == specie).unwrap();
+                if specie.leader == head_id {
+                    specie.members.retain(|s| *s != head_id);
+                    if let Some(new_leader) = specie.members.pop() {
+                        specie.leader = new_leader;
+                        debug!("New leader for specie {:?}: {:?}", specie.id, specie.leader);
+                    } else {
+                        let specie_id = specie.id;
+                        debug!("Specie {:?} is extinct", specie_id);
+                        species.species.retain(|s| s.id != specie_id);
+                    }
+                } else {
+                    specie.members.retain(|s| *s != head_id);
+                    debug!("Snake {:?} died and was removed from specie {:?}", head_id, specie.id);
+                }
             }
         } else {
             if let Ok([mut head_energy, mut tail_energy]) = energies.get_many_mut([head_id, *tail_id]) {
@@ -397,7 +432,6 @@ pub fn split(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, po
             } else {
                 panic!("Snake without neural network");
             }
-
         }
     }
 }
@@ -409,7 +443,7 @@ pub fn increase_age(mut agables: Query<&mut Age>) {
     }
 }
 
-pub fn calculate_stats(food: Query<&Food>, snakes: Query<(&Snake, &Age)>, solids: Query<&Solid>, mut stats: ResMut<Stats>) {
+pub fn calculate_stats(food: Query<&Food>, snakes: Query<(&Snake, &Age)>, solids: Query<&Solid>, mut stats: ResMut<Stats>, species: Res<Species>) {
     puffin::profile_function!();
     let max_age = snakes.iter().map(|(_, a)| a.0).reduce(|a, b| a.max(b));
     let max_generation = snakes.iter().map(|(s, _)| s.generation).reduce(|a, b| a.max(b));
@@ -420,9 +454,10 @@ pub fn calculate_stats(food: Query<&Food>, snakes: Query<(&Snake, &Age)>, solids
     stats.total_solids = solids.iter().count();
     stats.max_generation = max_generation.unwrap_or(0);
     stats.max_mutations = max_mutation.unwrap_or(0);
+    stats.species = species.clone();
 }
 
-pub fn grow(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake, &mut Energy)>, positions: Query<&Position>, config: Res<SimulationConfig>) {
+pub fn grow(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake, &mut Energy)>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     for (snake_id, mut snake, mut energy) in &mut snakes {
         // tail always takes energy from head when growing
@@ -445,11 +480,66 @@ pub fn assign_missing_segments(mut snakes: Query<(Entity, &mut Snake), Added<Sna
     }
 }
 
-pub fn create_snake(energy: i32, position: (i32, i32), brain: Box<dyn Brain>) -> (Position, Energy, Snake, Age, Solid) {
-    let (head, age) = create_head(position, brain, 0, 0);
-    (Position { x: position.0, y: position.1 }, Energy { amount: energy }, head, age, Solid)
+pub fn assign_species(new_borns: Query<Entity, Added<JustBorn>>, mut snakes: Query<(Entity, &mut Snake)>, mut species: ResMut<Species>, config: Res<SimulationConfig>) {
+    puffin::profile_function!();
+    for baby_id in &new_borns {
+        // let mut baby_snake = None;
+        for specie in species.species.iter_mut() {
+            if let Ok([(snake_id, mut snake), (leader_id, leader_snake)]) = snakes.get_many_mut([baby_id, specie.leader]) {
+                let compatibility = calculate_gene_difference(&leader_snake.brain.get_neural_network().unwrap(), &snake.brain.get_neural_network().unwrap());
+                info!("Difference: {}", compatibility);
+                if compatibility < config.species_threshold {
+                    debug!("Snake {:?} is in specie {:?}", snake_id, specie.id);
+                    snake.species = Some(specie.id);
+                    specie.members.push(snake_id);
+                    break;
+                }
+            } else {
+                if baby_id != specie.leader {
+                    panic!("Unable to find leader {:?} for baby {:?} for specie {:?}", specie.leader, baby_id, specie.id);
+                }
+            }
+        }
+        let (_, mut baby_snake) = snakes.get_mut(baby_id).unwrap();
+        if baby_snake.species.is_none() {
+            let mut new_specie = Specie { id: species.last_id + 1, leader: baby_id, members: vec![] };
+            new_specie.members.push(baby_id);
+            species.species.push(new_specie);
+            species.last_id += 1;
+            baby_snake.species = Some(species.last_id);
+            debug!("Snake {:?} is a new specie: {}", baby_id, species.last_id);
+        }
+    }
 }
 
-fn create_head(position: (i32, i32), brain: Box<dyn Brain>, generation: u32, mutations: u32) -> (Snake, Age) {
-    (Snake { direction: Direction::West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position, generation, mutations }, Age(0))
+fn calculate_gene_difference(leader: &NeuralNetwork, new_snake: &NeuralNetwork) -> f32 {
+    let leader_genes = leader.connections.iter().filter(|c| c.enabled).map(|c| c).collect::<Vec<&ConnectionGene>>();
+    let new_snake_genes = new_snake.connections.iter().filter(|c| c.enabled).map(|c| c).collect::<Vec<&ConnectionGene>>();
+    let leader_innovations: Vec<_> = leader_genes.iter().map(|c| c.innovation_number).collect();
+    let new_snake_innovations: Vec<_> = new_snake_genes.iter().map(|c| c.innovation_number).collect();
+    // genes that both have in common
+    let matching_innovations: Vec<_> = leader_innovations.iter().filter(|i| new_snake_innovations.contains(i)).collect();
+    let matching_genes_count = matching_innovations.len();
+    // calculate weight difference on matching genes
+    let mut weight_difference = 0.0;
+    for innovation in matching_innovations {
+        let leader_weight = leader.connections.iter().find(|c| c.innovation_number == *innovation).unwrap().weight;
+        let new_snake_weight = new_snake.connections.iter().find(|c| c.innovation_number == *innovation).unwrap().weight;
+        weight_difference += (leader_weight - new_snake_weight).abs();
+    }
+    // max number of genes
+    let max_genes = leader_genes.len().max(new_snake_genes.len());
+    let gene_difference = (max_genes - matching_genes_count) as f32 / max_genes as f32;
+    let weight_difference = weight_difference / matching_genes_count as f32;
+    info!("Matching genes: {}, max genes: {}, gene difference: {}, weight difference: {}", matching_genes_count, max_genes, gene_difference, weight_difference);
+    0.6 * gene_difference + 0.4 * weight_difference
+}
+
+pub fn create_snake(energy: i32, position: (i32, i32), brain: Box<dyn Brain>) -> (Position, Energy, Snake, Age, JustBorn, Solid) {
+    let (head, age, just_born) = create_head(position, brain, 0, 0);
+    (Position { x: position.0, y: position.1 }, Energy { amount: energy }, head, age, just_born, Solid)
+}
+
+fn create_head(position: (i32, i32), brain: Box<dyn Brain>, generation: u32, mutations: u32) -> (Snake, Age, JustBorn) {
+    (Snake { direction: Direction::West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position, generation, mutations, species: None }, Age(0), JustBorn)
 }
