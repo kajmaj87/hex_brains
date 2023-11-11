@@ -5,7 +5,7 @@ use rayon::join;
 use tracing::debug;
 
 // Define a trait that all sensor inputs will implement.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SensorInput {
     pub value: f32,
     pub index: usize,
@@ -133,7 +133,7 @@ impl NeuralNetwork {
         let rng = &mut rand::thread_rng();
         for (i,_) in input_activations.iter().enumerate(){
             for (j,_) in output_activations.iter().enumerate() {
-               network.add_connection(i, j + input_activations.len(), rng.gen_range(0.0..0.1), rng.gen_range(0.0..1.0) < connection_active_probability, innovation_tracker.get_innovation_number(i, j))
+               network.add_connection(i, j + input_activations.len(), rng.gen_range(0.0..1.0)-0.5, rng.gen_range(0.0..1.0) < connection_active_probability, innovation_tracker.get_innovation_number(i, j))
             }
         }
         network
@@ -156,6 +156,12 @@ impl NeuralNetwork {
         let mut rng = rand::thread_rng();
         let index = rng.gen_range(0..self.connections.len());
         self.connections[index].enabled = !self.connections[index].enabled;
+    }
+
+    pub(crate) fn mutate_random_connection_weight(&mut self) {
+        let mut rng = rand::thread_rng();
+        let index = rng.gen_range(0..self.connections.len());
+        self.connections[index].weight += rng.gen_range(-0.2..0.2);
     }
 
     pub fn get_active_connections(&self) -> Vec<&ConnectionGene> {

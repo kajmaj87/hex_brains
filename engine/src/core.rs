@@ -77,7 +77,7 @@ impl Brain for RandomBrain {
 
 impl RandomNeuralBrain {
     pub(crate) fn new(innovation_tracker: &mut InnovationTracker) -> Self {
-        let neural_network = NeuralNetwork::random_brain(2, 0.5, innovation_tracker);
+        let neural_network = NeuralNetwork::random_brain(5, 0.5, innovation_tracker);
         Self {
             neural_network
         }
@@ -139,7 +139,7 @@ pub fn movement(mut snakes: Query<(Entity, &mut Energy, &mut Snake, &Position)>,
         match snake.decision {
             Decision::MoveForward => {
                 energy.amount -= config.move_cost;
-                let new_position = move_to_direction(snake.direction.clone(), &head_position, &config);
+                let new_position = position_at_direction(snake.direction.clone(), &head_position, &config);
                 snake.new_position.0 = new_position.x;
                 snake.new_position.1 = new_position.y;
             }
@@ -147,7 +147,7 @@ pub fn movement(mut snakes: Query<(Entity, &mut Energy, &mut Snake, &Position)>,
                 energy.amount -= config.move_cost;
                 snake.direction = turn_left(snake.direction.clone());
 
-                let new_position = move_to_direction(snake.direction.clone(), &head_position, &config);
+                let new_position = position_at_direction(snake.direction.clone(), &head_position, &config);
                 snake.new_position.0 = new_position.x;
                 snake.new_position.1 = new_position.y;
             }
@@ -155,7 +155,7 @@ pub fn movement(mut snakes: Query<(Entity, &mut Energy, &mut Snake, &Position)>,
                 energy.amount -= config.move_cost;
                 snake.direction = turn_right(snake.direction.clone());
 
-                let new_position = move_to_direction(snake.direction.clone(), &head_position, &config);
+                let new_position = position_at_direction(snake.direction.clone(), &head_position, &config);
                 snake.new_position.0 = new_position.x;
                 snake.new_position.1 = new_position.y;
             }
@@ -226,7 +226,7 @@ fn flip_direction(direction: Direction) -> Direction {
     }
 }
 
-fn move_to_direction(direction: Direction, position: &Position, config: &Res<SimulationConfig>) -> Position {
+fn position_at_direction(direction: Direction, position: &Position, config: &Res<SimulationConfig>) -> Position {
     let mut x = position.x;
     let mut y = position.y;
     match direction {
@@ -268,11 +268,24 @@ fn move_to_direction(direction: Direction, position: &Position, config: &Res<Sim
     Position { x, y }
 }
 
-pub fn think(mut heads: Query<&mut Snake>) {
+pub fn think(mut heads: Query<(&Position, &mut Snake)>, foodMap: Res<EntityMap>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     let mut rng = rand::thread_rng();
-    for mut head in &mut heads {
-        head.decision = head.brain.decide(vec![SensorInput{ value: 1.0, index: 0 }, SensorInput{ value: rng.gen_range(0.0..1.0), index: 1 }]);
+    let bias = SensorInput { value: 1.0, index: 0 };
+    for (position, mut head) in &mut heads {
+        let chaos = SensorInput { value: rng.gen_range(0.0..1.0), index: 1 };
+        let food_smell_front = sense_food(&position_at_direction(head.direction.clone(), position, &config), &foodMap, 2);
+        let food_smell_left = sense_food(&position_at_direction(turn_left(head.direction.clone()), position, &config), &foodMap, 3);
+        let food_smell_right = sense_food(&position_at_direction(turn_right(head.direction.clone()), position, &config), &foodMap, 4);
+        head.decision = head.brain.decide(vec![bias.clone(), chaos, food_smell_front, food_smell_left, food_smell_right]);
+    }
+}
+
+fn sense_food(position: &Position, foodMap: &Res<EntityMap>, index: usize) -> SensorInput {
+    if foodMap.map[position.x as usize][position.y as usize].is_some() {
+        SensorInput { value: 1.0, index }
+    } else {
+        SensorInput { value: 0.0, index }
     }
 }
 
@@ -349,9 +362,12 @@ pub fn split(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, po
                 debug!("Splitting snake with neural network");
                 let mut new_neural_network = neural_network.clone();
                 let mut rng = rand::thread_rng();
-                // if rng.gen_bool(0.1) {
-                //     new_neural_network.flip_random_connection();
-                // }
+                if rng.gen_bool(0.1) {
+                    new_neural_network.flip_random_connection();
+                }
+                if rng.gen_bool(0.3) {
+                    new_neural_network.mutate_random_connection_weight();
+                }
                 debug!("New neural network: {:?}", new_neural_network);
                 new_head = create_head((new_head_position.x, new_head_position.y), Box::new(RandomNeuralBrain::from_neural_network(new_neural_network.clone())), snake.generation + 1);
                 new_head.0.segments = new_snake_segments;
