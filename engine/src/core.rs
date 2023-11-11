@@ -6,7 +6,7 @@ use tracing::debug;
 use crate::neural::{InnovationTracker, NeuralNetwork, SensorInput};
 use crate::simulation::{SimulationConfig, Stats};
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct Position {
     pub x: i32,
     pub y: i32,
@@ -45,6 +45,7 @@ pub struct Snake {
     pub last_position: (i32, i32),
     pub segments: Vec<Entity>,
     pub generation: u32,
+    pub mutations: u32,
 }
 
 #[derive(Component)]
@@ -77,7 +78,7 @@ impl Brain for RandomBrain {
 
 impl RandomNeuralBrain {
     pub(crate) fn new(innovation_tracker: &mut InnovationTracker) -> Self {
-        let neural_network = NeuralNetwork::random_brain(5, 0.5, innovation_tracker);
+        let neural_network = NeuralNetwork::random_brain(8, 0.5, innovation_tracker);
         Self {
             neural_network
         }
@@ -139,23 +140,23 @@ pub fn movement(mut snakes: Query<(Entity, &mut Energy, &mut Snake, &Position)>,
         match snake.decision {
             Decision::MoveForward => {
                 energy.amount -= config.move_cost;
-                let new_position = position_at_direction(snake.direction.clone(), &head_position, &config);
+                let new_position = position_at_direction(&snake.direction, &head_position, &config);
                 snake.new_position.0 = new_position.x;
                 snake.new_position.1 = new_position.y;
             }
             Decision::MoveLeft => {
                 energy.amount -= config.move_cost;
-                snake.direction = turn_left(snake.direction.clone());
+                snake.direction = turn_left(&snake.direction);
 
-                let new_position = position_at_direction(snake.direction.clone(), &head_position, &config);
+                let new_position = position_at_direction(&snake.direction, &head_position, &config);
                 snake.new_position.0 = new_position.x;
                 snake.new_position.1 = new_position.y;
             }
             Decision::MoveRight => {
                 energy.amount -= config.move_cost;
-                snake.direction = turn_right(snake.direction.clone());
+                snake.direction = turn_right(&snake.direction);
 
-                let new_position = position_at_direction(snake.direction.clone(), &head_position, &config);
+                let new_position = position_at_direction(&snake.direction, &head_position, &config);
                 snake.new_position.0 = new_position.x;
                 snake.new_position.1 = new_position.y;
             }
@@ -193,7 +194,7 @@ pub fn update_positions(mut positions: Query<&mut Position>, mut snakes: Query<(
     }
 }
 
-fn turn_left(direction: Direction) -> Direction {
+fn turn_left(direction: &Direction) -> Direction {
     match direction {
         Direction::NorthEast => Direction::NorthWest,
         Direction::East => Direction::NorthEast,
@@ -204,7 +205,7 @@ fn turn_left(direction: Direction) -> Direction {
     }
 }
 
-fn turn_right(direction: Direction) -> Direction {
+fn turn_right(direction: &Direction) -> Direction {
     match direction {
         Direction::NorthEast => Direction::East,
         Direction::East => Direction::SouthEast,
@@ -215,7 +216,7 @@ fn turn_right(direction: Direction) -> Direction {
     }
 }
 
-fn flip_direction(direction: Direction) -> Direction {
+fn flip_direction(direction: &Direction) -> Direction {
     match direction {
         Direction::NorthEast => Direction::SouthWest,
         Direction::East => Direction::West,
@@ -226,7 +227,7 @@ fn flip_direction(direction: Direction) -> Direction {
     }
 }
 
-fn position_at_direction(direction: Direction, position: &Position, config: &Res<SimulationConfig>) -> Position {
+fn position_at_direction(direction: &Direction, position: &Position, config: &Res<SimulationConfig>) -> Position {
     let mut x = position.x;
     let mut y = position.y;
     match direction {
@@ -274,11 +275,27 @@ pub fn think(mut heads: Query<(&Position, &mut Snake)>, foodMap: Res<EntityMap>,
     let bias = SensorInput { value: 1.0, index: 0 };
     for (position, mut head) in &mut heads {
         let chaos = SensorInput { value: rng.gen_range(0.0..1.0), index: 1 };
-        let food_smell_front = sense_food(&position_at_direction(head.direction.clone(), position, &config), &foodMap, 2);
-        let food_smell_left = sense_food(&position_at_direction(turn_left(head.direction.clone()), position, &config), &foodMap, 3);
-        let food_smell_right = sense_food(&position_at_direction(turn_right(head.direction.clone()), position, &config), &foodMap, 4);
-        head.decision = head.brain.decide(vec![bias.clone(), chaos, food_smell_front, food_smell_left, food_smell_right]);
+        let food_smell_front = sense_food(&position_at_direction(&head.direction, &position, &config), &foodMap, 2);
+        let food_smell_left = sense_food(&position_at_direction(&turn_left(&head.direction), &position, &config), &foodMap, 3);
+        let food_smell_right = sense_food(&position_at_direction(&turn_right(&head.direction), &position, &config), &foodMap, 4);
+        let food_vision_front = see_food(&head.direction, &position, 5, &foodMap, &config, 5);
+        let food_vision_left = see_food(&head.direction, &position, 3, &foodMap, &config, 6);
+        let food_vision_right = see_food(&head.direction, &position, 3, &foodMap, &config, 7);
+        head.decision = head.brain.decide(vec![bias.clone(), chaos, food_smell_front, food_smell_left, food_smell_right, food_vision_front, food_vision_left, food_vision_right]);
     }
+}
+
+fn see_food(head_direction: &Direction, position: &Position, range: u32, food_map: &Res<EntityMap>, config: &Res<SimulationConfig>, index: usize) -> SensorInput {
+    let mut current_vision_position= position.clone();
+    let mut current_range = 0;
+    while current_range < range {
+        current_vision_position = position_at_direction(head_direction, &current_vision_position, &config).clone();
+        if food_map.map[current_vision_position.x as usize][current_vision_position.y as usize].is_some() {
+            return SensorInput { value: (range - current_range) as f32 / range as f32, index };
+        }
+        current_range += 1;
+    }
+    SensorInput { value: 0.0, index }
 }
 
 fn sense_food(position: &Position, foodMap: &Res<EntityMap>, index: usize) -> SensorInput {
@@ -362,17 +379,20 @@ pub fn split(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, po
                 debug!("Splitting snake with neural network");
                 let mut new_neural_network = neural_network.clone();
                 let mut rng = rand::thread_rng();
+                let mut mutations = snake.mutations;
                 if rng.gen_bool(0.1) {
                     new_neural_network.flip_random_connection();
+                    mutations += 1;
                 }
                 if rng.gen_bool(0.3) {
                     new_neural_network.mutate_random_connection_weight();
+                    mutations += 1;
                 }
                 debug!("New neural network: {:?}", new_neural_network);
-                new_head = create_head((new_head_position.x, new_head_position.y), Box::new(RandomNeuralBrain::from_neural_network(new_neural_network.clone())), snake.generation + 1);
+                new_head = create_head((new_head_position.x, new_head_position.y), Box::new(RandomNeuralBrain::from_neural_network(new_neural_network.clone())), snake.generation + 1, mutations);
                 new_head.0.segments = new_snake_segments;
                 let new_head_id = new_head.0.segments[0];
-                new_head.0.direction = flip_direction(snake.direction.clone());
+                new_head.0.direction = flip_direction(&snake.direction);
                 commands.entity(new_head_id).insert(new_head);
             } else {
                 panic!("Snake without neural network");
@@ -393,11 +413,13 @@ pub fn calculate_stats(food: Query<&Food>, snakes: Query<(&Snake, &Age)>, solids
     puffin::profile_function!();
     let max_age = snakes.iter().map(|(_, a)| a.0).reduce(|a, b| a.max(b));
     let max_generation = snakes.iter().map(|(s, _)| s.generation).reduce(|a, b| a.max(b));
+    let max_mutation = snakes.iter().map(|(s, _)| s.mutations).reduce(|a, b| a.max(b));
     stats.oldest_snake = max_age.unwrap_or(0);
     stats.total_snakes = snakes.iter().count();
     stats.total_food = food.iter().count();
     stats.total_solids = solids.iter().count();
     stats.max_generation = max_generation.unwrap_or(0);
+    stats.max_mutations = max_mutation.unwrap_or(0);
 }
 
 pub fn grow(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake, &mut Energy)>, positions: Query<&Position>, config: Res<SimulationConfig>) {
@@ -424,10 +446,10 @@ pub fn assign_missing_segments(mut snakes: Query<(Entity, &mut Snake), Added<Sna
 }
 
 pub fn create_snake(energy: i32, position: (i32, i32), brain: Box<dyn Brain>) -> (Position, Energy, Snake, Age, Solid) {
-    let (head, age) = create_head(position, brain, 0);
+    let (head, age) = create_head(position, brain, 0, 0);
     (Position { x: position.0, y: position.1 }, Energy { amount: energy }, head, age, Solid)
 }
 
-fn create_head(position: (i32, i32), brain: Box<dyn Brain>, generation: u32) -> (Snake, Age) {
-    (Snake { direction: Direction::West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position, generation }, Age(0))
+fn create_head(position: (i32, i32), brain: Box<dyn Brain>, generation: u32, mutations: u32) -> (Snake, Age) {
+    (Snake { direction: Direction::West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position, generation, mutations }, Age(0))
 }

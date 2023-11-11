@@ -238,6 +238,7 @@ impl eframe::App for MyEguiApp {
                 ui.label(format!("Speed : x{:.1}", self.updates_per_second as f32 / self.frames_per_second as f32));
                 ui.label(format!("Oldest snake : {}", self.stats.oldest_snake));
                 ui.label(format!("Max generation : {}", self.stats.max_generation));
+                ui.label(format!("Max mutations : {}", self.stats.max_mutations));
                 ui.label(format!("Total snakes/segments : {}/{}", self.stats.total_snakes, self.stats.total_solids));
                 ui.label(format!("Total food : {}", self.stats.total_food));
             });

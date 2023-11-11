@@ -41,6 +41,7 @@ pub struct Stats {
     pub food: usize,
     pub total_solids: usize,
     pub max_generation: u32,
+    pub max_mutations: u32,
 }
 
 #[derive(Debug, Clone)]
