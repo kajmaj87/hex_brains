@@ -2,6 +2,7 @@ use std::collections::LinkedList;
 use rand::Rng;
 use bevy_ecs::prelude::*;
 use bevy_ecs::query::QueryParIter;
+use tracing::debug;
 use crate::neural::{InnovationTracker, NeuralNetwork, SensorInput};
 use crate::simulation::{SimulationConfig, Stats};
 
@@ -31,6 +32,7 @@ pub enum Decision {
 
 pub trait Brain: Sync + Send {
     fn decide(&self, sensory_input: Vec<SensorInput>) -> Decision;
+    fn get_neural_network(&self) -> Option<&NeuralNetwork>;
 }
 
 // Snake represents the head segment of snake and info about its other segments
@@ -67,6 +69,10 @@ impl Brain for RandomBrain {
             _ => Decision::Wait
         }
     }
+
+    fn get_neural_network(&self) -> Option<&NeuralNetwork> {
+        None
+    }
 }
 
 impl RandomNeuralBrain {
@@ -76,10 +82,16 @@ impl RandomNeuralBrain {
             neural_network
         }
     }
+    pub(crate) fn from_neural_network(neural_network: NeuralNetwork) -> Self {
+        Self {
+            neural_network
+        }
+    }
 }
 
 impl Brain for RandomNeuralBrain {
     fn decide(&self, sensor_input: Vec<SensorInput>) -> Decision {
+        debug!("Neural network input: {:?}", sensor_input);
         let output = self.neural_network.run(sensor_input);
         // return the index with the maximum value of the output vector
         let mut max_index = 0;
@@ -90,12 +102,19 @@ impl Brain for RandomNeuralBrain {
                 max_index = index;
             }
         }
-        match max_index {
+        let decision = match max_index {
             0 => Decision::MoveForward,
             1 => Decision::MoveLeft,
             2 => Decision::MoveRight,
             _ => Decision::Wait
-        }
+        };
+        debug!("Network architecture: {:?}", self.neural_network.get_active_connections());
+        debug!("Output: {:?}, decision: {:?}", output, decision);
+        decision
+    }
+
+    fn get_neural_network(&self) -> Option<&NeuralNetwork> {
+        Some(&self.neural_network)
     }
 }
 
@@ -325,11 +344,24 @@ pub fn split(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, po
             let new_head_id = new_snake_segments.last().unwrap();
             let new_head_position = positions.get(*new_head_id).unwrap();
             new_snake_segments.reverse();
-            let mut new_head = create_head((new_head_position.x, new_head_position.y), Box::new(RandomNeuralBrain::new(&mut *innovation_tracker)), snake.generation + 1);
-            new_head.0.segments = new_snake_segments;
-            let new_head_id = new_head.0.segments[0];
-            new_head.0.direction = flip_direction(snake.direction.clone());
-            commands.entity(new_head_id).insert(new_head);
+            let mut new_head;
+            if let Some(neural_network) = snake.brain.get_neural_network() {
+                debug!("Splitting snake with neural network");
+                let mut new_neural_network = neural_network.clone();
+                let mut rng = rand::thread_rng();
+                // if rng.gen_bool(0.1) {
+                //     new_neural_network.flip_random_connection();
+                // }
+                debug!("New neural network: {:?}", new_neural_network);
+                new_head = create_head((new_head_position.x, new_head_position.y), Box::new(RandomNeuralBrain::from_neural_network(new_neural_network.clone())), snake.generation + 1);
+                new_head.0.segments = new_snake_segments;
+                let new_head_id = new_head.0.segments[0];
+                new_head.0.direction = flip_direction(snake.direction.clone());
+                commands.entity(new_head_id).insert(new_head);
+            } else {
+                panic!("Snake without neural network");
+            }
+
         }
     }
 }

@@ -2,8 +2,10 @@ use std::collections::HashMap;
 use bevy_ecs::prelude::Resource;
 use rand::Rng;
 use rayon::join;
+use tracing::debug;
 
 // Define a trait that all sensor inputs will implement.
+#[derive(Debug)]
 pub struct SensorInput {
     pub value: f32,
     pub index: usize,
@@ -35,7 +37,7 @@ impl InnovationTracker {
 }
 
 #[derive(Clone, Debug)]
-struct ConnectionGene {
+pub struct ConnectionGene {
     in_node: usize,
     out_node: usize,
     weight: f32,
@@ -86,6 +88,7 @@ impl NodeGene {
 }
 
 // Your neural network with a generic vector for input values.
+#[derive(Clone, Debug)]
 pub struct NeuralNetwork {
     nodes: Vec<NodeGene>,
     connections: Vec<ConnectionGene>,
@@ -130,7 +133,7 @@ impl NeuralNetwork {
         let rng = &mut rand::thread_rng();
         for (i,_) in input_activations.iter().enumerate(){
             for (j,_) in output_activations.iter().enumerate() {
-               network.add_connection(i, j, rng.gen_range(0.0..0.1), rng.gen_range(0.0..1.0) < connection_active_probability, innovation_tracker.get_innovation_number(i, j))
+               network.add_connection(i, j + input_activations.len(), rng.gen_range(0.0..0.1), rng.gen_range(0.0..1.0) < connection_active_probability, innovation_tracker.get_innovation_number(i, j))
             }
         }
         network
@@ -149,13 +152,26 @@ impl NeuralNetwork {
         self.connections.push(connection);
     }
 
+    pub fn flip_random_connection(&mut self){
+        let mut rng = rand::thread_rng();
+        let index = rng.gen_range(0..self.connections.len());
+        self.connections[index].enabled = !self.connections[index].enabled;
+    }
+
+    pub fn get_active_connections(&self) -> Vec<&ConnectionGene> {
+        self.connections.iter().filter(|connection| connection.enabled).collect()
+    }
+
     pub fn run(&self, inputs: Vec<SensorInput>) -> Vec<f32> {
+        debug!("Running network with inputs: {:?}", inputs);
+        debug!("Nodes len: {}", self.nodes.len());
         let mut node_values = vec![0.0; self.nodes.len()];
 
         // Set initial values for input nodes based on SensorInput
         for input in inputs {
             let index = input.index;
             if index < self.nodes.len() && matches!(self.nodes[index].node_type, NodeType::Input) {
+                debug!("Setting input node {} to {}", index, input.value);
                 node_values[index] = input.value;
             }
         }
@@ -165,6 +181,7 @@ impl NeuralNetwork {
             if connection.enabled {
                 let input_value = node_values[connection.in_node];
                 node_values[connection.out_node] += input_value * connection.weight;
+                debug!("Propagating value {} from node {} to node {}", input_value, connection.in_node, connection.out_node)
             }
         }
 
@@ -172,6 +189,7 @@ impl NeuralNetwork {
         for (i, node) in self.nodes.iter().enumerate() {
             if matches!(node.node_type, NodeType::Hidden | NodeType::Output) {
                 node_values[i] = node.activation.apply(node_values[i]);
+                debug!("Applying activation function to node {} with value {}", i, node_values[i]);
             }
         }
 

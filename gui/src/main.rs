@@ -8,6 +8,8 @@ use eframe::epaint::Color32;
 use egui::{Frame, Key, Response, ScrollArea, Sense, Shape, Stroke, Ui};
 use egui::epaint::CircleShape;
 use egui::Shape::Circle;
+use tracing::Level;
+use tracing_subscriber::fmt;
 use hex_brains_engine::core::{Food, Snake, Position, Solid};
 use hex_brains_engine::simulation::{Simulation, EngineEvent, EngineCommand, EngineState, EngineEvents, Hex, HexType, SimulationConfig, Stats};
 use hex_brains_engine::simulation_manager::simulate_batch;
@@ -15,6 +17,9 @@ use hex_brains_engine::simulation_manager::simulate_batch;
 fn main() {
     let mut native_options = eframe::NativeOptions::default();
     native_options.initial_window_size = Some(Vec2 { x: 1200.0, y: 1200.0 });
+    fmt()
+        .with_max_level(Level::INFO)
+        .init();
     let (engine_commands_sender, engine_commands_receiver) = std::sync::mpsc::channel();
     let (engine_events_sender, engine_events_receiver) = std::sync::mpsc::channel();
     eframe::run_native("My egui App", native_options, Box::new(|cc| {
