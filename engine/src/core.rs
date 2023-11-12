@@ -98,7 +98,7 @@ impl Brain for RandomBrain {
 
 impl RandomNeuralBrain {
     pub(crate) fn new(innovation_tracker: &mut InnovationTracker) -> Self {
-        let neural_network = NeuralNetwork::random_brain(8, 0.5, innovation_tracker);
+        let neural_network = NeuralNetwork::random_brain(9, 0.5, innovation_tracker);
         Self {
             neural_network
         }
@@ -318,20 +318,34 @@ fn position_at_direction(direction: &Direction, position: &Position, config: &Re
     Position { x, y }
 }
 
-pub fn think(mut heads: Query<(&Position, &mut Snake)>, foodMap: Res<FoodMap>, config: Res<SimulationConfig>) {
+pub fn think(mut heads: Query<(&Position, &mut Snake)>, food_map: Res<FoodMap>, solids_map: Res<SolidsMap>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     let mut rng = rand::thread_rng();
     let bias = SensorInput { value: 1.0, index: 0 };
     for (position, mut head) in &mut heads {
         let chaos = SensorInput { value: rng.gen_range(0.0..1.0), index: 1 };
-        let food_smell_front = sense_food(&position_at_direction(&head.direction, &position, &config), &foodMap, 2);
-        let food_smell_left = sense_food(&position_at_direction(&turn_left(&head.direction), &position, &config), &foodMap, 3);
-        let food_smell_right = sense_food(&position_at_direction(&turn_right(&head.direction), &position, &config), &foodMap, 4);
-        let food_vision_front = see_food(&head.direction, &position, 5, &foodMap, &config, 5);
-        let food_vision_left = see_food(&head.direction, &position, 3, &foodMap, &config, 6);
-        let food_vision_right = see_food(&head.direction, &position, 3, &foodMap, &config, 7);
-        head.decision = head.brain.decide(vec![bias.clone(), chaos, food_smell_front, food_smell_left, food_smell_right, food_vision_front, food_vision_left, food_vision_right]);
+        let food_smell_front = sense_food(&position_at_direction(&head.direction, &position, &config), &food_map, 2);
+        let food_smell_left = sense_food(&position_at_direction(&turn_left(&head.direction), &position, &config), &food_map, 3);
+        let food_smell_right = sense_food(&position_at_direction(&turn_right(&head.direction), &position, &config), &food_map, 4);
+        let food_vision_front = see_food(&head.direction, &position, 5, &food_map, &config, 5);
+        let food_vision_left = see_food(&head.direction, &position, 5, &food_map, &config, 6);
+        let food_vision_right = see_food(&head.direction, &position, 5, &food_map, &config, 7);
+        let solid_vision_front = see_obstacles(&head.direction, &position, 6, &solids_map, &config, 8);
+        head.decision = head.brain.decide(vec![bias.clone(), chaos, food_smell_front, food_smell_left, food_smell_right, food_vision_front, food_vision_left, food_vision_right, solid_vision_front]);
     }
+}
+
+fn see_obstacles(head_direction: &Direction, position: &Position, range: u32, solids_map: &Res<SolidsMap>, config: &Res<SimulationConfig>, index: usize) -> SensorInput {
+    let mut current_vision_position = position.clone();
+    let mut current_range = 0;
+    while current_range < range {
+        current_vision_position = position_at_direction(head_direction, &current_vision_position, &config).clone();
+        if solids_map.map[current_vision_position.x as usize][current_vision_position.y as usize].len() > 0 {
+            return SensorInput { value: (range - current_range) as f32 / range as f32, index };
+        }
+        current_range += 1;
+    }
+    SensorInput { value: 0.0, index }
 }
 
 fn see_food(head_direction: &Direction, position: &Position, range: u32, food_map: &Res<FoodMap>, config: &Res<SimulationConfig>, index: usize) -> SensorInput {

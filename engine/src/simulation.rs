@@ -1,5 +1,5 @@
 use std::f32::consts::PI;
-use crate::core::{assign_new_occupied_solid_positions, remove_occupied_solid_positions};
+use crate::core::{assign_new_occupied_solid_positions, remove_occupied_solid_positions, Solid};
 use crate::core::{assign_new_food_positions, die_from_collisions, remove_eaten_food};
 use crate::core::SolidsMap;
 use std::sync::mpsc::{Receiver, Sender};
@@ -122,6 +122,13 @@ impl Simulation {
         // for _ in 0..config.starting_food {
         //     world.spawn(
         // }
+        for x in 0..config.columns {
+            if x != config.columns / 2 {
+                world.spawn((Solid, Position { x: x as i32, y: (config.rows / 4) as i32 }));
+                world.spawn((Solid, Position { x: x as i32, y: (2 * config.rows / 4) as i32 }));
+                world.spawn((Solid, Position { x: x as i32, y: (3 * config.rows / 4) as i32 }));
+            }
+        }
         world.insert_resource(config);
         world.insert_resource(Stats::default());
         world.insert_resource(FoodMap{ map: vec![vec![vec![]; config.columns]; config.rows] });
@@ -181,8 +188,9 @@ impl Simulation {
                             }
                             for brain in brains {
                                 let mut rng = thread_rng();
-                                let x = rng.gen_range(0..100);
-                                let y = rng.gen_range(0..100);
+                                let config = self.world.get_resource::<SimulationConfig>().unwrap();
+                                let x = rng.gen_range(0..config.columns) as i32;
+                                let y = rng.gen_range(0..config.rows) as i32;
                                 {
                                     self.world.spawn(create_snake(100, (x, y), Box::new(brain)));
                                 }

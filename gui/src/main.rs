@@ -27,8 +27,8 @@ fn main() {
     eframe::run_native("My egui App", native_options, Box::new(|cc| {
         let context = cc.egui_ctx.clone();
         let config = Config {
-            rows: 100,
-            columns: 100,
+            rows: 300,
+            columns: 300,
             bg_color: Stroke::new(1.0, Color32::LIGHT_GREEN),
             snake_color: Stroke::new(1.0, Color32::RED),
             tail_color: Stroke::new(1.0, Color32::LIGHT_RED),
@@ -63,7 +63,7 @@ fn create_simulation_config(columns: usize, rows: usize) -> SimulationConfig {
         columns,
         starting_snakes: 10,
         starting_food: 100,
-        food_per_step: 2,
+        food_per_step: 5,
         energy_per_segment: 100,
         wait_cost: 1,
         move_cost: 10,
