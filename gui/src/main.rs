@@ -152,6 +152,7 @@ struct MyEguiApp {
     show_simulation_settings: bool,
     show_mutation_settings: bool,
     show_species: bool,
+    show_info: bool,
     simulation_config: SimulationConfig,
     simulation_running: bool,
 }
@@ -205,6 +206,7 @@ impl MyEguiApp {
             show_simulation_settings: false,
             show_mutation_settings: false,
             show_species: false,
+            show_info: false,
             simulation_running: false,
         }
     }
@@ -327,6 +329,15 @@ impl eframe::App for MyEguiApp {
             });
         });
         egui::Window::new("Species").open(&mut self.show_species).show(ctx, |ui| {});
+        egui::Window::new("Info").open(&mut self.show_info).show(ctx, |ui| {
+            ui.label("Press 's' to add one snake");
+            ui.label("Press '+' to increase speed");
+            ui.label("Press '-' to decrease speed");
+            ui.label("Press 'tab' to ignore speed limit");
+            ui.label("Press 'space' to pause/resume");
+            ui.label("All enabled settings take effect immediately");
+            ui.label("To change disabled settings, stop the simulation first");
+        });
         self.engine_commands_sender.send(EngineCommand::UpdateSimulationConfig(self.simulation_config.clone())).unwrap();
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -391,6 +402,9 @@ impl eframe::App for MyEguiApp {
                 }
                 if ui.button("Species").clicked() {
                     self.show_species = !self.show_species;
+                }
+                if ui.button("Info").clicked() {
+                    self.show_info = !self.show_info;
                 }
             });
             draw_hexes(ui, &self.hexes, &self.config);
