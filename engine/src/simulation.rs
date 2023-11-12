@@ -1,9 +1,13 @@
+use std::f32::consts::PI;
+use crate::core::{assign_new_occupied_solid_positions, remove_occupied_solid_positions};
+use crate::core::{assign_new_food_positions, die_from_collisions, remove_eaten_food};
+use crate::core::SolidsMap;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Mutex;
 use std::time::Instant;
 use bevy_ecs::prelude::*;
 use rand::{Rng, thread_rng};
-use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, EntityMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments, increase_age, calculate_stats, RandomNeuralBrain, assign_species, Species};
+use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, FoodMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments, increase_age, calculate_stats, RandomNeuralBrain, assign_species, Species};
 use crate::neural::InnovationTracker;
 
 pub struct Simulation {
@@ -112,24 +116,25 @@ impl Simulation {
     pub fn new(name: String, engine_events: Sender<EngineEvent>, engine_commands: Option<Receiver<EngineCommand>>, config: SimulationConfig) -> Self {
         let mut world = World::new();
         let mut innovation_tracker = InnovationTracker::new();
-        for _ in 0..config.starting_snakes {
-            world.spawn(create_snake(config.energy_per_segment, (50, 50), Box::new(RandomNeuralBrain::new(&mut innovation_tracker))));
-        }
+        // for _ in 0..config.starting_snakes {
+        //     world.spawn(create_snake(config.energy_per_segment, (50, 50), Box::new(RandomNeuralBrain::new(&mut innovation_tracker))));
+        // }
         // for _ in 0..config.starting_food {
         //     world.spawn(
         // }
         world.insert_resource(config);
         world.insert_resource(Stats::default());
-        world.insert_resource(EntityMap { map: vec![vec![None; config.columns]; config.rows] });
+        world.insert_resource(FoodMap{ map: vec![vec![vec![]; config.columns]; config.rows] });
+        world.insert_resource(SolidsMap{ map: vec![vec![vec![]; config.columns]; config.rows] });
         world.insert_resource(EngineEvents { events: Mutex::new(engine_events.clone()) });
         world.insert_resource(innovation_tracker);
         world.insert_resource(Species::default());
         let mut first_schedule = Schedule::default();
         let mut core_schedule = Schedule::default();
         let mut secondary_schedule = Schedule::default();
-        first_schedule.add_systems((assign_missing_segments, assign_species).run_if(should_simulate_frame));
-        core_schedule.add_systems((think, increase_age, calculate_stats, (movement, update_positions, split).chain(), (eat_food, create_food).chain()).run_if(should_simulate_frame));
-        secondary_schedule.add_systems((grow, starve, turn_counter).run_if(should_simulate_frame));
+        first_schedule.add_systems((assign_species, (assign_missing_segments, assign_new_occupied_solid_positions, create_food), die_from_collisions).chain().run_if(should_simulate_frame));
+        core_schedule.add_systems(((think, increase_age, calculate_stats, assign_new_food_positions), (movement, update_positions, split).chain(), eat_food).chain().run_if(should_simulate_frame));
+        secondary_schedule.add_systems((grow, starve, remove_eaten_food, remove_occupied_solid_positions, turn_counter).run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();
         Simulation { first_schedule, core_schedule, secondary_schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
     }
@@ -142,7 +147,7 @@ impl Simulation {
     }
 
     pub fn is_done(&mut self) -> bool {
-        self.world.query::<&Position>().iter(&self.world).next().unwrap().x > 10_000
+        self.world.query::<&Position>().iter(&self.world).next().unwrap_or(&Position{x:0, y:0}).x > 10_000
     }
 
     pub fn run(&mut self) -> EngineEvent {

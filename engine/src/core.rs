@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::{LinkedList, VecDeque};
+use std::collections::{HashMap, LinkedList, VecDeque};
 use rand::Rng;
 use bevy_ecs::prelude::*;
 use bevy_ecs::query::QueryParIter;
@@ -7,7 +7,8 @@ use tracing::{debug, info};
 use crate::neural::{ConnectionGene, InnovationTracker, NeuralNetwork, SensorInput};
 use crate::simulation::{SimulationConfig, Stats};
 
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Default)]
+#[derive(Debug)]
 pub struct Position {
     pub x: i32,
     pub y: i32,
@@ -147,8 +148,13 @@ pub struct Energy {
 pub struct Food {}
 
 #[derive(Resource)]
-pub struct EntityMap {
-    pub map: Vec<Vec<Option<Entity>>>,
+pub struct FoodMap {
+    pub map: Vec<Vec<Vec<Entity>>>,
+}
+
+#[derive(Resource, Default)]
+pub struct SolidsMap {
+    pub map: Vec<Vec<Vec<Entity>>>,
 }
 
 // This system moves each entity with a Position and Velocity component
@@ -189,27 +195,51 @@ pub fn movement(mut snakes: Query<(Entity, &mut Energy, &mut Snake, &Position)>,
     }
 }
 
-pub fn update_positions(mut positions: Query<&mut Position>, mut snakes: Query<(Entity, &mut Snake)>) {
+pub fn update_positions(mut positions: Query<&mut Position>, mut snakes: Query<(Entity, &mut Snake)>, mut solids_map: ResMut<SolidsMap>) {
     puffin::profile_function!();
     for (head_id, mut snake) in &mut snakes {
         let mut new_position = snake.new_position;
         let mut head_position = positions.get_mut(head_id).unwrap();
+        debug!("Snake {:?} with {} segements is moving from {:?} to {:?} (last tail position: {:?})", head_id, snake.segments.len(), head_position, new_position, snake.last_position);
+        // iterate through solids_map and print out all occupied positions
+        // for (x, column) in solids_map.map.iter().enumerate() {
+        //     for (y, row) in column.iter().enumerate() {
+        //         if row.len() > 0 {
+        //             debug!("Before update position {:?} is occupied by {:?}", (x, y), row);
+        //         }
+        //     }
+        // }
         let old_head_position = (head_position.x, head_position.y);
         if new_position == old_head_position {
+            debug!("Snake is not moving");
             continue;
         }
         head_position.x = new_position.0;
         head_position.y = new_position.1;
+        let mut last_position = old_head_position;
+        let mut tail_id = head_id;
         if snake.segments.len() >= 2 {
-            let tail_id = snake.segments.pop().unwrap();
+            tail_id = snake.segments.pop().unwrap();
             let mut tail_position = positions.get_mut(tail_id).unwrap();
-            let last_position = (tail_position.x, tail_position.y);
+            last_position = (tail_position.x, tail_position.y);
             tail_position.x = old_head_position.0;
             tail_position.y = old_head_position.1;
             // move the snake right behind the head to avoid recalculating all positions
             snake.segments.insert(1, tail_id);
-            snake.last_position = last_position;
+            debug!("Removing tail {:?} from position {:?}", tail_id, last_position);
+            solids_map.map[last_position.0 as usize][last_position.1 as usize].retain(|s| *s != tail_id);
         }
+        debug!("Removing snake head {:?} from position {:?}", head_id, old_head_position);
+        solids_map.map[old_head_position.0 as usize][old_head_position.1 as usize].retain(|s| *s != head_id);
+        snake.last_position = last_position;
+        // iterate through solids_map and print out all occupied positions
+        // for (x, column) in solids_map.map.iter().enumerate() {
+        //     for (y, row) in column.iter().enumerate() {
+        //         if row.len() > 0 {
+        //             debug!("After update position {:?} is occupied by {:?}", (x, y), row);
+        //         }
+        //     }
+        // }
     }
 }
 
@@ -288,7 +318,7 @@ fn position_at_direction(direction: &Direction, position: &Position, config: &Re
     Position { x, y }
 }
 
-pub fn think(mut heads: Query<(&Position, &mut Snake)>, foodMap: Res<EntityMap>, config: Res<SimulationConfig>) {
+pub fn think(mut heads: Query<(&Position, &mut Snake)>, foodMap: Res<FoodMap>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     let mut rng = rand::thread_rng();
     let bias = SensorInput { value: 1.0, index: 0 };
@@ -304,12 +334,12 @@ pub fn think(mut heads: Query<(&Position, &mut Snake)>, foodMap: Res<EntityMap>,
     }
 }
 
-fn see_food(head_direction: &Direction, position: &Position, range: u32, food_map: &Res<EntityMap>, config: &Res<SimulationConfig>, index: usize) -> SensorInput {
+fn see_food(head_direction: &Direction, position: &Position, range: u32, food_map: &Res<FoodMap>, config: &Res<SimulationConfig>, index: usize) -> SensorInput {
     let mut current_vision_position = position.clone();
     let mut current_range = 0;
     while current_range < range {
         current_vision_position = position_at_direction(head_direction, &current_vision_position, &config).clone();
-        if food_map.map[current_vision_position.x as usize][current_vision_position.y as usize].is_some() {
+        if food_map.map[current_vision_position.x as usize][current_vision_position.y as usize].len() > 0 {
             return SensorInput { value: (range - current_range) as f32 / range as f32, index };
         }
         current_range += 1;
@@ -317,15 +347,15 @@ fn see_food(head_direction: &Direction, position: &Position, range: u32, food_ma
     SensorInput { value: 0.0, index }
 }
 
-fn sense_food(position: &Position, foodMap: &Res<EntityMap>, index: usize) -> SensorInput {
-    if foodMap.map[position.x as usize][position.y as usize].is_some() {
+fn sense_food(position: &Position, food_map: &Res<FoodMap>, index: usize) -> SensorInput {
+    if food_map.map[position.x as usize][position.y as usize].len() > 0 {
         SensorInput { value: 1.0, index }
     } else {
         SensorInput { value: 0.0, index }
     }
 }
 
-pub fn create_food(mut commands: Commands, mut entities: ResMut<EntityMap>, config: Res<SimulationConfig>) {
+pub fn create_food(mut commands: Commands, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     let mut rng = rand::thread_rng();
     let rows = config.rows as i32;
@@ -333,25 +363,21 @@ pub fn create_food(mut commands: Commands, mut entities: ResMut<EntityMap>, conf
     for _ in 0..config.food_per_step {
         let x = rng.gen_range(0..columns);
         let y = rng.gen_range(0..rows);
-        if entities.map[x as usize][y as usize].is_none() {
-            let entity = commands.spawn((Position { x, y }, Food {})).id();
-            entities.map[x as usize][y as usize] = Some(entity);
-        }
+        commands.spawn((Position { x, y }, Food {})).id();
     }
 }
 
-pub fn eat_food(mut commands: Commands, mut food: ResMut<EntityMap>, mut snakes: Query<(&Position, &mut Energy), Without<Food>>, config: Res<SimulationConfig>) {
+pub fn eat_food(mut commands: Commands, mut food: ResMut<FoodMap>, mut snakes: Query<(&Position, &mut Energy), Without<Food>>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     for (position, mut energy) in &mut snakes {
-        if let Some(food_entity) = food.map[position.x as usize][position.y as usize] {
-            commands.entity(food_entity).despawn();
-            food.map[position.x as usize][position.y as usize] = None;
+        for food_entity in &food.map[position.x as usize][position.y as usize] {
+            commands.entity(*food_entity).remove::<Food>();
             energy.amount += config.energy_per_segment;
         }
     }
 }
 
-pub fn starve(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, mut energies: Query<&mut Energy>, mut species: ResMut<Species>) {
+pub fn starve(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, positions: Query<&Position>, mut energies: Query<&mut Energy>, mut species: ResMut<Species>, mut solids_map: ResMut<SolidsMap>) {
     puffin::profile_function!();
     for (head_id, mut snake) in &mut snakes {
         let tail_id = snake.segments.last().unwrap();
@@ -359,30 +385,56 @@ pub fn starve(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, m
             let head_energy = energies.get_mut(head_id).unwrap();
             if head_energy.amount <= 0 {
                 commands.entity(head_id).despawn();
-                let specie = snake.species.unwrap();
-                let mut specie = species.species.iter_mut().find(|s| s.id == specie).unwrap();
-                if specie.leader == head_id {
-                    specie.members.retain(|s| *s != head_id);
-                    if let Some(new_leader) = specie.members.pop_front() {
-                        specie.leader = new_leader;
-                        debug!("New leader for specie {:?}: {:?}", specie.id, specie.leader);
-                    } else {
-                        let specie_id = specie.id;
-                        info!("Specie {:?} is extinct", specie_id);
-                        species.species.retain(|s| s.id != specie_id);
-                    }
-                } else {
-                    specie.members.retain(|s| *s != head_id);
-                    debug!("Snake {:?} died and was removed from specie {:?}", head_id, specie.id);
-                }
+                let position = positions.get(head_id).unwrap();
+                solids_map.map[position.x as usize][position.y as usize].retain(|s| *s != head_id);
+                remove_snake_from_species(&mut species, head_id, &mut snake);
             }
         } else {
             if let Ok([mut head_energy, mut tail_energy]) = energies.get_many_mut([head_id, *tail_id]) {
                 if head_energy.amount <= 0 {
                     head_energy.amount += tail_energy.amount;
                     commands.entity(*tail_id).despawn();
+                    let position = positions.get(*tail_id).unwrap();
+                    solids_map.map[position.x as usize][position.y as usize].retain(|s| *s != *tail_id);
                     snake.segments.pop();
                 }
+            }
+        }
+    }
+}
+
+fn remove_snake_from_species(species: &mut ResMut<Species>, head_id: Entity, snake: &mut Mut<Snake>) {
+    let specie = snake.species.unwrap();
+    let mut specie = species.species.iter_mut().find(|s| s.id == specie).unwrap();
+    if specie.leader == head_id {
+        specie.members.retain(|s| *s != head_id);
+        if let Some(new_leader) = specie.members.pop_front() {
+            specie.leader = new_leader;
+            debug!("New leader for specie {:?}: {:?}", specie.id, specie.leader);
+        } else {
+            let specie_id = specie.id;
+            debug!("Specie {:?} is extinct", specie_id);
+            species.species.retain(|s| s.id != specie_id);
+        }
+    } else {
+        specie.members.retain(|s| *s != head_id);
+        debug!("Snake {:?} died and was removed from specie {:?}", head_id, specie.id);
+    }
+}
+
+pub fn die_from_collisions(mut commands: Commands, mut snake: Query<(Entity, &mut Snake, &Position)>, mut species: ResMut<Species>, solids_map: Res<SolidsMap>) {
+    puffin::profile_function!();
+    for (head_id, mut snake, position) in &mut snake {
+        let head_collided = solids_map.map[position.x as usize][position.y as usize].iter().any(|s| *s != head_id);
+        if head_collided {
+            debug!("Snake {:?} collided with something solid: {:?}", head_id, solids_map.map[position.x as usize][position.y as usize]);
+            commands.entity(head_id).remove::<Snake>();
+            commands.entity(head_id).remove::<Solid>();
+            commands.entity(head_id).insert(Food {});
+            remove_snake_from_species(&mut species, head_id, &mut snake);
+            for segment_id in &snake.segments {
+                commands.entity(*segment_id).remove::<Solid>();
+                commands.entity(*segment_id).insert(Food {});
             }
         }
     }
@@ -411,7 +463,7 @@ pub fn split(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, po
             new_snake_segments.reverse();
             let mut new_head;
             if let Some(neural_network) = snake.brain.get_neural_network() {
-                debug!("Splitting snake with neural network");
+                debug!("Snake {:?} is splitting with neural network", head_id);
                 let mut new_neural_network = neural_network.clone();
                 let mut rng = rand::thread_rng();
                 let mut mutations = snake.mutations;
@@ -477,6 +529,42 @@ pub fn assign_missing_segments(mut snakes: Query<(Entity, &mut Snake), Added<Sna
         if snake.segments.len() == 0 {
             snake.segments.push(snake_id);
         }
+    }
+}
+
+pub fn assign_new_occupied_solid_positions(mut solids: Query<(Entity, &Position, &Solid), Changed<Position>>, mut entities: ResMut<SolidsMap>, config: Res<SimulationConfig>) {
+    puffin::profile_function!();
+    for (solid_id, position, _) in &mut solids {
+        entities.map[position.x as usize][position.y as usize].push(solid_id);
+    }
+}
+
+pub fn remove_occupied_solid_positions(mut removed_solids: RemovedComponents<Solid>, positions: Query<&Position>, mut entities: ResMut<SolidsMap>) {
+    puffin::profile_function!();
+    for solid_id in removed_solids.iter() {
+        if let Ok(position) = positions.get(solid_id) {
+            entities.map[position.x as usize][position.y as usize].retain(|f| *f != solid_id);
+        }
+    }
+}
+
+pub fn assign_new_food_positions(mut solids: Query<(Entity, &Position, &Food), Added<Food>>, mut entities: ResMut<FoodMap>, config: Res<SimulationConfig>) {
+    puffin::profile_function!();
+    for (solid_id, position, _) in &mut solids {
+        entities.map[position.x as usize][position.y as usize].push(solid_id);
+    }
+    // entities.map = vec![vec![vec![]; config.rows]; config.columns];
+    // for (solid_id, position, _) in &mut solids {
+    //     entities.map[position.x as usize][position.y as usize].push(solid_id);
+    // }
+}
+
+pub fn remove_eaten_food(mut commands: Commands, mut removed_food: RemovedComponents<Food>, positions: Query<&Position>, mut entities: ResMut<FoodMap>) {
+    puffin::profile_function!();
+    for food_id in removed_food.iter() {
+        let position = positions.get(food_id).unwrap();
+        entities.map[position.x as usize][position.y as usize].retain(|f| *f != food_id);
+        commands.entity(food_id).despawn();
     }
 }
 
