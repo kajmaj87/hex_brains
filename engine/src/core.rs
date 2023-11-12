@@ -98,7 +98,7 @@ impl Brain for RandomBrain {
 
 impl RandomNeuralBrain {
     pub(crate) fn new(innovation_tracker: &mut InnovationTracker) -> Self {
-        let neural_network = NeuralNetwork::random_brain(9, 0.5, innovation_tracker);
+        let neural_network = NeuralNetwork::random_brain(11, 0.5, innovation_tracker);
         Self {
             neural_network
         }
@@ -328,10 +328,12 @@ pub fn think(mut heads: Query<(&Position, &mut Snake)>, food_map: Res<FoodMap>, 
         let food_smell_left = sense_food(&position_at_direction(&turn_left(&head.direction), &position, &config), &food_map, 3);
         let food_smell_right = sense_food(&position_at_direction(&turn_right(&head.direction), &position, &config), &food_map, 4);
         let food_vision_front = see_food(&head.direction, &position, 5, &food_map, &config, 5);
-        let food_vision_left = see_food(&head.direction, &position, 5, &food_map, &config, 6);
-        let food_vision_right = see_food(&head.direction, &position, 5, &food_map, &config, 7);
+        let food_vision_left = see_food(&turn_left(&head.direction), &position, 5, &food_map, &config, 6);
+        let food_vision_right = see_food(&turn_right(&head.direction), &position, 5, &food_map, &config, 7);
         let solid_vision_front = see_obstacles(&head.direction, &position, 6, &solids_map, &config, 8);
-        head.decision = head.brain.decide(vec![bias.clone(), chaos, food_smell_front, food_smell_left, food_smell_right, food_vision_front, food_vision_left, food_vision_right, solid_vision_front]);
+        let solid_vision_left = see_obstacles(&turn_left(&head.direction), &position, 4, &solids_map, &config, 9);
+        let solid_vision_right = see_obstacles(&turn_right(&head.direction), &position, 4, &solids_map, &config, 10);
+        head.decision = head.brain.decide(vec![bias.clone(), chaos, food_smell_front, food_smell_left, food_smell_right, food_vision_front, food_vision_left, food_vision_right, solid_vision_front, solid_vision_left, solid_vision_right]);
     }
 }
 

@@ -1,5 +1,6 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::Instant;
@@ -10,7 +11,7 @@ use eframe::epaint::Color32;
 use egui::{Frame, Key, Response, ScrollArea, Sense, Shape, Stroke, Ui};
 use egui::epaint::CircleShape;
 use egui::Shape::Circle;
-use tracing::Level;
+use tracing::{info, Level};
 use tracing_subscriber::fmt;
 use hex_brains_engine::core::{Food, Snake, Position, Solid};
 use hex_brains_engine::simulation::{Simulation, EngineEvent, EngineCommand, EngineState, EngineEvents, Hex, HexType, SimulationConfig, Stats};
@@ -25,35 +26,7 @@ fn main() {
     let (engine_commands_sender, engine_commands_receiver) = std::sync::mpsc::channel();
     let (engine_events_sender, engine_events_receiver) = std::sync::mpsc::channel();
     eframe::run_native("My egui App", native_options, Box::new(|cc| {
-        let context = cc.egui_ctx.clone();
-        let config = Config {
-            rows: 300,
-            columns: 300,
-            bg_color: Stroke::new(1.0, Color32::LIGHT_GREEN),
-            snake_color: Stroke::new(1.0, Color32::RED),
-            tail_color: Stroke::new(1.0, Color32::LIGHT_RED),
-            food_color: Stroke::new(1.0, Color32::YELLOW),
-        };
-        let simulation_config = create_simulation_config(config.columns, config.rows);
-        let mut simulation = Simulation::new("Main".to_string(), engine_events_sender.clone(), Some(engine_commands_receiver), simulation_config);
-        let egui_context = EguiEcsContext {
-            context,
-        };
-        simulation.insert_resource(egui_context);
-        simulation.insert_resource(config);
-        simulation.insert_resource(EngineState {
-            repaint_needed: false,
-            speed_limit: Some(0.1),
-            running: true,
-            frames_left: 0.0,
-            frames: 0,
-            updates_done: 0,
-        });
-        simulation.add_system(draw_simulation.run_if(should_draw_simulation));
-        thread::spawn(move || {
-            simulation.run();
-        });
-        Box::new(MyEguiApp::new(cc, engine_commands_sender, engine_events_sender, engine_events_receiver, config))
+        Box::new(MyEguiApp::new(cc, engine_commands_sender, engine_events_sender, engine_events_receiver, engine_commands_receiver))
     }));
 }
 
@@ -63,7 +36,7 @@ fn create_simulation_config(columns: usize, rows: usize) -> SimulationConfig {
         columns,
         starting_snakes: 10,
         starting_food: 100,
-        food_per_step: 5,
+        food_per_step: 2,
         energy_per_segment: 100,
         wait_cost: 1,
         move_cost: 10,
@@ -71,6 +44,30 @@ fn create_simulation_config(columns: usize, rows: usize) -> SimulationConfig {
         size_to_split: 10,
         species_threshold: 0.2,
     }
+}
+
+fn start_simulation(engine_events_sender: &Sender<EngineEvent>, engine_commands_receiver: Arc<Mutex<Receiver<EngineCommand>>>, context: egui::Context, config: Config) {
+    let simulation_config = create_simulation_config(config.columns, config.rows);
+    let mut simulation = Simulation::new("Main".to_string(), engine_events_sender.clone(), Some(Arc::clone(&engine_commands_receiver)), simulation_config);
+    let egui_context = EguiEcsContext {
+        context,
+    };
+    simulation.insert_resource(egui_context);
+    simulation.insert_resource(config);
+    simulation.insert_resource(EngineState {
+        repaint_needed: false,
+        speed_limit: Some(0.1),
+        running: true,
+        frames_left: 0.0,
+        frames: 0,
+        updates_done: 0,
+        ignore_speed_limit: false,
+        finished: false,
+    });
+    simulation.add_system(draw_simulation.run_if(should_draw_simulation));
+    thread::spawn(move || {
+        simulation.run();
+    });
 }
 
 fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Position>, snakes: Query<(Entity, &Snake)>, solids: Query<(Entity, &Solid)>, food: Query<(Entity, &Food)>, stats: Res<Stats>) {
@@ -139,6 +136,7 @@ struct MyEguiApp {
     engine_commands_sender: Sender<EngineCommand>,
     engine_events_sender: Sender<EngineEvent>,
     engine_events_receiver: Receiver<EngineEvent>,
+    engine_commands_receiver: Arc<Mutex<Receiver<EngineCommand>>>,
     can_draw_frame: bool,
     config: Config,
     hexes: Vec<Hex>,
@@ -148,10 +146,12 @@ struct MyEguiApp {
     frames_per_second: u32,
     updates_per_second: u32,
     stats: Stats,
+    show_simulation_settings: bool,
+    simulation_config: SimulationConfig,
 }
 
 impl MyEguiApp {
-    fn new(cc: &eframe::CreationContext<'_>, engine_commands_sender: Sender<EngineCommand>, engine_events_sender: Sender<EngineEvent>, engine_events_receiver: Receiver<EngineEvent>, config: Config) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>, engine_commands_sender: Sender<EngineCommand>, engine_events_sender: Sender<EngineEvent>, engine_events_receiver: Receiver<EngineEvent>, engine_commands_receiver: Receiver<EngineCommand>) -> Self {
         // Customize egui here with cc.egui_ctx.set_fonts and cc.egui_ctx.set_visuals.
         // Restore app state using cc.storage (requires the "persistence" feature).
         // Use the cc.gl (a glow::Context) to create graphics shaders and buffers that you can use
@@ -168,10 +168,32 @@ impl MyEguiApp {
             engine_commands_sender,
             engine_events_sender,
             engine_events_receiver,
+            engine_commands_receiver: Arc::new(Mutex::new(engine_commands_receiver)),
+            config: Config {
+                rows: 100,
+                columns: 100,
+                bg_color: Stroke::new(1.0, Color32::LIGHT_GREEN),
+                snake_color: Stroke::new(1.0, Color32::RED),
+                tail_color: Stroke::new(1.0, Color32::LIGHT_RED),
+                food_color: Stroke::new(1.0, Color32::YELLOW),
+            },
+            simulation_config: SimulationConfig {
+                rows: 100,
+                columns: 100,
+                starting_snakes: 0,
+                starting_food: 0,
+                food_per_step: 2,
+                energy_per_segment: 100,
+                wait_cost: 1,
+                move_cost: 10,
+                energy_to_grow: 200,
+                size_to_split: 12,
+                species_threshold: 0.2,
+            },
             can_draw_frame: true,
-            config,
             stats: Stats::default(),
             hexes: vec![],
+            show_simulation_settings: false
         }
     }
 }
@@ -208,6 +230,46 @@ impl eframe::App for MyEguiApp {
             self.updates_last_second = 0;
             self.frames_last_second = 0;
         }
+        if self.show_simulation_settings {
+            egui::Window::new("Simulation Settings").show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Size");
+                    ui.add(egui::DragValue::new(&mut self.config.rows).speed(1.0));
+                    self.config.columns = self.config.rows;
+                    self.simulation_config.rows = self.config.rows;
+                    self.simulation_config.columns = self.config.columns;
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Food per step");
+                    ui.add(egui::DragValue::new(&mut self.simulation_config.food_per_step).speed(1.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Energy per segment");
+                    ui.add(egui::DragValue::new(&mut self.simulation_config.energy_per_segment).speed(1.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Wait cost");
+                    ui.add(egui::DragValue::new(&mut self.simulation_config.wait_cost).speed(1.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Move cost");
+                    ui.add(egui::DragValue::new(&mut self.simulation_config.move_cost).speed(1.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Energy to grow");
+                    ui.add(egui::DragValue::new(&mut self.simulation_config.energy_to_grow).speed(1.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Size to split");
+                    ui.add(egui::DragValue::new(&mut self.simulation_config.size_to_split).speed(1.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Species coloring threshold");
+                    ui.add(egui::DragValue::new(&mut self.simulation_config.species_threshold).speed(1.0));
+                });
+                self.engine_commands_sender.send(EngineCommand::UpdateSimulationConfig(self.simulation_config.clone())).unwrap();
+            });
+        }
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("Start profiling").clicked() {
@@ -224,6 +286,8 @@ impl eframe::App for MyEguiApp {
                                 frames_left: 0.0,
                                 frames: 0,
                                 updates_done: 0,
+                                finished: false,
+                                ignore_speed_limit: false
                             });
                             result
                         })
@@ -252,6 +316,17 @@ impl eframe::App for MyEguiApp {
                 egui::stroke_ui(ui, &mut self.config.tail_color, "Tail Color");
                 egui::stroke_ui(ui, &mut self.config.food_color, "Food Color");
             });
+            ui.horizontal(|ui| {
+                if ui.button("Start simulation").clicked() {
+                    start_simulation(&self.engine_events_sender, Arc::clone(&self.engine_commands_receiver), ctx.clone(), self.config);
+                }
+                if ui.button("Stop simulation").clicked() {
+                    self.engine_commands_sender.send(EngineCommand::StopSimulation).unwrap();
+                }
+                if ui.button("Show settings").clicked() {
+                    self.show_simulation_settings = true
+                }
+            });
             draw_hexes(ui, &self.hexes, &self.config);
             ScrollArea::vertical()
                 .auto_shrink([false; 2])
@@ -266,8 +341,8 @@ impl eframe::App for MyEguiApp {
             if ctx.input(|i| i.key_pressed(Key::Minus)) {
                 self.engine_commands_sender.send(EngineCommand::DecreaseSpeed).unwrap();
             }
-            if ctx.input(|i| i.key_pressed(Key::Num0)) {
-                self.engine_commands_sender.send(EngineCommand::RemoveSpeedLimit).unwrap();
+            if ctx.input(|i| i.key_pressed(Key::Tab)) {
+                self.engine_commands_sender.send(EngineCommand::IgnoreSpeedLimit).unwrap();
             }
             if ctx.input(|i| i.key_pressed(Key::Space)) {
                 self.engine_commands_sender.send(EngineCommand::FlipRunningState).unwrap();
@@ -299,7 +374,7 @@ fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
         let shapes: Vec<Shape> = hexes.iter().map(|hex| {
             let position = Pos2 { x: hex.x as f32, y: hex.y as f32 };
             let color = match hex.hex_type {
-                HexType::SnakeHead{ specie } => u32_to_color(specie),
+                HexType::SnakeHead { specie } => u32_to_color(specie),
                 HexType::SnakeTail => config.tail_color.color,
                 HexType::Food => config.food_color.color,
             };

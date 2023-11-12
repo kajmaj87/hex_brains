@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::f32::consts::PI;
 use crate::core::{assign_new_occupied_solid_positions, remove_occupied_solid_positions, Solid};
 use crate::core::{assign_new_food_positions, die_from_collisions, remove_eaten_food};
@@ -19,7 +20,7 @@ pub struct Simulation {
     pub name: String,
     engine_events: Sender<EngineEvent>,
     // only the main simulation may receive commands
-    engine_commands: Option<Receiver<EngineCommand>>,
+    engine_commands: Option<Arc<Mutex<Receiver<EngineCommand>>>>,
     has_gui: bool,
 }
 
@@ -79,9 +80,11 @@ pub enum EngineCommand {
     RepaintRequested,
     IncreaseSpeed,
     DecreaseSpeed,
-    RemoveSpeedLimit,
+    IgnoreSpeedLimit,
     FlipRunningState,
     CreateSnakes(usize),
+    StopSimulation,
+    UpdateSimulationConfig(SimulationConfig),
 }
 
 #[derive(Debug, Resource)]
@@ -92,6 +95,8 @@ pub struct EngineState {
     pub frames_left: f32,
     pub frames: u32,
     pub updates_done: u32,
+    pub finished: bool,
+    pub ignore_speed_limit: bool
 }
 
 #[derive(Resource)]
@@ -101,7 +106,7 @@ pub struct EngineEvents {
 
 fn turn_counter(mut engine_state: ResMut<EngineState>) {
     puffin::profile_function!();
-    if engine_state.speed_limit.is_some() {
+    if engine_state.speed_limit.is_some() && !engine_state.ignore_speed_limit {
         engine_state.frames_left -= 1.0;
     }
     engine_state.updates_done += 1;
@@ -109,26 +114,27 @@ fn turn_counter(mut engine_state: ResMut<EngineState>) {
 }
 
 fn should_simulate_frame(engine_state: Res<EngineState>) -> bool {
-    engine_state.speed_limit.is_none() || (engine_state.running && engine_state.frames_left > 0.0)
+    engine_state.ignore_speed_limit || engine_state.speed_limit.is_none() || (engine_state.running && engine_state.frames_left > 0.0)
 }
 
 impl Simulation {
-    pub fn new(name: String, engine_events: Sender<EngineEvent>, engine_commands: Option<Receiver<EngineCommand>>, config: SimulationConfig) -> Self {
+    pub fn new(name: String, engine_events: Sender<EngineEvent>, engine_commands: Option<Arc<Mutex<Receiver<EngineCommand>>>>, config: SimulationConfig) -> Self {
         let mut world = World::new();
-        let mut innovation_tracker = InnovationTracker::new();
+        let innovation_tracker = InnovationTracker::new();
         // for _ in 0..config.starting_snakes {
         //     world.spawn(create_snake(config.energy_per_segment, (50, 50), Box::new(RandomNeuralBrain::new(&mut innovation_tracker))));
         // }
         // for _ in 0..config.starting_food {
         //     world.spawn(
         // }
-        for x in 0..config.columns {
-            if x != config.columns / 2 {
-                world.spawn((Solid, Position { x: x as i32, y: (config.rows / 4) as i32 }));
-                world.spawn((Solid, Position { x: x as i32, y: (2 * config.rows / 4) as i32 }));
-                world.spawn((Solid, Position { x: x as i32, y: (3 * config.rows / 4) as i32 }));
-            }
-        }
+        // for x in 0..config.columns {
+        //     let middle = config.rows / 2;
+        //     if x != middle && x != middle + 1 && x != middle - 1 {
+        //         world.spawn((Solid, Position { x: x as i32, y: (config.rows / 4) as i32 }));
+        //         world.spawn((Solid, Position { x: x as i32, y: (2 * config.rows / 4) as i32 }));
+        //         world.spawn((Solid, Position { x: x as i32, y: (3 * config.rows / 4) as i32 }));
+        //     }
+        // }
         world.insert_resource(config);
         world.insert_resource(Stats::default());
         world.insert_resource(FoodMap{ map: vec![vec![vec![]; config.columns]; config.rows] });
@@ -154,13 +160,17 @@ impl Simulation {
     }
 
     pub fn is_done(&mut self) -> bool {
-        self.world.query::<&Position>().iter(&self.world).next().unwrap_or(&Position{x:0, y:0}).x > 10_000
+        let engine_state = self.world.get_resource::<EngineState>().unwrap();
+        engine_state.finished
     }
 
     pub fn run(&mut self) -> EngineEvent {
         let start_time = Instant::now();
         while !self.is_done() {
-            if let Some(commands) = self.engine_commands.as_ref() {
+            if let Some(commands) = match &self.engine_commands {
+                Some(arc_mutex) => arc_mutex.lock().ok(),
+                None => None
+            }{
                 commands.try_iter().for_each(|command| {
                     let mut engine_state = self.world.get_resource_mut::<EngineState>().unwrap();
                     match command {
@@ -173,8 +183,8 @@ impl Simulation {
                         EngineCommand::DecreaseSpeed => {
                             engine_state.speed_limit = engine_state.speed_limit.map(|limit| limit / 2.0).or(Some(0.02));
                         }
-                        EngineCommand::RemoveSpeedLimit => {
-                            engine_state.speed_limit = None;
+                        EngineCommand::IgnoreSpeedLimit => {
+                            engine_state.ignore_speed_limit = !engine_state.ignore_speed_limit;
                         }
                         EngineCommand::FlipRunningState => {
                             engine_state.running = !engine_state.running;
@@ -195,6 +205,13 @@ impl Simulation {
                                     self.world.spawn(create_snake(100, (x, y), Box::new(brain)));
                                 }
                             }
+                        }
+                        EngineCommand::StopSimulation => {
+                            engine_state.finished = true;
+                        }
+                        EngineCommand::UpdateSimulationConfig(new_config) => {
+                            self.world.remove_resource::<SimulationConfig>();
+                            self.world.insert_resource(new_config);
                         }
                     }
                 });
