@@ -63,13 +63,13 @@ fn create_simulation_config(columns: usize, rows: usize) -> SimulationConfig {
         columns,
         starting_snakes: 10,
         starting_food: 100,
-        food_per_step: 3,
+        food_per_step: 2,
         energy_per_segment: 100,
         wait_cost: 1,
         move_cost: 10,
         energy_to_grow: 200,
         size_to_split: 10,
-        species_threshold: 0.05,
+        species_threshold: 0.2,
     }
 }
 

@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::LinkedList;
+use std::collections::{LinkedList, VecDeque};
 use rand::Rng;
 use bevy_ecs::prelude::*;
 use bevy_ecs::query::QueryParIter;
@@ -42,7 +42,7 @@ pub trait Brain: Sync + Send {
 pub struct Specie {
     pub id: u32,
     pub leader: Entity,
-    pub members: Vec<Entity>,
+    pub members: VecDeque<Entity>,
 }
 
 #[derive(Resource, Default, Debug, Clone)]
@@ -363,12 +363,12 @@ pub fn starve(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, m
                 let mut specie = species.species.iter_mut().find(|s| s.id == specie).unwrap();
                 if specie.leader == head_id {
                     specie.members.retain(|s| *s != head_id);
-                    if let Some(new_leader) = specie.members.pop() {
+                    if let Some(new_leader) = specie.members.pop_front() {
                         specie.leader = new_leader;
                         debug!("New leader for specie {:?}: {:?}", specie.id, specie.leader);
                     } else {
                         let specie_id = specie.id;
-                        debug!("Specie {:?} is extinct", specie_id);
+                        info!("Specie {:?} is extinct", specie_id);
                         species.species.retain(|s| s.id != specie_id);
                     }
                 } else {
@@ -491,7 +491,7 @@ pub fn assign_species(new_borns: Query<Entity, Added<JustBorn>>, mut snakes: Que
                 if compatibility < config.species_threshold {
                     debug!("Snake {:?} is in specie {:?}", snake_id, specie.id);
                     snake.species = Some(specie.id);
-                    specie.members.push(snake_id);
+                    specie.members.push_back(snake_id);
                     break;
                 }
             } else {
@@ -502,8 +502,8 @@ pub fn assign_species(new_borns: Query<Entity, Added<JustBorn>>, mut snakes: Que
         }
         let (_, mut baby_snake) = snakes.get_mut(baby_id).unwrap();
         if baby_snake.species.is_none() {
-            let mut new_specie = Specie { id: species.last_id + 1, leader: baby_id, members: vec![] };
-            new_specie.members.push(baby_id);
+            let mut new_specie = Specie { id: species.last_id + 1, leader: baby_id, members: VecDeque::new() };
+            new_specie.members.push_back(baby_id);
             species.species.push(new_specie);
             species.last_id += 1;
             baby_snake.species = Some(species.last_id);

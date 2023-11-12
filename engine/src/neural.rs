@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use bevy_ecs::prelude::Resource;
 use rand::Rng;
 use rayon::join;
-use tracing::debug;
+use tracing::{debug, info};
 
 // Define a trait that all sensor inputs will implement.
 #[derive(Debug, Clone)]
@@ -155,13 +155,18 @@ impl NeuralNetwork {
     pub fn flip_random_connection(&mut self){
         let mut rng = rand::thread_rng();
         let index = rng.gen_range(0..self.connections.len());
+        debug!("Flipping connection {}", index);
         self.connections[index].enabled = !self.connections[index].enabled;
     }
 
     pub(crate) fn mutate_random_connection_weight(&mut self) {
         let mut rng = rand::thread_rng();
-        let index = rng.gen_range(0..self.connections.len());
+        let mut index = rng.gen_range(0..self.connections.len());
+        while !self.connections[index].enabled {
+            index = rng.gen_range(0..self.connections.len());
+        }
         self.connections[index].weight += rng.gen_range(-0.2..0.2);
+        debug!("Mutating connection {} to value {}", index, self.connections[index].weight);
     }
 
     pub fn get_active_connections(&self) -> Vec<&ConnectionGene> {
