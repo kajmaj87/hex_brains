@@ -111,6 +111,7 @@ pub struct SimulationConfig {
     pub size_to_split: usize,
     pub species_threshold: f32,
     pub mutation: MutationConfig,
+    pub add_walls: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -165,14 +166,16 @@ impl Simulation {
         // for _ in 0..config.starting_food {
         //     world.spawn(
         // }
-        // for x in 0..config.columns {
-        //     let middle = config.rows / 2;
-        //     if x != middle && x != middle + 1 && x != middle - 1 {
-        //         world.spawn((Solid, Position { x: x as i32, y: (config.rows / 4) as i32 }));
-        //         world.spawn((Solid, Position { x: x as i32, y: (2 * config.rows / 4) as i32 }));
-        //         world.spawn((Solid, Position { x: x as i32, y: (3 * config.rows / 4) as i32 }));
-        //     }
-        // }
+        if config.add_walls {
+            for x in 0..config.columns {
+                let middle = config.rows / 2;
+                if x != middle && x != middle + 1 && x != middle - 1 {
+                    world.spawn((Solid, Position { x: x as i32, y: (config.rows / 4) as i32 }));
+                    world.spawn((Solid, Position { x: x as i32, y: (2 * config.rows / 4) as i32 }));
+                    world.spawn((Solid, Position { x: x as i32, y: (3 * config.rows / 4) as i32 }));
+                }
+            }
+        }
         world.insert_resource(config);
         world.insert_resource(Stats::default());
         world.insert_resource(FoodMap { map: vec![vec![vec![]; config.columns]; config.rows] });

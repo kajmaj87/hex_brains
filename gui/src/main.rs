@@ -30,10 +30,11 @@ fn main() {
     }));
 }
 
-fn create_simulation_config(columns: usize, rows: usize) -> SimulationConfig {
+fn create_simulation_config(columns: usize, rows: usize, add_walls: bool) -> SimulationConfig {
     SimulationConfig {
         rows,
         columns,
+        add_walls,
         starting_snakes: 10,
         starting_food: 100,
         food_per_step: 2,
@@ -48,7 +49,7 @@ fn create_simulation_config(columns: usize, rows: usize) -> SimulationConfig {
 }
 
 fn start_simulation(engine_events_sender: &Sender<EngineEvent>, engine_commands_receiver: Arc<Mutex<Receiver<EngineCommand>>>, context: egui::Context, config: Config) {
-    let simulation_config = create_simulation_config(config.columns, config.rows);
+    let simulation_config = create_simulation_config(config.columns, config.rows, config.add_walls);
     let mut simulation = Simulation::new("Main".to_string(), engine_events_sender.clone(), Some(Arc::clone(&engine_commands_receiver)), simulation_config);
     let egui_context = EguiEcsContext {
         context,
@@ -128,6 +129,7 @@ struct Config {
     snake_color: Stroke,
     food_color: Stroke,
     tail_color: Stroke,
+    add_walls: bool,
 }
 
 struct MyEguiApp {
@@ -180,6 +182,7 @@ impl MyEguiApp {
                 snake_color: Stroke::new(1.0, Color32::RED),
                 tail_color: Stroke::new(1.0, Color32::LIGHT_RED),
                 food_color: Stroke::new(1.0, Color32::YELLOW),
+                add_walls: false,
             },
             simulation_config: SimulationConfig {
                 rows: 100,
@@ -193,6 +196,7 @@ impl MyEguiApp {
                 energy_to_grow: 200,
                 size_to_split: 12,
                 species_threshold: 0.2,
+                add_walls: false,
                 mutation: MutationConfig::default(),
             },
             can_draw_frame: true,
@@ -245,6 +249,9 @@ impl eframe::App for MyEguiApp {
                 self.config.rows = self.config.columns;
                 self.simulation_config.rows = self.config.rows;
                 self.simulation_config.columns = self.config.columns;
+            });
+            ui.horizontal(|ui| {
+                ui.add_enabled(!self.simulation_running, egui::Checkbox::new(&mut self.config.add_walls, "Add walls"));
             });
             ui.horizontal(|ui| {
                 ui.label("Food per step");
@@ -329,7 +336,7 @@ impl eframe::App for MyEguiApp {
                 if ui.button("Simulate Batch").clicked() {
                     let simulations = (0..64)
                         .map(|i| {
-                            let mut result = Simulation::new(format!("Simulation {}", i), self.engine_events_sender.clone(), None, create_simulation_config(self.config.columns, self.config.rows));
+                            let mut result = Simulation::new(format!("Simulation {}", i), self.engine_events_sender.clone(), None, create_simulation_config(self.config.columns, self.config.rows, false));
                             result.insert_resource(EngineState {
                                 repaint_needed: false,
                                 speed_limit: None,
