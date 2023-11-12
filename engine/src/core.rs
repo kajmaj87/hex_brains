@@ -323,16 +323,49 @@ pub fn think(mut heads: Query<(&Position, &mut Snake)>, food_map: Res<FoodMap>, 
     let mut rng = rand::thread_rng();
     let bias = SensorInput { value: 1.0, index: 0 };
     for (position, mut head) in &mut heads {
-        let chaos = SensorInput { value: rng.gen_range(0.0..1.0), index: 1 };
-        let food_smell_front = sense_food(&position_at_direction(&head.direction, &position, &config), &food_map, 2);
-        let food_smell_left = sense_food(&position_at_direction(&turn_left(&head.direction), &position, &config), &food_map, 3);
-        let food_smell_right = sense_food(&position_at_direction(&turn_right(&head.direction), &position, &config), &food_map, 4);
-        let food_vision_front = see_food(&head.direction, &position, 5, &food_map, &config, 5);
-        let food_vision_left = see_food(&turn_left(&head.direction), &position, 5, &food_map, &config, 6);
-        let food_vision_right = see_food(&turn_right(&head.direction), &position, 5, &food_map, &config, 7);
-        let solid_vision_front = see_obstacles(&head.direction, &position, 6, &solids_map, &config, 8);
-        let solid_vision_left = see_obstacles(&turn_left(&head.direction), &position, 4, &solids_map, &config, 9);
-        let solid_vision_right = see_obstacles(&turn_right(&head.direction), &position, 4, &solids_map, &config, 10);
+        let chaos = if config.mutation.chaos_input_enabled {
+            SensorInput { value: rng.gen_range(0.0..1.0), index: 1 }
+        } else {
+            SensorInput { value: 0.0, index: 1 }
+        };
+        let direction_left = turn_left(&head.direction);
+        let direction_right = turn_right(&head.direction);
+        let food_smell_front;
+        let food_smell_left;
+        let food_smell_right;
+        if config.mutation.food_sensing_enabled {
+            food_smell_front = sense_food(&position_at_direction(&head.direction, &position, &config), &food_map, 2);
+            food_smell_left = sense_food(&position_at_direction(&direction_left, &position, &config), &food_map, 3);
+            food_smell_right = sense_food(&position_at_direction(&direction_right, &position, &config), &food_map, 4);
+        } else {
+            food_smell_front = SensorInput { value: 0.0, index: 2 };
+            food_smell_left = SensorInput { value: 0.0, index: 3 };
+            food_smell_right = SensorInput { value: 0.0, index: 4 };
+        }
+        let food_vision_front;
+        let food_vision_left;
+        let food_vision_right;
+        if config.mutation.food_vision_enabled {
+            food_vision_front = see_food(&head.direction, &position, config.mutation.food_vision_front_range, &food_map, &config, 5);
+            food_vision_left = see_food(&direction_left, &position,config.mutation.food_vision_left_range, &food_map, &config, 6);
+            food_vision_right = see_food(&direction_right, &position, config.mutation.food_vision_right_range, &food_map, &config, 7);
+        } else {
+            food_vision_front = SensorInput { value: 0.0, index: 5 };
+            food_vision_left = SensorInput { value: 0.0, index: 6 };
+            food_vision_right = SensorInput { value: 0.0, index: 7 };
+        }
+        let solid_vision_front;
+        let solid_vision_left;
+        let solid_vision_right;
+        if config.mutation.obstacle_vision_enabled {
+            solid_vision_front = see_obstacles(&head.direction, &position, config.mutation.obstacle_vision_front_range, &solids_map, &config, 8);
+            solid_vision_left = see_obstacles(&direction_left, &position, config.mutation.obstacle_vision_left_range, &solids_map, &config, 9);
+            solid_vision_right = see_obstacles(&direction_right, &position, config.mutation.obstacle_vision_right_range, &solids_map, &config, 10);
+        } else {
+            solid_vision_front = SensorInput { value: 0.0, index: 8 };
+            solid_vision_left = SensorInput { value: 0.0, index: 9 };
+            solid_vision_right = SensorInput { value: 0.0, index: 10 };
+        }
         head.decision = head.brain.decide(vec![bias.clone(), chaos, food_smell_front, food_smell_left, food_smell_right, food_vision_front, food_vision_left, food_vision_right, solid_vision_front, solid_vision_left, solid_vision_right]);
     }
 }
@@ -483,12 +516,12 @@ pub fn split(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, po
                 let mut new_neural_network = neural_network.clone();
                 let mut rng = rand::thread_rng();
                 let mut mutations = snake.mutations;
-                if rng.gen_bool(0.1) {
+                if rng.gen_bool(config.mutation.connection_flip_chance) {
                     new_neural_network.flip_random_connection();
                     mutations += 1;
                 }
-                if rng.gen_bool(0.3) {
-                    new_neural_network.mutate_random_connection_weight();
+                if rng.gen_bool(config.mutation.weight_perturbation_chance) {
+                    new_neural_network.mutate_random_connection_weight(config.mutation.weight_perturbation_range);
                     mutations += 1;
                 }
                 debug!("New neural network: {:?}", new_neural_network);

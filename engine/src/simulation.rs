@@ -37,7 +37,7 @@ pub enum HexType {
     SnakeHead {
         specie: u32,
     },
-    SnakeTail
+    SnakeTail,
 }
 
 #[derive(Resource, Default, Debug, Clone)]
@@ -50,7 +50,7 @@ pub struct Stats {
     pub total_solids: usize,
     pub max_generation: u32,
     pub max_mutations: u32,
-    pub species: Species
+    pub species: Species,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +58,43 @@ pub enum EngineEvent {
     SimulationFinished { steps: u32, name: String, duration: u128 },
     DrawData { hexes: Vec<Hex>, stats: Stats },
     FrameDrawn { updates_left: f32, updates_done: u32 },
+}
+
+#[derive(Debug, Resource, Clone, Copy)]
+pub struct MutationConfig {
+    pub food_sensing_enabled: bool,
+    pub food_vision_enabled: bool,
+    pub obstacle_vision_enabled: bool,
+    pub chaos_input_enabled: bool,
+    pub food_vision_front_range: u32,
+    pub food_vision_left_range: u32,
+    pub food_vision_right_range: u32,
+    pub obstacle_vision_front_range: u32,
+    pub obstacle_vision_left_range: u32,
+    pub obstacle_vision_right_range: u32,
+    pub weight_perturbation_range: f32,
+    pub weight_perturbation_chance: f64,
+    pub connection_flip_chance: f64,
+}
+
+impl Default for MutationConfig {
+    fn default() -> Self {
+        MutationConfig {
+            food_sensing_enabled: true,
+            food_vision_enabled: true,
+            obstacle_vision_enabled: true,
+            chaos_input_enabled: true,
+            food_vision_front_range: 5,
+            food_vision_left_range: 3,
+            food_vision_right_range: 3,
+            obstacle_vision_front_range: 5,
+            obstacle_vision_left_range: 3,
+            obstacle_vision_right_range: 3,
+            weight_perturbation_range: 0.2,
+            weight_perturbation_chance: 0.3,
+            connection_flip_chance: 0.1,
+        }
+    }
 }
 
 #[derive(Debug, Resource, Clone, Copy)]
@@ -73,6 +110,7 @@ pub struct SimulationConfig {
     pub energy_to_grow: i32,
     pub size_to_split: usize,
     pub species_threshold: f32,
+    pub mutation: MutationConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -96,7 +134,7 @@ pub struct EngineState {
     pub frames: u32,
     pub updates_done: u32,
     pub finished: bool,
-    pub ignore_speed_limit: bool
+    pub ignore_speed_limit: bool,
 }
 
 #[derive(Resource)]
@@ -137,8 +175,8 @@ impl Simulation {
         // }
         world.insert_resource(config);
         world.insert_resource(Stats::default());
-        world.insert_resource(FoodMap{ map: vec![vec![vec![]; config.columns]; config.rows] });
-        world.insert_resource(SolidsMap{ map: vec![vec![vec![]; config.columns]; config.rows] });
+        world.insert_resource(FoodMap { map: vec![vec![vec![]; config.columns]; config.rows] });
+        world.insert_resource(SolidsMap { map: vec![vec![vec![]; config.columns]; config.rows] });
         world.insert_resource(EngineEvents { events: Mutex::new(engine_events.clone()) });
         world.insert_resource(innovation_tracker);
         world.insert_resource(Species::default());
@@ -170,7 +208,7 @@ impl Simulation {
             if let Some(commands) = match &self.engine_commands {
                 Some(arc_mutex) => arc_mutex.lock().ok(),
                 None => None
-            }{
+            } {
                 commands.try_iter().for_each(|command| {
                     let mut engine_state = self.world.get_resource_mut::<EngineState>().unwrap();
                     match command {

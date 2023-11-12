@@ -14,7 +14,7 @@ use egui::Shape::Circle;
 use tracing::{info, Level};
 use tracing_subscriber::fmt;
 use hex_brains_engine::core::{Food, Snake, Position, Solid};
-use hex_brains_engine::simulation::{Simulation, EngineEvent, EngineCommand, EngineState, EngineEvents, Hex, HexType, SimulationConfig, Stats};
+use hex_brains_engine::simulation::{Simulation, EngineEvent, EngineCommand, EngineState, EngineEvents, Hex, HexType, SimulationConfig, Stats, MutationConfig};
 use hex_brains_engine::simulation_manager::simulate_batch;
 
 fn main() {
@@ -43,6 +43,7 @@ fn create_simulation_config(columns: usize, rows: usize) -> SimulationConfig {
         energy_to_grow: 200,
         size_to_split: 10,
         species_threshold: 0.2,
+        mutation: MutationConfig::default(),
     }
 }
 
@@ -147,7 +148,10 @@ struct MyEguiApp {
     updates_per_second: u32,
     stats: Stats,
     show_simulation_settings: bool,
+    show_mutation_settings: bool,
+    show_species: bool,
     simulation_config: SimulationConfig,
+    simulation_running: bool,
 }
 
 impl MyEguiApp {
@@ -189,11 +193,15 @@ impl MyEguiApp {
                 energy_to_grow: 200,
                 size_to_split: 12,
                 species_threshold: 0.2,
+                mutation: MutationConfig::default(),
             },
             can_draw_frame: true,
             stats: Stats::default(),
             hexes: vec![],
-            show_simulation_settings: false
+            show_simulation_settings: false,
+            show_mutation_settings: false,
+            show_species: false,
+            simulation_running: false,
         }
     }
 }
@@ -230,46 +238,89 @@ impl eframe::App for MyEguiApp {
             self.updates_last_second = 0;
             self.frames_last_second = 0;
         }
-        if self.show_simulation_settings {
-            egui::Window::new("Simulation Settings").show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("Size");
-                    ui.add(egui::DragValue::new(&mut self.config.rows).speed(1.0));
-                    self.config.columns = self.config.rows;
-                    self.simulation_config.rows = self.config.rows;
-                    self.simulation_config.columns = self.config.columns;
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Food per step");
-                    ui.add(egui::DragValue::new(&mut self.simulation_config.food_per_step).speed(1.0));
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Energy per segment");
-                    ui.add(egui::DragValue::new(&mut self.simulation_config.energy_per_segment).speed(1.0));
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Wait cost");
-                    ui.add(egui::DragValue::new(&mut self.simulation_config.wait_cost).speed(1.0));
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Move cost");
-                    ui.add(egui::DragValue::new(&mut self.simulation_config.move_cost).speed(1.0));
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Energy to grow");
-                    ui.add(egui::DragValue::new(&mut self.simulation_config.energy_to_grow).speed(1.0));
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Size to split");
-                    ui.add(egui::DragValue::new(&mut self.simulation_config.size_to_split).speed(1.0));
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Species coloring threshold");
-                    ui.add(egui::DragValue::new(&mut self.simulation_config.species_threshold).speed(1.0));
-                });
-                self.engine_commands_sender.send(EngineCommand::UpdateSimulationConfig(self.simulation_config.clone())).unwrap();
+        egui::Window::new("Environment Settings").open(&mut self.show_simulation_settings).show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Size");
+                ui.add_enabled(!self.simulation_running, egui::DragValue::new(&mut self.config.columns).speed(1.0));
+                self.config.rows = self.config.columns;
+                self.simulation_config.rows = self.config.rows;
+                self.simulation_config.columns = self.config.columns;
             });
-        }
+            ui.horizontal(|ui| {
+                ui.label("Food per step");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.food_per_step).speed(1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Energy per segment");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.energy_per_segment).speed(1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Wait cost");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.wait_cost).speed(1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Move cost");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.move_cost).speed(1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Energy to grow");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.energy_to_grow).speed(1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Size to split");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.size_to_split).speed(1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Species coloring threshold");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.species_threshold).speed(1.0));
+            });
+        });
+        egui::Window::new("Mutation Settings").open(&mut self.show_mutation_settings).show(ctx, |ui| {
+            ui.label("Senses:");
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut self.simulation_config.mutation.chaos_input_enabled, "Chaos gene");
+            });
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut self.simulation_config.mutation.food_sensing_enabled, "Food sensing");
+            });
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut self.simulation_config.mutation.food_vision_enabled, "Food vision");
+            });
+            ui.horizontal(|ui| {
+                ui.label("Front range");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.food_vision_front_range).speed(1.0));
+                ui.label("Left range");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.food_vision_left_range).speed(1.0));
+                ui.label("Right range");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.food_vision_right_range).speed(1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut self.simulation_config.mutation.obstacle_vision_enabled, "Obstacle vision");
+            });
+            ui.horizontal(|ui| {
+                ui.label("Front range");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.obstacle_vision_front_range).speed(1.0));
+                ui.label("Left range");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.obstacle_vision_left_range).speed(1.0));
+                ui.label("Right range");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.obstacle_vision_right_range).speed(1.0));
+            });
+            ui.label("Mutation settings:");
+            ui.horizontal(|ui| {
+                ui.label("Weights perturbation chance");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.weight_perturbation_chance).speed(1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Weights perturbation range");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.weight_perturbation_range).speed(1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Connection flip chance");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.connection_flip_chance).speed(1.0));
+            });
+        });
+        egui::Window::new("Species").open(&mut self.show_species).show(ctx, |ui| {});
+        self.engine_commands_sender.send(EngineCommand::UpdateSimulationConfig(self.simulation_config.clone())).unwrap();
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("Start profiling").clicked() {
@@ -287,7 +338,7 @@ impl eframe::App for MyEguiApp {
                                 frames: 0,
                                 updates_done: 0,
                                 finished: false,
-                                ignore_speed_limit: false
+                                ignore_speed_limit: false,
                             });
                             result
                         })
@@ -319,12 +370,20 @@ impl eframe::App for MyEguiApp {
             ui.horizontal(|ui| {
                 if ui.button("Start simulation").clicked() {
                     start_simulation(&self.engine_events_sender, Arc::clone(&self.engine_commands_receiver), ctx.clone(), self.config);
+                    self.simulation_running = true;
                 }
                 if ui.button("Stop simulation").clicked() {
                     self.engine_commands_sender.send(EngineCommand::StopSimulation).unwrap();
+                    self.simulation_running = false;
                 }
-                if ui.button("Show settings").clicked() {
-                    self.show_simulation_settings = true
+                if ui.button("Environment").clicked() {
+                    self.show_simulation_settings = !self.show_simulation_settings;
+                }
+                if ui.button("Mutations").clicked() {
+                    self.show_mutation_settings = !self.show_mutation_settings;
+                }
+                if ui.button("Species").clicked() {
+                    self.show_species = !self.show_species;
                 }
             });
             draw_hexes(ui, &self.hexes, &self.config);
