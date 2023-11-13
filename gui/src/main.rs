@@ -441,7 +441,7 @@ impl eframe::App for MyEguiApp {
 }
 
 fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
-    Frame::canvas(ui.style()).show(ui, |ui| {
+    Frame::canvas(ui.style()).fill(config.bg_color.color).show(ui, |ui| {
         let (mut response, _) =
             ui.allocate_painter(ui.available_size_before_wrap(), Sense::drag());
 
@@ -449,6 +449,7 @@ fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
             Rect::from_min_size(Pos2::ZERO, response.rect.square_proportions()),
             response.rect,
         );
+
         // let from_screen = to_screen.inverse();
 
         let shapes: Vec<Shape> = hexes.iter().map(|hex| {
@@ -461,9 +462,10 @@ fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
             transform_to_circle(&position, &to_screen, &response, &config, color)
         }).collect();
 
-        let positions: Vec<Pos2> = (0..config.columns)
-            .flat_map(|x| (0..config.rows).map(move |y| Pos2 { x: x as f32, y: y as f32 }))
-            .collect();
+        // let positions: Vec<Pos2> = (0..config.columns)
+        //     .flat_map(|x| (0..config.rows).map(move |y| Pos2 { x: x as f32, y: y as f32 }))
+        //     .collect();
+        let positions = vec![];
 
         let mut ground: Vec<Shape> = positions.iter().map(|position| {
             transform_to_circle(position, &to_screen, &response, &config, config.bg_color.color)
