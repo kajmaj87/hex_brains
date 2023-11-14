@@ -1,11 +1,11 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, LinkedList, VecDeque};
-use rand::Rng;
 use bevy_ecs::prelude::*;
 use bevy_ecs::query::QueryParIter;
 use tracing::{debug, info};
 use crate::neural::{ConnectionGene, InnovationTracker, NeuralNetwork, SensorInput};
 use crate::simulation::{SimulationConfig, Stats};
+use rand::Rng;
 
 #[derive(Component, Clone, Default)]
 #[derive(Debug)]
@@ -320,9 +320,9 @@ fn position_at_direction(direction: &Direction, position: &Position, config: &Re
 
 pub fn think(mut heads: Query<(&Position, &mut Snake)>, food_map: Res<FoodMap>, solids_map: Res<SolidsMap>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
-    let mut rng = rand::thread_rng();
     let bias = SensorInput { value: 1.0, index: 0 };
-    for (position, mut head) in &mut heads {
+    heads.par_iter_mut().for_each_mut(|(position, mut head)|{
+        let mut rng = rand::thread_rng();
         let chaos = if config.mutation.chaos_input_enabled {
             SensorInput { value: rng.gen_range(0.0..1.0), index: 1 }
         } else {
@@ -367,7 +367,7 @@ pub fn think(mut heads: Query<(&Position, &mut Snake)>, food_map: Res<FoodMap>, 
             solid_vision_right = SensorInput { value: 0.0, index: 10 };
         }
         head.decision = head.brain.decide(vec![bias.clone(), chaos, food_smell_front, food_smell_left, food_smell_right, food_vision_front, food_vision_left, food_vision_right, solid_vision_front, solid_vision_left, solid_vision_right]);
-    }
+    });
 }
 
 fn see_obstacles(head_direction: &Direction, position: &Position, range: u32, solids_map: &Res<SolidsMap>, config: &Res<SimulationConfig>, index: usize) -> SensorInput {
@@ -412,10 +412,28 @@ pub fn create_food(mut commands: Commands, config: Res<SimulationConfig>) {
     for _ in 0..config.food_per_step {
         let x = rng.gen_range(0..columns);
         let y = rng.gen_range(0..rows);
-        commands.spawn((Position { x, y }, Food {})).id();
+        commands.spawn((Position { x, y }, Food {}, Age(0))).id();
     }
 }
 
+pub fn destroy_old_food(mut commands: Commands, mut food: Query<(Entity, &Food, &Age)>, config: Res<SimulationConfig>) {
+    puffin::profile_function!();
+    for (food_id, _, age) in &mut food {
+        if age.0 >= 5000 {
+            commands.entity(food_id).remove::<Food>();
+        }
+    }
+}
+
+
+pub fn remove_eaten_food(mut commands: Commands, mut removed_food: RemovedComponents<Food>, positions: Query<&Position>, mut entities: ResMut<FoodMap>) {
+    puffin::profile_function!();
+    for food_id in removed_food.iter() {
+        let position = positions.get(food_id).unwrap();
+        entities.map[position.x as usize][position.y as usize].retain(|f| *f != food_id);
+        commands.entity(food_id).despawn();
+    }
+}
 pub fn eat_food(mut commands: Commands, mut food: ResMut<FoodMap>, mut snakes: Query<(&Position, &mut Energy), Without<Food>>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     for (position, mut energy) in &mut snakes {
@@ -606,15 +624,6 @@ pub fn assign_new_food_positions(mut solids: Query<(Entity, &Position, &Food), A
     // for (solid_id, position, _) in &mut solids {
     //     entities.map[position.x as usize][position.y as usize].push(solid_id);
     // }
-}
-
-pub fn remove_eaten_food(mut commands: Commands, mut removed_food: RemovedComponents<Food>, positions: Query<&Position>, mut entities: ResMut<FoodMap>) {
-    puffin::profile_function!();
-    for food_id in removed_food.iter() {
-        let position = positions.get(food_id).unwrap();
-        entities.map[position.x as usize][position.y as usize].retain(|f| *f != food_id);
-        commands.entity(food_id).despawn();
-    }
 }
 
 pub fn assign_species(new_borns: Query<Entity, Added<JustBorn>>, mut snakes: Query<(Entity, &mut Snake)>, mut species: ResMut<Species>, config: Res<SimulationConfig>) {

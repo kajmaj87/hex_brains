@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::f32::consts::PI;
-use crate::core::{assign_new_occupied_solid_positions, remove_occupied_solid_positions, Solid};
+use crate::core::{assign_new_occupied_solid_positions, destroy_old_food, remove_occupied_solid_positions, Solid};
 use crate::core::{assign_new_food_positions, die_from_collisions, remove_eaten_food};
 use crate::core::SolidsMap;
 use std::sync::mpsc::{Receiver, Sender};
@@ -187,7 +187,7 @@ impl Simulation {
         let mut core_schedule = Schedule::default();
         let mut secondary_schedule = Schedule::default();
         first_schedule.add_systems((assign_species, (assign_missing_segments, assign_new_occupied_solid_positions, create_food), die_from_collisions).chain().run_if(should_simulate_frame));
-        core_schedule.add_systems(((think, increase_age, calculate_stats, assign_new_food_positions), (movement, update_positions, split).chain(), eat_food).chain().run_if(should_simulate_frame));
+        core_schedule.add_systems(((think, increase_age, calculate_stats, assign_new_food_positions), (movement, update_positions, split).chain(), eat_food, destroy_old_food).chain().run_if(should_simulate_frame));
         secondary_schedule.add_systems((grow, starve, remove_eaten_food, remove_occupied_solid_positions, turn_counter).run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();
         Simulation { first_schedule, core_schedule, secondary_schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
