@@ -133,7 +133,7 @@ struct Config {
     rows: usize,
     columns: usize,
     bg_color: Stroke,
-    snake_color: Stroke,
+    scent_color: Stroke,
     food_color: Stroke,
     tail_color: Stroke,
     add_walls: bool,
@@ -187,7 +187,7 @@ impl MyEguiApp {
                 rows: 100,
                 columns: 100,
                 bg_color: Stroke::new(1.0, Color32::LIGHT_GREEN),
-                snake_color: Stroke::new(1.0, Color32::RED),
+                scent_color: Stroke::new(1.0, Color32::from_rgba_unmultiplied(0xAD, 0xD8, 0xE6, 50)),
                 tail_color: Stroke::new(1.0, Color32::LIGHT_RED),
                 food_color: Stroke::new(1.0, Color32::YELLOW),
                 add_walls: false,
@@ -400,7 +400,7 @@ impl eframe::App for MyEguiApp {
             });
             ui.horizontal(|ui| {
                 egui::stroke_ui(ui, &mut self.config.bg_color, "Background Color");
-                egui::stroke_ui(ui, &mut self.config.snake_color, "Snake Color");
+                egui::stroke_ui(ui, &mut self.config.scent_color, "Scent Color");
                 egui::stroke_ui(ui, &mut self.config.tail_color, "Tail Color");
                 egui::stroke_ui(ui, &mut self.config.food_color, "Food Color");
             });
@@ -477,7 +477,7 @@ fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
                 HexType::SnakeHead { specie } => u32_to_color(specie),
                 HexType::SnakeTail => config.tail_color.color,
                 HexType::Food => config.food_color.color,
-                HexType::Scent { value } => Color32::from_rgba_unmultiplied(218, 12, 129, (value / 5.0) as u8)
+                HexType::Scent { value } => Color32::from_rgba_unmultiplied(config.scent_color.color.r(), config.scent_color.color.g(), config.scent_color.color.b(), (config.scent_color.color.a() as f32 / 256.0 * value ) as u8),
             };
             transform_to_circle(&position, &to_screen, &response, &config, color)
         }).collect();
