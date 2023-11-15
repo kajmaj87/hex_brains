@@ -382,7 +382,7 @@ pub fn think(mut heads: Query<(&Position, &mut Snake)>, food_map: Res<FoodMap>, 
 
 fn scent(scenting_position: &Position, scent_map: &Res<ScentMap>, index: usize) -> SensorInput {
     let scent = scent_map.map[scenting_position.x as usize][scenting_position.y as usize];
-    SensorInput { value: scent/100.0, index }
+    SensorInput { value: scent/500.0, index }
 }
 
 fn see_obstacles(head_direction: &Direction, position: &Position, range: u32, solids_map: &Res<SolidsMap>, config: &Res<SimulationConfig>, index: usize) -> SensorInput {
@@ -431,7 +431,9 @@ pub fn add_scents(mut commands: Commands, scent_source: Query<(&Energy, &Positio
             } else {
                 debug!("Scent already there, increasing amount at position {:?} with energy {}", position, energy.amount);
             }
-            *current_scent += energy.amount as f32;
+            if *current_scent < 1000.0 {
+                *current_scent += energy.amount as f32;
+            }
         }
     }
 }
