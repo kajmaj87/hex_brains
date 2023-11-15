@@ -13,7 +13,7 @@ use egui::epaint::CircleShape;
 use egui::Shape::Circle;
 use tracing::{info, Level};
 use tracing_subscriber::fmt;
-use hex_brains_engine::core::{Food, Snake, Position, Solid};
+use hex_brains_engine::core::{Food, Snake, Position, Solid, ScentMap, Scent};
 use hex_brains_engine::simulation::{Simulation, EngineEvent, EngineCommand, EngineState, EngineEvents, Hex, HexType, SimulationConfig, Stats, MutationConfig};
 use hex_brains_engine::simulation_manager::simulate_batch;
 
@@ -35,6 +35,9 @@ fn create_simulation_config(columns: usize, rows: usize, add_walls: bool) -> Sim
         rows,
         columns,
         add_walls,
+        create_scents: true,
+        scent_diffusion_rate: 0.25,
+        scent_dispersion_per_step: 150.0,
         starting_snakes: 10,
         starting_food: 100,
         food_per_step: 2,
@@ -72,7 +75,7 @@ fn start_simulation(engine_events_sender: &Sender<EngineEvent>, engine_commands_
     });
 }
 
-fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Position>, snakes: Query<(Entity, &Snake)>, solids: Query<(Entity, &Solid)>, food: Query<(Entity, &Food)>, stats: Res<Stats>) {
+fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Position>, scents: Query<(Entity,&Scent)>, scent_map: Res<ScentMap>, snakes: Query<(Entity, &Snake)>, solids: Query<(Entity, &Solid)>, food: Query<(Entity, &Food)>, stats: Res<Stats>) {
     puffin::profile_function!();
     let all_hexes: Vec<Hex> = solids.iter().map(|(solid, _)| {
         let position = positions.get(solid).unwrap();
@@ -84,6 +87,10 @@ fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Po
         let position = positions.get(food).unwrap();
         Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Food }
         // transform_to_circle(&p, &to_screen, &response, &config, Color32::YELLOW)
+    })).chain(scents.iter().map(|(scent, _)| {
+        let position = positions.get(scent).unwrap();
+        let value = scent_map.map[position.x as usize][position.y as usize];
+        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Scent { value } }
     })).collect();
     engine_events.events.lock().unwrap().send(EngineEvent::DrawData { hexes: all_hexes, stats: stats.clone() });
 }
@@ -188,6 +195,9 @@ impl MyEguiApp {
             simulation_config: SimulationConfig {
                 rows: 100,
                 columns: 100,
+                create_scents: true,
+                scent_diffusion_rate: 0.2,
+                scent_dispersion_per_step: 30.0,
                 starting_snakes: 0,
                 starting_food: 0,
                 food_per_step: 2,
@@ -283,6 +293,15 @@ impl eframe::App for MyEguiApp {
                 ui.label("Species coloring threshold");
                 ui.add(egui::DragValue::new(&mut self.simulation_config.species_threshold).speed(1.0));
             });
+            ui.add(egui::Checkbox::new(&mut self.simulation_config.create_scents, "Create smell (low performance)"));
+            ui.horizontal(|ui| {
+                ui.label("Smell diffusion rate");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.scent_diffusion_rate).speed(1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Smell dispersion rate per step");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.scent_dispersion_per_step).speed(1.0));
+            });
         });
         egui::Window::new("Mutation Settings").open(&mut self.show_mutation_settings).show(ctx, |ui| {
             ui.label("Senses:");
@@ -290,7 +309,7 @@ impl eframe::App for MyEguiApp {
                 ui.checkbox(&mut self.simulation_config.mutation.chaos_input_enabled, "Chaos gene");
             });
             ui.horizontal(|ui| {
-                ui.checkbox(&mut self.simulation_config.mutation.food_sensing_enabled, "Food sensing");
+                ui.checkbox(&mut self.simulation_config.mutation.food_sensing_enabled, "Food smelling");
             });
             ui.horizontal(|ui| {
                 ui.checkbox(&mut self.simulation_config.mutation.food_vision_enabled, "Food vision");
@@ -458,6 +477,7 @@ fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
                 HexType::SnakeHead { specie } => u32_to_color(specie),
                 HexType::SnakeTail => config.tail_color.color,
                 HexType::Food => config.food_color.color,
+                HexType::Scent { value } => Color32::from_rgba_unmultiplied(218, 12, 129, (value / 5.0) as u8)
             };
             transform_to_circle(&position, &to_screen, &response, &config, color)
         }).collect();

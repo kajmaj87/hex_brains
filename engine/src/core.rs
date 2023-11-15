@@ -1,3 +1,4 @@
+use rand::prelude::SliceRandom;
 use std::cell::RefCell;
 use std::collections::{HashMap, LinkedList, VecDeque};
 use bevy_ecs::prelude::*;
@@ -6,6 +7,7 @@ use tracing::{debug, info};
 use crate::neural::{ConnectionGene, InnovationTracker, NeuralNetwork, SensorInput};
 use crate::simulation::{SimulationConfig, Stats};
 use rand::Rng;
+use crate::core::Direction::{East, NorthEast, NorthWest, SouthEast, SouthWest, West};
 
 #[derive(Component, Clone, Default)]
 #[derive(Debug)]
@@ -157,6 +159,14 @@ pub struct SolidsMap {
     pub map: Vec<Vec<Vec<Entity>>>,
 }
 
+#[derive(Component)]
+pub struct Scent {}
+
+#[derive(Resource)]
+pub struct ScentMap {
+    pub map: Vec<Vec<f32>>,
+}
+
 // This system moves each entity with a Position and Velocity component
 pub fn movement(mut snakes: Query<(Entity, &mut Energy, &mut Snake, &Position)>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
@@ -245,34 +255,34 @@ pub fn update_positions(mut positions: Query<&mut Position>, mut snakes: Query<(
 
 fn turn_left(direction: &Direction) -> Direction {
     match direction {
-        Direction::NorthEast => Direction::NorthWest,
-        Direction::East => Direction::NorthEast,
-        Direction::SouthEast => Direction::East,
-        Direction::SouthWest => Direction::SouthEast,
-        Direction::West => Direction::SouthWest,
-        Direction::NorthWest => Direction::West,
+        NorthEast => NorthWest,
+        East => NorthEast,
+        SouthEast => East,
+        SouthWest => SouthEast,
+        West => SouthWest,
+        NorthWest => West,
     }
 }
 
 fn turn_right(direction: &Direction) -> Direction {
     match direction {
-        Direction::NorthEast => Direction::East,
-        Direction::East => Direction::SouthEast,
-        Direction::SouthEast => Direction::SouthWest,
-        Direction::SouthWest => Direction::West,
-        Direction::West => Direction::NorthWest,
-        Direction::NorthWest => Direction::NorthEast,
+        NorthEast => East,
+        East => SouthEast,
+        SouthEast => SouthWest,
+        SouthWest => West,
+        West => NorthWest,
+        NorthWest => NorthEast,
     }
 }
 
 fn flip_direction(direction: &Direction) -> Direction {
     match direction {
-        Direction::NorthEast => Direction::SouthWest,
-        Direction::East => Direction::West,
-        Direction::SouthEast => Direction::NorthWest,
-        Direction::SouthWest => Direction::NorthEast,
-        Direction::West => Direction::East,
-        Direction::NorthWest => Direction::SouthEast,
+        NorthEast => SouthWest,
+        East => West,
+        SouthEast => NorthWest,
+        SouthWest => NorthEast,
+        West => East,
+        NorthWest => SouthEast,
     }
 }
 
@@ -280,31 +290,31 @@ fn position_at_direction(direction: &Direction, position: &Position, config: &Re
     let mut x = position.x;
     let mut y = position.y;
     match direction {
-        Direction::NorthEast => {
+        NorthEast => {
             if y % 2 == 0 {
                 x += 1;
             }
             y -= 1;
         }
-        Direction::East => {
+        East => {
             x += 1;
         }
-        Direction::SouthEast => {
+        SouthEast => {
             if y % 2 == 0 {
                 x += 1;
             }
             y += 1;
         }
-        Direction::SouthWest => {
+        SouthWest => {
             if y % 2 == 1 {
                 x -= 1;
             }
             y += 1;
         }
-        Direction::West => {
+        West => {
             x -= 1;
         }
-        Direction::NorthWest => {
+        NorthWest => {
             if y % 2 == 1 {
                 x -= 1;
             }
@@ -318,10 +328,10 @@ fn position_at_direction(direction: &Direction, position: &Position, config: &Re
     Position { x, y }
 }
 
-pub fn think(mut heads: Query<(&Position, &mut Snake)>, food_map: Res<FoodMap>, solids_map: Res<SolidsMap>, config: Res<SimulationConfig>) {
+pub fn think(mut heads: Query<(&Position, &mut Snake)>, food_map: Res<FoodMap>, solids_map: Res<SolidsMap>, scent_map: Res<ScentMap>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     let bias = SensorInput { value: 1.0, index: 0 };
-    heads.par_iter_mut().for_each_mut(|(position, mut head)|{
+    heads.par_iter_mut().for_each_mut(|(position, mut head)| {
         let mut rng = rand::thread_rng();
         let chaos = if config.mutation.chaos_input_enabled {
             SensorInput { value: rng.gen_range(0.0..1.0), index: 1 }
@@ -334,9 +344,9 @@ pub fn think(mut heads: Query<(&Position, &mut Snake)>, food_map: Res<FoodMap>, 
         let food_smell_left;
         let food_smell_right;
         if config.mutation.food_sensing_enabled {
-            food_smell_front = sense_food(&position_at_direction(&head.direction, &position, &config), &food_map, 2);
-            food_smell_left = sense_food(&position_at_direction(&direction_left, &position, &config), &food_map, 3);
-            food_smell_right = sense_food(&position_at_direction(&direction_right, &position, &config), &food_map, 4);
+            food_smell_front = scent(&position_at_direction(&head.direction, &position, &config), &scent_map, 2);
+            food_smell_left = scent(&position_at_direction(&direction_left, &position, &config), &scent_map, 3);
+            food_smell_right = scent(&position_at_direction(&direction_right, &position, &config), &scent_map, 4);
         } else {
             food_smell_front = SensorInput { value: 0.0, index: 2 };
             food_smell_left = SensorInput { value: 0.0, index: 3 };
@@ -347,7 +357,7 @@ pub fn think(mut heads: Query<(&Position, &mut Snake)>, food_map: Res<FoodMap>, 
         let food_vision_right;
         if config.mutation.food_vision_enabled {
             food_vision_front = see_food(&head.direction, &position, config.mutation.food_vision_front_range, &food_map, &config, 5);
-            food_vision_left = see_food(&direction_left, &position,config.mutation.food_vision_left_range, &food_map, &config, 6);
+            food_vision_left = see_food(&direction_left, &position, config.mutation.food_vision_left_range, &food_map, &config, 6);
             food_vision_right = see_food(&direction_right, &position, config.mutation.food_vision_right_range, &food_map, &config, 7);
         } else {
             food_vision_front = SensorInput { value: 0.0, index: 5 };
@@ -368,6 +378,11 @@ pub fn think(mut heads: Query<(&Position, &mut Snake)>, food_map: Res<FoodMap>, 
         }
         head.decision = head.brain.decide(vec![bias.clone(), chaos, food_smell_front, food_smell_left, food_smell_right, food_vision_front, food_vision_left, food_vision_right, solid_vision_front, solid_vision_left, solid_vision_right]);
     });
+}
+
+fn scent(scenting_position: &Position, scent_map: &Res<ScentMap>, index: usize) -> SensorInput {
+    let scent = scent_map.map[scenting_position.x as usize][scenting_position.y as usize];
+    SensorInput { value: scent/100.0, index }
 }
 
 fn see_obstacles(head_direction: &Direction, position: &Position, range: u32, solids_map: &Res<SolidsMap>, config: &Res<SimulationConfig>, index: usize) -> SensorInput {
@@ -404,6 +419,56 @@ fn sense_food(position: &Position, food_map: &Res<FoodMap>, index: usize) -> Sen
     }
 }
 
+pub fn add_scents(mut commands: Commands, scent_source: Query<(&Energy, &Position)>, mut scent_map: ResMut<ScentMap>, config: Res<SimulationConfig>) {
+    puffin::profile_function!();
+    if config.create_scents {
+        for (energy, position) in &scent_source {
+            debug!("Adding scent at position {:?} with energy {}", position, energy.amount);
+            let mut current_scent = &mut scent_map.map[position.x as usize][position.y as usize];
+            if current_scent <= &mut 0.0 {
+                debug!("Adding scent at position {:?} with energy {}", position, energy.amount);
+                commands.spawn((Scent {}, Position { x: position.x, y: position.y }));
+            } else {
+                debug!("Scent already there, increasing amount at position {:?} with energy {}", position, energy.amount);
+            }
+            *current_scent += energy.amount as f32;
+        }
+    }
+}
+
+pub fn diffuse_scents(mut commands: Commands, scents: Query<(&Scent, &Position)>, mut scent_map: ResMut<ScentMap>, config: Res<SimulationConfig>) {
+    let directions = [NorthEast, East, SouthEast, SouthWest, West, NorthWest];
+    let mut rng = rand::thread_rng();
+    for (_, position) in &scents {
+        let random_direction = directions.choose(&mut rng).unwrap();
+        let new_position = position_at_direction(random_direction, &position, &config);
+        let diffused_scent = scent_map.map[position.x as usize][position.y as usize] * config.scent_diffusion_rate;
+        scent_map.map[position.x as usize][position.y as usize] -= diffused_scent;
+        let mut new_scent = &mut scent_map.map[new_position.x as usize][new_position.y as usize];
+        if new_scent <= &mut 0.0 {
+            debug!("Adding scent throuhg diffusion at position {:?} with energy {}", new_position, diffused_scent);
+            commands.spawn((Scent {}, Position { x: new_position.x, y: new_position.y }));
+        } else {
+            debug!("Scent already diffused there, increasing amount at position {:?} with energy {}", new_position, diffused_scent);
+        }
+        *new_scent += diffused_scent;
+        debug!("New scent {}", *new_scent);
+    }
+}
+
+pub fn disperse_scents(mut commands: Commands, scents: Query<(Entity, &Scent, &Position)>, mut scent_map: ResMut<ScentMap>, config: Res<SimulationConfig>) {
+    puffin::profile_function!();
+    for (scent_id, _, position) in &scents {
+        let mut scent = &mut scent_map.map[position.x as usize][position.y as usize];
+         *scent -= config.scent_dispersion_per_step;
+        if scent <= &mut 0.0 {
+            debug!("Removing scent at position {:?} with energy {}", position, scent);
+            commands.entity(scent_id).despawn();
+            scent_map.map[position.x as usize][position.y as usize] = 0.0;
+        }
+    }
+}
+
 pub fn create_food(mut commands: Commands, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     let mut rng = rand::thread_rng();
@@ -412,7 +477,7 @@ pub fn create_food(mut commands: Commands, config: Res<SimulationConfig>) {
     for _ in 0..config.food_per_step {
         let x = rng.gen_range(0..columns);
         let y = rng.gen_range(0..rows);
-        commands.spawn((Position { x, y }, Food {}, Age(0))).id();
+        commands.spawn((Position { x, y }, Food {}, Age(0), Energy { amount: config.energy_per_segment }));
     }
 }
 
@@ -434,6 +499,7 @@ pub fn remove_eaten_food(mut commands: Commands, mut removed_food: RemovedCompon
         commands.entity(food_id).despawn();
     }
 }
+
 pub fn eat_food(mut commands: Commands, mut food: ResMut<FoodMap>, mut snakes: Query<(&Position, &mut Energy), Without<Food>>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     for (position, mut energy) in &mut snakes {
@@ -687,5 +753,5 @@ pub fn create_snake(energy: i32, position: (i32, i32), brain: Box<dyn Brain>) ->
 }
 
 fn create_head(position: (i32, i32), brain: Box<dyn Brain>, generation: u32, mutations: u32) -> (Snake, Age, JustBorn) {
-    (Snake { direction: Direction::West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position, generation, mutations, species: None }, Age(0), JustBorn)
+    (Snake { direction: West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position, generation, mutations, species: None }, Age(0), JustBorn)
 }
