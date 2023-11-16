@@ -55,6 +55,7 @@ pub struct Stats {
     pub max_generation: u32,
     pub max_mutations: u32,
     pub species: Species,
+    pub total_entities: usize,
 }
 
 #[derive(Debug, Clone)]

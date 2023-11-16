@@ -397,6 +397,7 @@ impl eframe::App for MyEguiApp {
                 ui.label(format!("Total snakes/segments : {}/{}", self.stats.total_snakes, self.stats.total_solids));
                 ui.label(format!("Total food : {}", self.stats.total_food));
                 ui.label(format!("Total species : {}", self.stats.species.species.len()));
+                ui.label(format!("Entities : {}", self.stats.total_entities));
             });
             ui.horizontal(|ui| {
                 egui::stroke_ui(ui, &mut self.config.bg_color, "Background Color");
