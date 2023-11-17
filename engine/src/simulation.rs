@@ -1,4 +1,4 @@
-use crate::core::{despawn_food, Map2d, move_energy_to_food, ScentMap};
+use crate::core::{despawn_food, incease_move_potential, Map2d, move_energy_to_food, ScentMap};
 use std::sync::Arc;
 use std::f32::consts::PI;
 use crate::core::{add_scents, assing_solid_positions, destroy_old_food, diffuse_scents, disperse_scents, Solid};
@@ -209,7 +209,7 @@ impl Simulation {
         let mut first_schedule = Schedule::default();
         let mut core_schedule = Schedule::default();
         let mut secondary_schedule = Schedule::default();
-        first_schedule.add_systems((assign_species, (assign_missing_segments, assing_solid_positions, create_food), die_from_collisions, add_scents).chain().run_if(should_simulate_frame));
+        first_schedule.add_systems((assign_species, (assign_missing_segments, assing_solid_positions, create_food, incease_move_potential), die_from_collisions, add_scents).chain().run_if(should_simulate_frame));
         core_schedule.add_systems(((think, increase_age, calculate_stats, diffuse_scents), (movement, update_positions, split).chain(), eat_food, destroy_old_food).chain().run_if(should_simulate_frame));
         secondary_schedule.add_systems((grow, starve, (move_energy_to_food, despawn_food).chain(), turn_counter, disperse_scents).run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();

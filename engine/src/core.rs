@@ -72,7 +72,11 @@ pub struct Snake {
     pub generation: u32,
     pub mutations: u32,
     pub species: Option<u32>,
-    pub dna: Dna
+    pub dna: Dna,
+    pub move_potential: f32,
+    pub move_cost: f32,
+    pub always_cost: f32,
+    pub mobility: f32,
 }
 
 #[derive(Component)]
@@ -217,41 +221,48 @@ pub struct ScentMap {
     pub map: Map2d<f32>,
 }
 
+pub fn incease_move_potential(mut snakes: Query<&mut Snake>){
+    puffin::profile_function!();
+    for mut snake in &mut snakes {
+        if snake.move_potential < 1.0 {
+            snake.move_potential += snake.mobility;
+        }
+    }
+}
+
 // This system moves each entity with a Position and Velocity component
 pub fn movement(mut snakes: Query<(Entity, &mut Energy, &mut Snake, &Position)>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
 
     for (_, mut energy, mut snake, head_position) in &mut snakes {
-        match snake.decision {
-            Decision::MoveForward => {
-                energy.amount -= config.move_cost;
-                let new_position = position_at_direction(&snake.direction, &head_position, &config);
-                snake.new_position.0 = new_position.x;
-                snake.new_position.1 = new_position.y;
+        if snake.move_potential >= 1.0 {
+            match snake.decision {
+                Decision::MoveForward => {
+                    energy.amount -= snake.move_cost;
+                    let new_position = position_at_direction(&snake.direction, &head_position, &config);
+                    snake.new_position.0 = new_position.x;
+                    snake.new_position.1 = new_position.y;
+                }
+                Decision::MoveLeft => {
+                    energy.amount -= snake.move_cost;
+                    snake.direction = turn_left(&snake.direction);
+                    let new_position = position_at_direction(&snake.direction, &head_position, &config);
+                    snake.new_position.0 = new_position.x;
+                    snake.new_position.1 = new_position.y;
+                }
+                Decision::MoveRight => {
+                    energy.amount -= snake.move_cost;
+                    snake.direction = turn_right(&snake.direction);
+                    let new_position = position_at_direction(&snake.direction, &head_position, &config);
+                    snake.new_position.0 = new_position.x;
+                    snake.new_position.1 = new_position.y;
+                }
+                Decision::Wait => {
+                }
             }
-            Decision::MoveLeft => {
-                energy.amount -= config.move_cost;
-                snake.direction = turn_left(&snake.direction);
-
-                let new_position = position_at_direction(&snake.direction, &head_position, &config);
-                snake.new_position.0 = new_position.x;
-                snake.new_position.1 = new_position.y;
-            }
-            Decision::MoveRight => {
-                energy.amount -= config.move_cost;
-                snake.direction = turn_right(&snake.direction);
-
-                let new_position = position_at_direction(&snake.direction, &head_position, &config);
-                snake.new_position.0 = new_position.x;
-                snake.new_position.1 = new_position.y;
-            }
-            Decision::Wait => {
-                energy.amount -= config.wait_cost;
-            }
+            snake.move_potential -= 1.0;
         }
-        // if energy.amount < -10 {
-        //     energy.amount = 0;
-        // }
+        energy.amount -= snake.always_cost;
     }
 }
 
@@ -719,11 +730,18 @@ pub fn grow(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake, &mut 
             let energy_for_tail = energy.amount / 2.0;
             energy.amount -= energy_for_tail;
             let segment_type = snake.dna.build_segment();
+            adjust_snake_params_after_grow(&mut snake, &segment_type);
             let new_tail = commands.spawn((segment_type, Position { x: snake.last_position.0, y: snake.last_position.1 }, Solid, Energy { amount: energy_for_tail })).id();
 
             snake.segments.push(new_tail);
         }
     }
+}
+
+fn adjust_snake_params_after_grow(mut snake: &mut Snake, segment_type: &SegmentType){
+   snake.mobility = segment_type.mobility();
+    snake.move_cost = segment_type.energy_cost_move();
+    snake.always_cost = segment_type.energy_cost_always()
 }
 
 pub fn assign_missing_segments(mut snakes: Query<(Entity, &mut Snake), Added<Snake>>) {
@@ -803,5 +821,5 @@ pub fn create_snake(energy: f32, position: (i32, i32), brain: Box<dyn Brain>, dn
 }
 
 fn create_head(position: (i32, i32), brain: Box<dyn Brain>, generation: u32, mutations: u32, dna: Dna) -> (Snake, Age, JustBorn) {
-    (Snake { direction: West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position, generation, mutations, species: None, dna }, Age(0), JustBorn)
+    (Snake { direction: West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position, generation, mutations, species: None, dna, mobility: 1.0, move_potential: -2.0, move_cost: 1.0, always_cost: 1.0 }, Age(0), JustBorn)
 }

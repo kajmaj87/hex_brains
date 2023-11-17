@@ -6,6 +6,7 @@ use rand::Rng;
 pub struct Segment {
     pub energy_cost_move: f32,
     pub energy_cost_always: f32,
+    pub mobility: f32,
 }
 #[derive(Clone, Debug, Component)]
 pub enum SegmentType {
@@ -23,6 +24,7 @@ impl SegmentType {
         SegmentType::Muscle(Segment {
             energy_cost_move: 1.0,
             energy_cost_always: 0.0,
+            mobility: 1.2,
         })
     }
 
@@ -30,13 +32,39 @@ impl SegmentType {
         SegmentType::Solid(Segment {
             energy_cost_move: 1.0,
             energy_cost_always: 0.0,
+            mobility: 0.1,
         })
     }
     pub fn split() -> Self {
         SegmentType::Split(Segment {
             energy_cost_move: 1.0,
-            energy_cost_always: 0.0,
+            energy_cost_always: 2.0,
+            mobility: 1.0,
         })
+    }
+
+    pub fn mobility(&self) -> f32 {
+        match self {
+            SegmentType::Muscle(segment) => segment.mobility,
+            SegmentType::Solid(segment) => segment.mobility,
+            SegmentType::Split(segment) => segment.mobility,
+        }
+    }
+
+    pub fn energy_cost_move(&self) -> f32 {
+        match self {
+            SegmentType::Muscle(segment) => segment.energy_cost_move,
+            SegmentType::Solid(segment) => segment.energy_cost_move,
+            SegmentType::Split(segment) => segment.energy_cost_move,
+        }
+    }
+
+    pub fn energy_cost_always(&self) -> f32 {
+        match self {
+            SegmentType::Muscle(segment) => segment.energy_cost_always,
+            SegmentType::Solid(segment) => segment.energy_cost_always,
+            SegmentType::Split(segment) => segment.energy_cost_always,
+        }
     }
 }
 
