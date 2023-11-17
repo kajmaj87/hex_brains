@@ -1,13 +1,13 @@
-use crate::core::{despawn_food, Map2d, ScentMap};
+use crate::core::{despawn_food, Map2d, move_energy_to_food, ScentMap};
 use std::sync::Arc;
 use std::f32::consts::PI;
-use crate::core::{add_scents, assign_new_occupied_solid_positions, destroy_old_food, diffuse_scents, disperse_scents, Solid};
+use crate::core::{add_scents, assing_solid_positions, destroy_old_food, diffuse_scents, disperse_scents, Solid};
 use crate::core::{die_from_collisions};
 use crate::core::SolidsMap;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Mutex;
 use std::time::Instant;
-use bevy_ecs::prelude::*;
+use bevy_ecs::prelude::{IntoSystemConfigs, Res, ResMut, Resource, Schedule, World};
 use rand::{Rng, thread_rng};
 use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, FoodMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments, increase_age, calculate_stats, RandomNeuralBrain, assign_species, Species};
 use crate::neural::InnovationTracker;
@@ -177,20 +177,27 @@ impl Simulation {
         // for _ in 0..config.starting_food {
         //     world.spawn(
         // }
+        let mut solids = SolidsMap { map: Map2d::new(config.columns, config.rows, false) };
         if config.add_walls {
             for x in 0..config.columns {
                 let middle = config.rows / 2;
                 if x != middle && x != middle + 1 && x != middle - 1 {
-                    world.spawn((Solid, Position { x: x as i32, y: (config.rows / 4) as i32 }));
-                    world.spawn((Solid, Position { x: x as i32, y: (2 * config.rows / 4) as i32 }));
-                    world.spawn((Solid, Position { x: x as i32, y: (3 * config.rows / 4) as i32 }));
+                    let position = Position { x: x as i32, y: (config.rows / 4) as i32 };
+                    solids.map.set(&position, true);
+                    world.spawn((Solid, position));
+                    let position = Position { x: x as i32, y: (2 * config.rows / 4) as i32 };
+                    solids.map.set(&position, true);
+                    world.spawn((Solid, position));
+                    let position = Position { x: x as i32, y: (3 * config.rows / 4) as i32 };
+                    solids.map.set(&position, true);
+                    world.spawn((Solid, position));
                 }
             }
         }
         world.insert_resource(config);
         world.insert_resource(Stats::default());
         world.insert_resource(FoodMap { map: Map2d::new(config.columns, config.rows, 0.0) });
-        world.insert_resource(SolidsMap { map: Map2d::new(config.columns, config.rows, false) });
+        world.insert_resource(solids);
         world.insert_resource(ScentMap { map: Map2d::new(config.columns, config.rows, 0.0) });
         world.insert_resource(EngineEvents { events: Mutex::new(engine_events.clone()) });
         world.insert_resource(innovation_tracker);
@@ -198,9 +205,9 @@ impl Simulation {
         let mut first_schedule = Schedule::default();
         let mut core_schedule = Schedule::default();
         let mut secondary_schedule = Schedule::default();
-        first_schedule.add_systems((assign_species, (assign_missing_segments, assign_new_occupied_solid_positions, create_food), die_from_collisions, add_scents).chain().run_if(should_simulate_frame));
+        first_schedule.add_systems((assign_species, (assign_missing_segments, assing_solid_positions, create_food), die_from_collisions, add_scents).chain().run_if(should_simulate_frame));
         core_schedule.add_systems(((think, increase_age, calculate_stats, diffuse_scents), (movement, update_positions, split).chain(), eat_food, destroy_old_food).chain().run_if(should_simulate_frame));
-        secondary_schedule.add_systems((grow, starve, despawn_food, turn_counter, disperse_scents).run_if(should_simulate_frame));
+        secondary_schedule.add_systems((grow, starve, (move_energy_to_food, despawn_food).chain(), turn_counter, disperse_scents).run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();
         Simulation { first_schedule, core_schedule, secondary_schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
     }

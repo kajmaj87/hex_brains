@@ -537,6 +537,15 @@ pub fn create_food(mut commands: Commands, mut food_map: ResMut<FoodMap>, config
     }
 }
 
+pub fn move_energy_to_food(mut commands: Commands, mut food_map: ResMut<FoodMap>, food_with_energy: Query<(Entity, &Position, &Food, &Energy)>){
+    puffin::profile_function!();
+    for (food_id, position, _, energy) in &food_with_energy {
+        let mut food = food_map.map.get_mut(position);
+        *food += energy.amount;
+        commands.entity(food_id).remove::<Energy>();
+    }
+}
+
 pub fn destroy_old_food(mut commands: Commands, mut food: Query<(Entity, &Position, &Food, &Age)>, mut food_map: ResMut<FoodMap>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     for (food_id, postition, food, age) in &mut food {
@@ -625,7 +634,7 @@ pub fn die_from_collisions(mut commands: Commands, positions: Query<&Position>, 
         remove_snake_from_species(&mut species, head_id, &mut snake);
         for segment_id in &snake.segments {
             commands.entity(*segment_id).remove::<Solid>();
-            commands.entity(*segment_id).insert(Food {});
+            commands.entity(*segment_id).insert((Food {}, Age(0)));
             let solid_position = positions.get(*segment_id).unwrap();
             solids_map.map.set(solid_position, false);
         }
@@ -726,7 +735,7 @@ pub fn assign_missing_segments(mut snakes: Query<(Entity, &mut Snake), Added<Sna
     }
 }
 
-pub fn assign_new_occupied_solid_positions(mut solids: Query<(&Position, &Solid), Changed<Position>>, mut solids_map: ResMut<SolidsMap>, config: Res<SimulationConfig>) {
+pub fn assing_solid_positions(mut solids: Query<(&Position, &Solid)d a>, mut solids_map: ResMut<SolidsMap>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     for (position, _) in &mut solids {
         solids_map.map.set(position, true);

@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::Instant;
-use bevy_ecs::prelude::{Entity, IntoSystemConfigs, Query, Res, ResMut, Resource, With, Without};
+use bevy_ecs::prelude::*;
 use eframe::{egui, emath};
 use eframe::emath::{Pos2, Rect, Vec2};
 use eframe::epaint::Color32;
@@ -35,7 +35,7 @@ fn create_simulation_config(columns: usize, rows: usize, add_walls: bool) -> Sim
         rows,
         columns,
         add_walls,
-        create_scents: true,
+        create_scents: false,
         scent_diffusion_rate: 0.25,
         scent_dispersion_per_step: 150.0,
         starting_snakes: 10,
@@ -195,7 +195,7 @@ impl MyEguiApp {
             simulation_config: SimulationConfig {
                 rows: 100,
                 columns: 100,
-                create_scents: true,
+                create_scents: false,
                 scent_diffusion_rate: 0.2,
                 scent_dispersion_per_step: 30.0,
                 starting_snakes: 0,
@@ -293,7 +293,7 @@ impl eframe::App for MyEguiApp {
                 ui.label("Species coloring threshold");
                 ui.add(egui::DragValue::new(&mut self.simulation_config.species_threshold).speed(1.0));
             });
-            ui.add(egui::Checkbox::new(&mut self.simulation_config.create_scents, "Create smell (low performance)"));
+            ui.add(egui::Checkbox::new(&mut self.simulation_config.create_scents, "Create smell (low performance, memory leaks)"));
             ui.horizontal(|ui| {
                 ui.label("Smell diffusion rate");
                 ui.add(egui::DragValue::new(&mut self.simulation_config.scent_diffusion_rate).speed(1.0));

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy_ecs = "0.11.3"
+bevy_ecs = {  version = "0.12.0", features = ["multi-threaded"] }
 rayon = "1.8.0"
 puffin = "0.17.0"
 rand = "0.8.5"
