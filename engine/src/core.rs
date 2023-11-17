@@ -78,6 +78,7 @@ pub struct Snake {
     pub move_cost: f32,
     pub always_cost: f32,
     pub mobility: f32,
+    pub energy_production: f32
 }
 
 #[derive(Component)]
@@ -203,6 +204,52 @@ impl<T: Default + Clone> Map2d<T> {
     }
 }
 
+pub struct Map3d<T> {
+    pub map: Vec<Vec<T>>,
+    pub width: usize,
+    pub height: usize,
+}
+
+impl<T: Clone> Map3d<T> {
+    // Constructs a new Map2D with the specified dimensions and default value
+    pub fn new(width: usize, height: usize) -> Self
+        where
+            T: Clone,
+    {
+        Map3d {
+            // map: vec![vec![default; height]; width],
+            map: vec![vec![]; width * height],
+            width,
+            height,
+        }
+    }
+
+    fn index(&self, position: &Position) -> usize {
+        (position.x * self.width as i32 + position.y) as usize
+    }
+    // Get a reference to the value at a given position
+    pub fn get(&self, position: &Position) -> &Vec<T> {
+        let index = self.index(position);
+        &self.map[index]
+    }
+
+    // Get a mutable reference to the value at a given position
+    pub fn get_mut(&mut self, position: &Position) -> &mut Vec<T> {
+        let index = self.index(position);
+        &mut self.map[index]
+    }
+
+    // Set the value at a given position
+    pub fn add(&mut self, position: &Position, value: T) {
+        let index = self.index(position);
+        self.map[index].push(value);
+    }
+
+    pub fn clear(&mut self) {
+        self.map = vec![vec![]; self.width * self.height];
+    }
+}
+
 #[derive(Component)]
 pub struct Energy {
     pub(crate) amount: f32,
@@ -210,6 +257,9 @@ pub struct Energy {
 
 #[derive(Component)]
 pub struct Food {}
+
+#[derive(Component)]
+pub struct Meat {}
 
 #[derive(Resource)]
 pub struct FoodMap {
@@ -229,9 +279,14 @@ pub struct ScentMap {
     pub map: Map2d<f32>,
 }
 
+#[derive(Resource)]
+pub struct SegmentMap {
+    pub map: Map3d<Entity>,
+}
+
 pub fn incease_move_potential(mut snakes: Query<(&mut Snake, &Age)>) {
     puffin::profile_function!();
-    for (mut snake , age) in &mut snakes {
+    for (mut snake, age) in &mut snakes {
         if snake.move_potential < 1.0 {
             snake.move_potential += snake.mobility * age.efficiency_factor;
         }
@@ -274,6 +329,7 @@ pub fn movement(mut snakes: Query<(Entity, &mut Energy, &mut Snake, &Position, &
             debug!("Removing more energy for thinking: {}", snake.always_cost / age.efficiency_factor);
         }
         energy.amount -= snake.always_cost / age.efficiency_factor;
+        energy.amount += snake.energy_production * age.efficiency_factor;
     }
 }
 
@@ -624,7 +680,11 @@ fn adjust_snake_params_after_starve(mut snake: &mut Snake, segment_type: &Segmen
     let len = snake.segments.len() as f32;
     snake.mobility = (snake.mobility * len - segment_type.mobility()) / (len - 1.0);
     snake.move_cost -= segment_type.energy_cost_move();
-    snake.always_cost -= segment_type.energy_cost_always();
+    if segment_type.energy_cost_always() > 0.0 {
+        snake.always_cost -= segment_type.energy_cost_always();
+    } else {
+        snake.energy_production += segment_type.energy_cost_always();
+    }
 }
 
 fn remove_snake_from_species(species: &mut ResMut<Species>, head_id: Entity, snake: &mut Mut<Snake>) {
@@ -658,7 +718,7 @@ pub fn die_from_collisions(mut commands: Commands, positions: Query<&Position>, 
         remove_snake_from_species(&mut species, head_id, &mut snake);
         for segment_id in &snake.segments {
             commands.entity(*segment_id).remove::<Solid>();
-            commands.entity(*segment_id).insert((Food {}, Age{ age: 0, efficiency_factor: 1.0}));
+            commands.entity(*segment_id).insert((Food {}, Meat {}, Age { age: 0, efficiency_factor: 1.0 }));
             let solid_position = positions.get(*segment_id).unwrap();
             solids_map.map.set(solid_position, false);
         }
@@ -764,14 +824,14 @@ pub fn calculate_stats(entities: Query<Entity>, scents: Query<&Scent>, food: Que
     stats.total_entities = entities.iter().count();
 }
 
-pub fn grow(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake, &mut Energy)>, config: Res<SimulationConfig>) {
+pub fn grow(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake, &mut Energy)>, segment_map: Res<SegmentMap>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     for (snake_id, mut snake, mut energy) in &mut snakes {
         // tail always takes energy from head when growing
-        if energy.amount >= config.energy_to_grow {
+        let position_empty = segment_map.map.get(&Position { x: snake.last_position.0, y: snake.last_position.1 }).is_empty();
+        if position_empty && energy.amount >= config.energy_to_grow {
             let energy_for_tail = energy.amount / 2.0;
             energy.amount -= energy_for_tail;
-            // TODO: solar snakes can grow even if there is no space for segments!
             let segment_type = snake.dna.build_segment();
             let new_tail = commands.spawn((segment_type.clone(), Position { x: snake.last_position.0, y: snake.last_position.1 }, Energy { amount: energy_for_tail })).id();
             match segment_type {
@@ -790,7 +850,11 @@ fn adjust_snake_params_after_grow(mut snake: &mut Snake, segment_type: &SegmentT
     let len = snake.segments.len() as f32;
     snake.mobility = (snake.mobility * len + segment_type.mobility()) / (len + 1.0);
     snake.move_cost += segment_type.energy_cost_move();
-    snake.always_cost += segment_type.energy_cost_always();
+    if segment_type.energy_cost_always() > 0.0 {
+        snake.always_cost += segment_type.energy_cost_always();
+    } else {
+        snake.energy_production -= segment_type.energy_cost_always();
+    }
 }
 
 pub fn assign_missing_segments(mut snakes: Query<(Entity, &mut Snake), Added<Snake>>) {
@@ -802,11 +866,19 @@ pub fn assign_missing_segments(mut snakes: Query<(Entity, &mut Snake), Added<Sna
     }
 }
 
-pub fn assing_solid_positions(mut solids: Query<(&Position, &Solid)>, mut solids_map: ResMut<SolidsMap>, config: Res<SimulationConfig>) {
+pub fn assign_solid_positions(mut solids: Query<(&Position, &Solid)>, mut solids_map: ResMut<SolidsMap>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     solids_map.map.clear();
     for (position, _) in &mut solids {
         solids_map.map.set(position, true);
+    }
+}
+
+pub fn assign_segment_positions(mut segment_map: ResMut<SegmentMap>, segments: Query<(Entity, &Position, &SegmentType)>) {
+    puffin::profile_function!();
+    segment_map.map.clear();
+    for (segment_id, position, _) in &segments {
+        segment_map.map.add(position, segment_id);
     }
 }
 
@@ -871,5 +943,5 @@ pub fn create_snake(energy: f32, position: (i32, i32), brain: Box<dyn Brain>, dn
 }
 
 fn create_head(position: (i32, i32), brain: Box<dyn Brain>, generation: u32, mutations: u32, dna: Dna) -> (Snake, Age, JustBorn) {
-    (Snake { direction: West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position, generation, mutations, species: None, dna, mobility: 1.0, move_potential: -2.0, move_cost: 1.0, always_cost: 1.0 }, Age{ age: 0, efficiency_factor: 1.0 }, JustBorn)
+    (Snake { direction: West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position, generation, mutations, species: None, dna, mobility: 1.0, move_potential: -2.0, move_cost: 1.0, always_cost: 1.0, energy_production: 0.0 }, Age { age: 0, efficiency_factor: 1.0 }, JustBorn)
 }

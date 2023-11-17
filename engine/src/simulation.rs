@@ -1,7 +1,7 @@
-use crate::core::{despawn_food, incease_move_potential, Map2d, move_energy_to_food, ScentMap};
+use crate::core::{assign_segment_positions, despawn_food, incease_move_potential, Map2d, Map3d, move_energy_to_food, ScentMap, SegmentMap};
 use std::sync::Arc;
 use std::f32::consts::PI;
-use crate::core::{add_scents, assing_solid_positions, destroy_old_food, diffuse_scents, disperse_scents, Solid};
+use crate::core::{add_scents, assign_solid_positions, destroy_old_food, diffuse_scents, disperse_scents, Solid};
 use crate::core::{die_from_collisions};
 use crate::core::SolidsMap;
 use std::sync::mpsc::{Receiver, Sender};
@@ -45,7 +45,8 @@ pub enum HexType {
     },
     Segment {
         segment_type: SegmentType
-    }
+    },
+    Meat,
 }
 
 #[derive(Resource, Default, Debug, Clone)]
@@ -206,15 +207,16 @@ impl Simulation {
         world.insert_resource(FoodMap { map: Map2d::new(config.columns, config.rows, 0.0) });
         world.insert_resource(solids);
         world.insert_resource(ScentMap { map: Map2d::new(config.columns, config.rows, 0.0) });
+        world.insert_resource(SegmentMap { map: Map3d::new(config.columns, config.rows) });
         world.insert_resource(EngineEvents { events: Mutex::new(engine_events.clone()) });
         world.insert_resource(innovation_tracker);
         world.insert_resource(Species::default());
         let mut first_schedule = Schedule::default();
         let mut core_schedule = Schedule::default();
         let mut secondary_schedule = Schedule::default();
-        first_schedule.add_systems((assign_species, (assign_missing_segments, assing_solid_positions, create_food, incease_move_potential), die_from_collisions, add_scents).chain().run_if(should_simulate_frame));
+        first_schedule.add_systems((assign_species, (assign_missing_segments, create_food, incease_move_potential), die_from_collisions, add_scents).chain().run_if(should_simulate_frame));
         core_schedule.add_systems(((think, increase_age, calculate_stats, diffuse_scents), (movement, update_positions, split).chain(), eat_food, destroy_old_food).chain().run_if(should_simulate_frame));
-        secondary_schedule.add_systems((grow, starve, (move_energy_to_food, despawn_food).chain(), turn_counter, disperse_scents).run_if(should_simulate_frame));
+        secondary_schedule.add_systems(((assign_solid_positions, assign_segment_positions), (grow, starve,turn_counter, disperse_scents, (move_energy_to_food, despawn_food).chain())).chain().run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();
         Simulation { first_schedule, core_schedule, secondary_schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
     }
