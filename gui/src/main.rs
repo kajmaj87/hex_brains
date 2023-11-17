@@ -49,6 +49,7 @@ fn create_simulation_config(columns: usize, rows: usize, add_walls: bool) -> Sim
         size_to_split: 10,
         species_threshold: 0.2,
         mutation: MutationConfig::default(),
+        snake_max_age: 2_000,
     }
 }
 
@@ -214,6 +215,7 @@ impl MyEguiApp {
                 species_threshold: 0.2,
                 add_walls: false,
                 mutation: MutationConfig::default(),
+                snake_max_age: 2_000,
             },
             can_draw_frame: true,
             stats: Stats::default(),
@@ -293,6 +295,10 @@ impl eframe::App for MyEguiApp {
             ui.horizontal(|ui| {
                 ui.label("Size to split");
                 ui.add(egui::DragValue::new(&mut self.simulation_config.size_to_split).speed(1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Aging starts at");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.snake_max_age).speed(1.0));
             });
             ui.horizontal(|ui| {
                 ui.label("Species coloring threshold");
@@ -399,7 +405,7 @@ impl eframe::App for MyEguiApp {
                 ui.label(format!("Oldest snake : {}", self.stats.oldest_snake));
                 ui.label(format!("Max generation : {}", self.stats.max_generation));
                 ui.label(format!("Max mutations : {}", self.stats.max_mutations));
-                ui.label(format!("Snakes/segments : {}/{}", self.stats.total_snakes, self.stats.total_solids));
+                ui.label(format!("Snakes/segments : {}/{}", self.stats.total_snakes, self.stats.total_segments));
                 ui.label(format!("Food : {}", self.stats.total_food));
                 ui.label(format!("Species : {}", self.stats.species.species.len()));
                 ui.label(format!("Scents : {}", self.stats.total_scents));
@@ -493,7 +499,7 @@ fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
                         SegmentType::Solid(_) => {
                             Color32::BROWN
                         }
-                        SegmentType::Split(_) => {
+                        SegmentType::Solar(_) => {
                             Color32::LIGHT_BLUE
                         }
                     }

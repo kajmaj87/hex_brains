@@ -12,11 +12,11 @@ pub struct Segment {
 pub enum SegmentType {
     Muscle(Segment),
     Solid(Segment),
-    Split(Segment)
+    Solar(Segment)
 }
 
 fn all_segment_types() -> [SegmentType; 3] {
-    [SegmentType::muscle(), SegmentType::solid(), SegmentType::split()]
+    [SegmentType::muscle(), SegmentType::solid(), SegmentType::solar()]
 }
 
 impl SegmentType {
@@ -24,7 +24,7 @@ impl SegmentType {
         SegmentType::Muscle(Segment {
             energy_cost_move: 1.0,
             energy_cost_always: 0.0,
-            mobility: 1.2,
+            mobility: 1.0,
         })
     }
 
@@ -35,11 +35,11 @@ impl SegmentType {
             mobility: 0.1,
         })
     }
-    pub fn split() -> Self {
-        SegmentType::Split(Segment {
+    pub fn solar() -> Self {
+        SegmentType::Solar(Segment {
             energy_cost_move: 1.0,
-            energy_cost_always: 2.0,
-            mobility: 1.0,
+            energy_cost_always: -0.1,
+            mobility: 0.5,
         })
     }
 
@@ -47,7 +47,7 @@ impl SegmentType {
         match self {
             SegmentType::Muscle(segment) => segment.mobility,
             SegmentType::Solid(segment) => segment.mobility,
-            SegmentType::Split(segment) => segment.mobility,
+            SegmentType::Solar(segment) => segment.mobility,
         }
     }
 
@@ -55,7 +55,7 @@ impl SegmentType {
         match self {
             SegmentType::Muscle(segment) => segment.energy_cost_move,
             SegmentType::Solid(segment) => segment.energy_cost_move,
-            SegmentType::Split(segment) => segment.energy_cost_move,
+            SegmentType::Solar(segment) => segment.energy_cost_move,
         }
     }
 
@@ -63,7 +63,7 @@ impl SegmentType {
         match self {
             SegmentType::Muscle(segment) => segment.energy_cost_always,
             SegmentType::Solid(segment) => segment.energy_cost_always,
-            SegmentType::Split(segment) => segment.energy_cost_always,
+            SegmentType::Solar(segment) => segment.energy_cost_always,
         }
     }
 }

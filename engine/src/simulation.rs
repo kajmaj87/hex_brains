@@ -55,7 +55,7 @@ pub struct Stats {
     pub total_energy: i32,
     pub oldest_snake: u32,
     pub food: usize,
-    pub total_solids: usize,
+    pub total_segments: usize,
     pub max_generation: u32,
     pub max_mutations: u32,
     pub species: Species,
@@ -85,6 +85,7 @@ pub struct MutationConfig {
     pub weight_perturbation_range: f32,
     pub weight_perturbation_chance: f64,
     pub connection_flip_chance: f64,
+    pub dna_mutation_chance: f64
 }
 
 impl Default for MutationConfig {
@@ -103,6 +104,7 @@ impl Default for MutationConfig {
             weight_perturbation_range: 0.2,
             weight_perturbation_chance: 0.3,
             connection_flip_chance: 0.1,
+            dna_mutation_chance: 0.1,
         }
     }
 }
@@ -126,7 +128,8 @@ pub struct SimulationConfig {
     pub add_walls: bool,
     pub scent_diffusion_rate: f32,
     pub scent_dispersion_per_step: f32,
-    pub create_scents: bool
+    pub create_scents: bool,
+    pub snake_max_age: u32,
 }
 
 #[derive(Debug, Clone)]
