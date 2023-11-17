@@ -735,7 +735,7 @@ pub fn assign_missing_segments(mut snakes: Query<(Entity, &mut Snake), Added<Sna
     }
 }
 
-pub fn assing_solid_positions(mut solids: Query<(&Position, &Solid)d a>, mut solids_map: ResMut<SolidsMap>, config: Res<SimulationConfig>) {
+pub fn assing_solid_positions(mut solids: Query<(&Position, &Solid)>, mut solids_map: ResMut<SolidsMap>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     for (position, _) in &mut solids {
         solids_map.map.set(position, true);
