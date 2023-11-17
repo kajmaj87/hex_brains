@@ -14,6 +14,7 @@ use egui::Shape::Circle;
 use tracing::{info, Level};
 use tracing_subscriber::fmt;
 use hex_brains_engine::core::{Food, Snake, Position, Solid, ScentMap, Scent};
+use hex_brains_engine::dna::SegmentType;
 use hex_brains_engine::simulation::{Simulation, EngineEvent, EngineCommand, EngineState, EngineEvents, Hex, HexType, SimulationConfig, Stats, MutationConfig};
 use hex_brains_engine::simulation_manager::simulate_batch;
 
@@ -75,14 +76,18 @@ fn start_simulation(engine_events_sender: &Sender<EngineEvent>, engine_commands_
     });
 }
 
-fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Position>, scents: Query<(Entity,&Scent)>, scent_map: Res<ScentMap>, snakes: Query<(Entity, &Snake)>, solids: Query<(Entity, &Solid)>, food: Query<(Entity, &Food)>, stats: Res<Stats>) {
+fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Position>, scents: Query<(Entity,&Scent)>, scent_map: Res<ScentMap>, heads: Query<(Entity, &Snake)>, solids: Query<(Entity, &Solid), Without<SegmentType>>, segments: Query<(Entity, &SegmentType), With<SegmentType>>, food: Query<(Entity, &Food)>, stats: Res<Stats>) {
     puffin::profile_function!();
     let all_hexes: Vec<Hex> = solids.iter().map(|(solid, _)| {
         let position = positions.get(solid).unwrap();
         Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::SnakeTail }
-    }).chain(snakes.iter().map(|(head, snake)| {
+    }).chain(heads.iter().map(|(head, snake)| {
         let position = positions.get(head).unwrap();
         Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::SnakeHead { specie: snake.species.unwrap_or(0) } }
+    })).chain(segments.iter().map(|(segment_id, segment_type)| {
+        let position = positions.get(segment_id).unwrap();
+        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Segment{segment_type: segment_type.clone()} }
+        // transform_to_circle(&p, &to_screen, &response, &config, Color32::YELLOW)
     })).chain(food.iter().map(|(food, _)| {
         let position = positions.get(food).unwrap();
         Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Food }
@@ -475,11 +480,24 @@ fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
 
         let shapes: Vec<Shape> = hexes.iter().map(|hex| {
             let position = Pos2 { x: hex.x as f32, y: hex.y as f32 };
-            let color = match hex.hex_type {
-                HexType::SnakeHead { specie } => u32_to_color(specie),
+            let color = match &hex.hex_type {
+                HexType::SnakeHead { specie } => u32_to_color(*specie),
                 HexType::SnakeTail => config.tail_color.color,
                 HexType::Food => config.food_color.color,
                 HexType::Scent { value } => Color32::from_rgba_unmultiplied(config.scent_color.color.r(), config.scent_color.color.g(), config.scent_color.color.b(), (config.scent_color.color.a() as f32 / 256.0 * value ) as u8),
+                HexType::Segment { segment_type } => {
+                    match &segment_type {
+                        SegmentType::Muscle(_) => {
+                            Color32::LIGHT_RED
+                        }
+                        SegmentType::Solid(_) => {
+                            Color32::BROWN
+                        }
+                        SegmentType::Split(_) => {
+                            Color32::LIGHT_BLUE
+                        }
+                    }
+                }
             };
             transform_to_circle(&position, &to_screen, &response, &config, color)
         }).collect();

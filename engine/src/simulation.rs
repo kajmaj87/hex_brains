@@ -10,6 +10,7 @@ use std::time::Instant;
 use bevy_ecs::prelude::{IntoSystemConfigs, Res, ResMut, Resource, Schedule, World};
 use rand::{Rng, thread_rng};
 use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, FoodMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments, increase_age, calculate_stats, RandomNeuralBrain, assign_species, Species};
+use crate::dna::{Dna, SegmentType};
 use crate::neural::InnovationTracker;
 
 pub struct Simulation {
@@ -42,6 +43,9 @@ pub enum HexType {
     Scent {
         value: f32,
     },
+    Segment {
+        segment_type: SegmentType
+    }
 }
 
 #[derive(Resource, Default, Debug, Clone)]
@@ -262,7 +266,7 @@ impl Simulation {
                                 let x = rng.gen_range(0..config.columns) as i32;
                                 let y = rng.gen_range(0..config.rows) as i32;
                                 {
-                                    self.world.spawn(create_snake(100.0, (x, y), Box::new(brain)));
+                                    self.world.spawn(create_snake(100.0, (x, y), Box::new(brain), Dna::random(8)));
                                 }
                             }
                         }

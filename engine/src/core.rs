@@ -8,6 +8,7 @@ use crate::neural::{ConnectionGene, InnovationTracker, NeuralNetwork, SensorInpu
 use crate::simulation::{SimulationConfig, Stats};
 use rand::Rng;
 use crate::core::Direction::{East, NorthEast, NorthWest, SouthEast, SouthWest, West};
+use crate::dna::{Dna, SegmentType};
 
 #[derive(Component, Clone, Default)]
 #[derive(Debug)]
@@ -71,6 +72,7 @@ pub struct Snake {
     pub generation: u32,
     pub mutations: u32,
     pub species: Option<u32>,
+    pub dna: Dna
 }
 
 #[derive(Component)]
@@ -259,55 +261,49 @@ pub struct DiedFromCollision {}
 pub fn update_positions(mut commands: Commands, mut positions: Query<&mut Position>, mut snakes: Query<(Entity, &mut Snake)>, mut solids_map: ResMut<SolidsMap>) {
     puffin::profile_function!();
     for (head_id, mut snake) in &mut snakes {
-        let mut new_position = snake.new_position;
+        let new_position = snake.new_position;
+        let last_position = positions.get_mut(*snake.segments.last().unwrap()).unwrap().clone();
         let mut head_position = positions.get_mut(head_id).unwrap();
         debug!("Snake {:?} with {} segements is moving from {:?} to {:?} (last tail position: {:?})", head_id, snake.segments.len(), head_position, new_position, snake.last_position);
-        // iterate through solids_map and print out all occupied positions
-        // for (x, column) in solids_map.map.iter().enumerate() {
-        //     for (y, row) in column.iter().enumerate() {
-        //         if row.len() > 0 {
-        //             debug!("Before update position {:?} is occupied by {:?}", (x, y), row);
-        //         }
-        //     }
-        // }
         let old_head_position = head_position.clone();
         if new_position == old_head_position.as_pair() {
             debug!("Snake is not moving");
             continue;
         }
-        head_position.x = new_position.0;
-        head_position.y = new_position.1;
-        let mut last_position = old_head_position.clone();
-        let mut tail_id = head_id;
-        if *solids_map.map.get(&head_position) {
+        if *solids_map.map.get(&Position { x: new_position.0, y: new_position.1 }) {
             debug!("Snake has hit something, he will soon die");
             commands.entity(head_id).insert(DiedFromCollision {});
         } else {
             solids_map.map.set(&head_position, true);
         }
-        solids_map.map.set(&old_head_position, false);
-        if snake.segments.len() >= 2 {
-            tail_id = snake.segments.pop().unwrap();
-            let mut tail_position = positions.get_mut(tail_id).unwrap();
-            solids_map.map.set(&tail_position, false);
-            last_position = tail_position.clone();
-            tail_position.x = old_head_position.x;
-            tail_position.y = old_head_position.y;
-            solids_map.map.set(&tail_position, true);
-            // move the snake right behind the head to avoid recalculating all positions
-            snake.segments.insert(1, tail_id);
-            debug!("Removing tail {:?} from position {:?}", tail_id, last_position);
-        }
+        update_segment_positions(&mut positions, Position { x: new_position.0, y: new_position.1 }, &snake.segments);
+        solids_map.map.set(&last_position, false);
+        // if snake.segments.len() >= 2 {
+        //     tail_id = snake.segments.pop().unwrap();
+        //     let mut tail_position = positions.get_mut(tail_id).unwrap();
+        //     solids_map.map.set(&tail_position, false);
+        //     last_position = tail_position.clone();
+        //     tail_position.x = old_head_position.x;
+        //     tail_position.y = old_head_position.y;
+        //     solids_map.map.set(&tail_position, true);
+        //     // move the snake right behind the head to avoid recalculating all positions
+        //     snake.segments.insert(1, tail_id);
+        //     debug!("Removing tail {:?} from position {:?}", tail_id, last_position);
+        // }
         debug!("Removing snake head {:?} from position {:?}", head_id, old_head_position);
         snake.last_position = last_position.as_pair();
-        // iterate through solids_map and print out all occupied positions
-        // for (x, column) in solids_map.map.iter().enumerate() {
-        //     for (y, row) in column.iter().enumerate() {
-        //         if row.len() > 0 {
-        //             debug!("After update position {:?} is occupied by {:?}", (x, y), row);
-        //         }
-        //     }
-        // }
+    }
+}
+
+fn update_segment_positions(mut positions: &mut Query<&mut Position>, new_position: Position, segments: &Vec<Entity>){
+    let mut new_position = new_position.clone();
+    for segment in segments {
+        let mut position = positions.get_mut(*segment).unwrap();
+        let old_position = position.clone();
+        debug!("Updating segment {:?} to position {:?} to position {:?}", segment, position, new_position);
+        position.x = new_position.x;
+        position.y = new_position.y;
+        new_position = old_position.clone();
     }
 }
 
@@ -676,12 +672,15 @@ pub fn split(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, po
                     new_neural_network.mutate_random_connection_weight(config.mutation.weight_perturbation_range);
                     mutations += 1;
                 }
+                let mut dna  = snake.dna.clone();
+                dna.mutate();
                 debug!("New neural network: {:?}", new_neural_network);
-                new_head = create_head((new_head_position.x, new_head_position.y), Box::new(RandomNeuralBrain::from_neural_network(new_neural_network.clone())), snake.generation + 1, mutations);
+                new_head = create_head((new_head_position.x, new_head_position.y), Box::new(RandomNeuralBrain::from_neural_network(new_neural_network.clone())), snake.generation + 1, mutations, dna);
                 new_head.0.segments = new_snake_segments;
                 let new_head_id = new_head.0.segments[0];
                 new_head.0.direction = flip_direction(&snake.direction);
                 commands.entity(new_head_id).insert(new_head);
+                commands.entity(new_head_id).remove::<SegmentType>();
             } else {
                 panic!("Snake without neural network");
             }
@@ -719,7 +718,8 @@ pub fn grow(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake, &mut 
         if energy.amount >= config.energy_to_grow {
             let energy_for_tail = energy.amount / 2.0;
             energy.amount -= energy_for_tail;
-            let new_tail = commands.spawn((Position { x: snake.last_position.0, y: snake.last_position.1 }, Solid, Energy { amount: energy_for_tail })).id();
+            let segment_type = snake.dna.build_segment();
+            let new_tail = commands.spawn((segment_type, Position { x: snake.last_position.0, y: snake.last_position.1 }, Solid, Energy { amount: energy_for_tail })).id();
 
             snake.segments.push(new_tail);
         }
@@ -797,11 +797,11 @@ fn calculate_gene_difference(leader: &NeuralNetwork, new_snake: &NeuralNetwork) 
     0.6 * gene_difference + 0.4 * weight_difference
 }
 
-pub fn create_snake(energy: f32, position: (i32, i32), brain: Box<dyn Brain>) -> (Position, Energy, Snake, Age, JustBorn, Solid) {
-    let (head, age, just_born) = create_head(position, brain, 0, 0);
+pub fn create_snake(energy: f32, position: (i32, i32), brain: Box<dyn Brain>, dna: Dna) -> (Position, Energy, Snake, Age, JustBorn, Solid) {
+    let (head, age, just_born) = create_head(position, brain, 0, 0, dna);
     (Position { x: position.0, y: position.1 }, Energy { amount: energy }, head, age, just_born, Solid)
 }
 
-fn create_head(position: (i32, i32), brain: Box<dyn Brain>, generation: u32, mutations: u32) -> (Snake, Age, JustBorn) {
-    (Snake { direction: West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position, generation, mutations, species: None }, Age(0), JustBorn)
+fn create_head(position: (i32, i32), brain: Box<dyn Brain>, generation: u32, mutations: u32, dna: Dna) -> (Snake, Age, JustBorn) {
+    (Snake { direction: West, decision: Decision::Wait, brain, new_position: position, segments: vec![], last_position: position, generation, mutations, species: None, dna }, Age(0), JustBorn)
 }
