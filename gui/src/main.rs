@@ -41,10 +41,10 @@ fn create_simulation_config(columns: usize, rows: usize, add_walls: bool) -> Sim
         starting_snakes: 10,
         starting_food: 100,
         food_per_step: 2,
-        energy_per_segment: 100,
-        wait_cost: 1,
-        move_cost: 10,
-        energy_to_grow: 200,
+        energy_per_segment: 100.0,
+        wait_cost: 1.0,
+        move_cost: 10.0,
+        energy_to_grow: 200.0,
         size_to_split: 10,
         species_threshold: 0.2,
         mutation: MutationConfig::default(),
@@ -89,8 +89,8 @@ fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Po
         // transform_to_circle(&p, &to_screen, &response, &config, Color32::YELLOW)
     })).chain(scents.iter().map(|(scent, _)| {
         let position = positions.get(scent).unwrap();
-        let value = scent_map.map[position.x as usize][position.y as usize];
-        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Scent { value } }
+        let value = scent_map.map.get(position);
+        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Scent { value: *value } }
     })).collect();
     engine_events.events.lock().unwrap().send(EngineEvent::DrawData { hexes: all_hexes, stats: stats.clone() });
 }
@@ -201,10 +201,10 @@ impl MyEguiApp {
                 starting_snakes: 0,
                 starting_food: 0,
                 food_per_step: 2,
-                energy_per_segment: 100,
-                wait_cost: 1,
-                move_cost: 10,
-                energy_to_grow: 200,
+                energy_per_segment: 100.0,
+                wait_cost: 1.0,
+                move_cost: 10.0,
+                energy_to_grow: 200.0,
                 size_to_split: 12,
                 species_threshold: 0.2,
                 add_walls: false,
@@ -394,9 +394,10 @@ impl eframe::App for MyEguiApp {
                 ui.label(format!("Oldest snake : {}", self.stats.oldest_snake));
                 ui.label(format!("Max generation : {}", self.stats.max_generation));
                 ui.label(format!("Max mutations : {}", self.stats.max_mutations));
-                ui.label(format!("Total snakes/segments : {}/{}", self.stats.total_snakes, self.stats.total_solids));
-                ui.label(format!("Total food : {}", self.stats.total_food));
-                ui.label(format!("Total species : {}", self.stats.species.species.len()));
+                ui.label(format!("Snakes/segments : {}/{}", self.stats.total_snakes, self.stats.total_solids));
+                ui.label(format!("Food : {}", self.stats.total_food));
+                ui.label(format!("Species : {}", self.stats.species.species.len()));
+                ui.label(format!("Scents : {}", self.stats.total_scents));
                 ui.label(format!("Entities : {}", self.stats.total_entities));
             });
             ui.horizontal(|ui| {

@@ -1,8 +1,8 @@
-use crate::core::ScentMap;
+use crate::core::{despawn_food, Map2d, ScentMap};
 use std::sync::Arc;
 use std::f32::consts::PI;
-use crate::core::{add_scents, assign_new_occupied_solid_positions, destroy_old_food, diffuse_scents, disperse_scents, remove_occupied_solid_positions, Solid};
-use crate::core::{assign_new_food_positions, die_from_collisions, remove_eaten_food};
+use crate::core::{add_scents, assign_new_occupied_solid_positions, destroy_old_food, diffuse_scents, disperse_scents, Solid};
+use crate::core::{die_from_collisions};
 use crate::core::SolidsMap;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Mutex;
@@ -56,6 +56,7 @@ pub struct Stats {
     pub max_mutations: u32,
     pub species: Species,
     pub total_entities: usize,
+    pub total_scents: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -102,6 +103,8 @@ impl Default for MutationConfig {
     }
 }
 
+type EnergyValue = f32;
+
 #[derive(Debug, Resource, Clone, Copy)]
 pub struct SimulationConfig {
     pub rows: usize,
@@ -109,10 +112,10 @@ pub struct SimulationConfig {
     pub starting_snakes: usize,
     pub starting_food: usize,
     pub food_per_step: usize,
-    pub energy_per_segment: i32,
-    pub wait_cost: i32,
-    pub move_cost: i32,
-    pub energy_to_grow: i32,
+    pub energy_per_segment: f32,
+    pub wait_cost: f32,
+    pub move_cost: f32,
+    pub energy_to_grow: f32,
     pub size_to_split: usize,
     pub species_threshold: f32,
     pub mutation: MutationConfig,
@@ -186,18 +189,18 @@ impl Simulation {
         }
         world.insert_resource(config);
         world.insert_resource(Stats::default());
-        world.insert_resource(FoodMap { map: vec![vec![vec![]; config.columns]; config.rows] });
-        world.insert_resource(SolidsMap { map: vec![vec![vec![]; config.columns]; config.rows] });
+        world.insert_resource(FoodMap { map: Map2d::new(config.columns, config.rows, 0.0) });
+        world.insert_resource(SolidsMap { map: Map2d::new(config.columns, config.rows, false) });
+        world.insert_resource(ScentMap { map: Map2d::new(config.columns, config.rows, 0.0) });
         world.insert_resource(EngineEvents { events: Mutex::new(engine_events.clone()) });
         world.insert_resource(innovation_tracker);
         world.insert_resource(Species::default());
-        world.insert_resource(ScentMap { map: vec![vec![0.0; config.columns]; config.rows] });
         let mut first_schedule = Schedule::default();
         let mut core_schedule = Schedule::default();
         let mut secondary_schedule = Schedule::default();
         first_schedule.add_systems((assign_species, (assign_missing_segments, assign_new_occupied_solid_positions, create_food), die_from_collisions, add_scents).chain().run_if(should_simulate_frame));
-        core_schedule.add_systems(((think, increase_age, calculate_stats, assign_new_food_positions, diffuse_scents), (movement, update_positions, split).chain(), eat_food, destroy_old_food).chain().run_if(should_simulate_frame));
-        secondary_schedule.add_systems((grow, starve, remove_eaten_food, remove_occupied_solid_positions, turn_counter, disperse_scents).run_if(should_simulate_frame));
+        core_schedule.add_systems(((think, increase_age, calculate_stats, diffuse_scents), (movement, update_positions, split).chain(), eat_food, destroy_old_food).chain().run_if(should_simulate_frame));
+        secondary_schedule.add_systems((grow, starve, despawn_food, turn_counter, disperse_scents).run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();
         Simulation { first_schedule, core_schedule, secondary_schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
     }
@@ -252,7 +255,7 @@ impl Simulation {
                                 let x = rng.gen_range(0..config.columns) as i32;
                                 let y = rng.gen_range(0..config.rows) as i32;
                                 {
-                                    self.world.spawn(create_snake(100, (x, y), Box::new(brain)));
+                                    self.world.spawn(create_snake(100.0, (x, y), Box::new(brain)));
                                 }
                             }
                         }
