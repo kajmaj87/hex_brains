@@ -697,9 +697,9 @@ pub fn despawn_food(mut commands: Commands, food: Query<(Entity, &Position, &Foo
 pub fn starve(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, positions: Query<&Position>, mut food_map: ResMut<FoodMap>, mut species: ResMut<Species>, mut solids_map: ResMut<SolidsMap>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     for (head_id, mut snake) in &mut snakes {
-        info!("Snake {:?} has energy {} and plants {} and meat {} in stomach", head_id, snake.energy, snake.plant_in_stomach, snake.meat_in_stomach);
+        debug!("Snake {:?} has energy {} and plants {} and meat {} in stomach", head_id, snake.energy, snake.plant_in_stomach, snake.meat_in_stomach);
         if snake.energy < 0.0 {
-            info!("Snake {:?} starved to death", head_id);
+            debug!("Snake {:?} starved to death", head_id);
             snake.segments.iter().for_each(|segment_id| {
                 commands.entity(*segment_id).despawn();
                 let position = positions.get(*segment_id).unwrap();
