@@ -12,11 +12,8 @@ pub struct Segment {
 pub enum SegmentType {
     Muscle(Segment),
     Solid(Segment),
-    Solar(Segment)
-}
-
-fn all_segment_types() -> [SegmentType; 3] {
-    [SegmentType::muscle(), SegmentType::solid(), SegmentType::solar()]
+    Solar(Segment),
+    Stomach(Segment),
 }
 
 impl SegmentType {
@@ -43,11 +40,19 @@ impl SegmentType {
         })
     }
 
+    pub fn stomach() -> Self {
+        SegmentType::Stomach(Segment {
+            energy_cost_move: 1.0,
+            energy_cost_always: 1.0,
+            mobility: 0.5,
+        })
+    }
     pub fn mobility(&self) -> f32 {
         match self {
             SegmentType::Muscle(segment) => segment.mobility,
             SegmentType::Solid(segment) => segment.mobility,
             SegmentType::Solar(segment) => segment.mobility,
+            SegmentType::Stomach(segment) => segment.mobility,
         }
     }
 
@@ -56,6 +61,7 @@ impl SegmentType {
             SegmentType::Muscle(segment) => segment.energy_cost_move,
             SegmentType::Solid(segment) => segment.energy_cost_move,
             SegmentType::Solar(segment) => segment.energy_cost_move,
+            SegmentType::Stomach(segment) => segment.energy_cost_move,
         }
     }
 
@@ -64,9 +70,15 @@ impl SegmentType {
             SegmentType::Muscle(segment) => segment.energy_cost_always,
             SegmentType::Solid(segment) => segment.energy_cost_always,
             SegmentType::Solar(segment) => segment.energy_cost_always,
+            SegmentType::Stomach(segment) => segment.energy_cost_always,
         }
     }
 }
+
+fn all_segment_types() -> [SegmentType; 4] {
+    [SegmentType::muscle(), SegmentType::solid(), SegmentType::solar(), SegmentType::stomach()]
+}
+
 
 pub enum MutationType {
     AddGene,

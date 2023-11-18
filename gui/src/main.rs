@@ -13,7 +13,7 @@ use egui::epaint::CircleShape;
 use egui::Shape::Circle;
 use tracing::{info, Level};
 use tracing_subscriber::fmt;
-use hex_brains_engine::core::{Food, Snake, Position, Solid, ScentMap, Scent, Meat};
+use hex_brains_engine::core::{Food, Snake, Position, Solid, ScentMap, Scent};
 use hex_brains_engine::dna::SegmentType;
 use hex_brains_engine::simulation::{Simulation, EngineEvent, EngineCommand, EngineState, EngineEvents, Hex, HexType, SimulationConfig, Stats, MutationConfig};
 use hex_brains_engine::simulation_manager::simulate_batch;
@@ -77,7 +77,7 @@ fn start_simulation(engine_events_sender: &Sender<EngineEvent>, engine_commands_
     });
 }
 
-fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Position>, meat: Query<(Entity, &Meat)>, scents: Query<(Entity,&Scent)>, scent_map: Res<ScentMap>, heads: Query<(Entity, &Snake)>, solids: Query<(Entity, &Solid), Without<SegmentType>>, segments: Query<(Entity, &SegmentType), With<SegmentType>>, food: Query<(Entity, &Food)>, stats: Res<Stats>) {
+fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Position>, scents: Query<(Entity,&Scent)>, scent_map: Res<ScentMap>, heads: Query<(Entity, &Snake)>, solids: Query<(Entity, &Solid), Without<SegmentType>>, segments: Query<(Entity, &SegmentType), With<SegmentType>>, food: Query<(Entity, &Food)>, stats: Res<Stats>) {
     puffin::profile_function!();
     let all_hexes: Vec<Hex> = solids.iter().map(|(solid, _)| {
         let position = positions.get(solid).unwrap();
@@ -88,15 +88,13 @@ fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Po
     })).chain(segments.iter().map(|(segment_id, segment_type)| {
         let position = positions.get(segment_id).unwrap();
         Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Segment{segment_type: segment_type.clone()} }
-        // transform_to_circle(&p, &to_screen, &response, &config, Color32::YELLOW)
-    })).chain(food.iter().map(|(food, _)| {
-        let position = positions.get(food).unwrap();
-        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Food }
-        // transform_to_circle(&p, &to_screen, &response, &config, Color32::YELLOW)
-    })).chain(meat.iter().map(|(meat, _)| {
-        let position = positions.get(meat).unwrap();
-        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Meat }
-        // transform_to_circle(&p, &to_screen, &response, &config, Color32::YELLOW)
+    })).chain(food.iter().map(|(food_id, food)| {
+        let position = positions.get(food_id).unwrap();
+        if food.is_meat() {
+            Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Meat }
+        } else {
+            Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Food }
+        }
     })).chain(scents.iter().map(|(scent, _)| {
         let position = positions.get(scent).unwrap();
         let value = scent_map.map.get(position);
@@ -116,10 +114,11 @@ fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
         );
 
         // let from_screen = to_screen.inverse();
-        let segment_alpha = 0.5;
+        let segment_alpha = 0.8;
         let muscle_color = with_alpha(Color32::LIGHT_RED, segment_alpha);
         let solid_color = with_alpha(Color32::BROWN, segment_alpha);
         let solar_color = with_alpha(Color32::LIGHT_BLUE, segment_alpha);
+        let stomach_color = with_alpha(Color32::LIGHT_GREEN, segment_alpha);
 
         let shapes: Vec<Shape> = hexes.iter().map(|hex| {
             let position = Pos2 { x: hex.x as f32, y: hex.y as f32 };
@@ -134,6 +133,7 @@ fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
                         SegmentType::Muscle(_) => muscle_color,
                         SegmentType::Solid(_) => solid_color,
                         SegmentType::Solar(_) => solar_color,
+                        SegmentType::Stomach(_) => stomach_color,
                     }
                 }
             };
@@ -414,6 +414,10 @@ impl eframe::App for MyEguiApp {
             ui.horizontal(|ui| {
                 ui.label("Connection flip chance");
                 ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.connection_flip_chance).speed(1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Dna mutation chance");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.dna_mutation_chance).speed(1.0));
             });
         });
         egui::Window::new("Species").open(&mut self.show_species).show(ctx, |ui| {});
