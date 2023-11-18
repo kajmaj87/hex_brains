@@ -45,11 +45,13 @@ fn create_simulation_config(columns: usize, rows: usize, add_walls: bool) -> Sim
         energy_per_segment: 100.0,
         wait_cost: 1.0,
         move_cost: 10.0,
-        energy_to_grow: 200.0,
+        new_segment_cost: 200.0,
         size_to_split: 10,
         species_threshold: 0.2,
         mutation: MutationConfig::default(),
         snake_max_age: 2_000,
+        meat_energy_content: 5.0,
+        plant_energy_content: 1.0,
     }
 }
 
@@ -77,7 +79,7 @@ fn start_simulation(engine_events_sender: &Sender<EngineEvent>, engine_commands_
     });
 }
 
-fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Position>, scents: Query<(Entity,&Scent)>, scent_map: Res<ScentMap>, heads: Query<(Entity, &Snake)>, solids: Query<(Entity, &Solid), Without<SegmentType>>, segments: Query<(Entity, &SegmentType), With<SegmentType>>, food: Query<(Entity, &Food)>, stats: Res<Stats>) {
+fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Position>, scents: Query<(Entity, &Scent)>, scent_map: Res<ScentMap>, heads: Query<(Entity, &Snake)>, solids: Query<(Entity, &Solid), Without<SegmentType>>, segments: Query<(Entity, &SegmentType), With<SegmentType>>, food: Query<(Entity, &Food)>, stats: Res<Stats>) {
     puffin::profile_function!();
     let all_hexes: Vec<Hex> = solids.iter().map(|(solid, _)| {
         let position = positions.get(solid).unwrap();
@@ -87,7 +89,7 @@ fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Po
         Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::SnakeHead { specie: snake.species.unwrap_or(0) } }
     })).chain(segments.iter().map(|(segment_id, segment_type)| {
         let position = positions.get(segment_id).unwrap();
-        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Segment{segment_type: segment_type.clone()} }
+        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Segment { segment_type: segment_type.clone() } }
     })).chain(food.iter().map(|(food_id, food)| {
         let position = positions.get(food_id).unwrap();
         if food.is_meat() {
@@ -159,6 +161,7 @@ fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
 fn with_alpha(color: Color32, alpha: f32) -> Color32 {
     Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), (alpha * 256.0) as u8)
 }
+
 fn transform_to_circle(game_position: &Pos2, to_screen: &emath::RectTransform, response: &Response, config: &Config, color: Color32) -> Shape {
     // Radius is based on window's dimensions and the desired number of circles.
     let radius = 1.0 / (2.0 * config.rows as f32);
@@ -268,12 +271,14 @@ impl MyEguiApp {
                 energy_per_segment: 100.0,
                 wait_cost: 1.0,
                 move_cost: 10.0,
-                energy_to_grow: 200.0,
+                new_segment_cost: 200.0,
                 size_to_split: 12,
                 species_threshold: 0.2,
                 add_walls: false,
                 mutation: MutationConfig::default(),
                 snake_max_age: 2_000,
+                meat_energy_content: 5.0,
+                plant_energy_content: 1.0,
             },
             can_draw_frame: true,
             stats: Stats::default(),
@@ -347,8 +352,8 @@ impl eframe::App for MyEguiApp {
                 ui.add(egui::DragValue::new(&mut self.simulation_config.move_cost).speed(1.0));
             });
             ui.horizontal(|ui| {
-                ui.label("Energy to grow");
-                ui.add(egui::DragValue::new(&mut self.simulation_config.energy_to_grow).speed(1.0));
+                ui.label("New segment energy cost");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.new_segment_cost).speed(1.0));
             });
             ui.horizontal(|ui| {
                 ui.label("Size to split");
@@ -378,18 +383,29 @@ impl eframe::App for MyEguiApp {
                 ui.checkbox(&mut self.simulation_config.mutation.chaos_input_enabled, "Chaos gene");
             });
             ui.horizontal(|ui| {
-                ui.checkbox(&mut self.simulation_config.mutation.food_sensing_enabled, "Food smelling");
+                ui.checkbox(&mut self.simulation_config.mutation.scent_sensing_enabled, "Food smelling");
             });
             ui.horizontal(|ui| {
-                ui.checkbox(&mut self.simulation_config.mutation.food_vision_enabled, "Food vision");
+                ui.checkbox(&mut self.simulation_config.mutation.plant_vision_enabled, "Plant vision");
             });
             ui.horizontal(|ui| {
                 ui.label("Front range");
-                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.food_vision_front_range).speed(1.0));
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.plant_vision_front_range).speed(1.0));
                 ui.label("Left range");
-                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.food_vision_left_range).speed(1.0));
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.plant_vision_left_range).speed(1.0));
                 ui.label("Right range");
-                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.food_vision_right_range).speed(1.0));
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.plant_vision_right_range).speed(1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut self.simulation_config.mutation.meat_vision_enabled, "Meat vision");
+            });
+            ui.horizontal(|ui| {
+                ui.label("Front range");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.meat_vision_front_range).speed(1.0));
+                ui.label("Left range");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.meat_vision_left_range).speed(1.0));
+                ui.label("Right range");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.meat_vision_right_range).speed(1.0));
             });
             ui.horizontal(|ui| {
                 ui.checkbox(&mut self.simulation_config.mutation.obstacle_vision_enabled, "Obstacle vision");
@@ -480,7 +496,7 @@ impl eframe::App for MyEguiApp {
                 egui::stroke_ui(ui, &mut self.config.food_color, "Food Color");
             });
             ui.horizontal(|ui| {
-                if ui.button("Start simulation").clicked() {
+                if ui.add_enabled(!self.simulation_running, egui::Button::new("Start simulation")).clicked() {
                     start_simulation(&self.engine_events_sender, Arc::clone(&self.engine_commands_receiver), ctx.clone(), self.config);
                     self.simulation_running = true;
                 }

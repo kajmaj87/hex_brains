@@ -1,4 +1,4 @@
-use crate::core::{assign_segment_positions, despawn_food, Food, incease_move_potential, Map2d, Map3d, ScentMap, SegmentMap};
+use crate::core::{assign_segment_positions, despawn_food, Food, incease_move_potential, Map2d, Map3d, process_food, ScentMap, SegmentMap};
 use std::sync::Arc;
 use std::f32::consts::PI;
 use crate::core::{add_scents, assign_solid_positions, destroy_old_food, diffuse_scents, disperse_scents, Solid};
@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 use bevy_ecs::prelude::{IntoSystemConfigs, Res, ResMut, Resource, Schedule, World};
 use rand::{Rng, thread_rng};
-use crate::core::{create_food, create_snake, Decision, Direction, eat_food, Energy, FoodMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments, increase_age, calculate_stats, RandomNeuralBrain, assign_species, Species};
+use crate::core::{create_food, create_snake, Decision, Direction, eat_food, MeatMatter, FoodMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments, increase_age, calculate_stats, RandomNeuralBrain, assign_species, Species};
 use crate::dna::{Dna, SegmentType};
 use crate::neural::InnovationTracker;
 
@@ -73,32 +73,36 @@ pub enum EngineEvent {
 
 #[derive(Debug, Resource, Clone, Copy)]
 pub struct MutationConfig {
-    pub food_sensing_enabled: bool,
-    pub food_vision_enabled: bool,
+    pub scent_sensing_enabled: bool,
+    pub plant_vision_enabled: bool,
+    pub meat_vision_enabled: bool,
     pub obstacle_vision_enabled: bool,
     pub chaos_input_enabled: bool,
-    pub food_vision_front_range: u32,
-    pub food_vision_left_range: u32,
-    pub food_vision_right_range: u32,
+    pub plant_vision_front_range: u32,
+    pub plant_vision_left_range: u32,
+    pub plant_vision_right_range: u32,
+    pub meat_vision_front_range: u32,
+    pub meat_vision_left_range: u32,
+    pub meat_vision_right_range: u32,
     pub obstacle_vision_front_range: u32,
     pub obstacle_vision_left_range: u32,
     pub obstacle_vision_right_range: u32,
     pub weight_perturbation_range: f32,
     pub weight_perturbation_chance: f64,
     pub connection_flip_chance: f64,
-    pub dna_mutation_chance: f64
+    pub dna_mutation_chance: f64,
 }
 
 impl Default for MutationConfig {
     fn default() -> Self {
         MutationConfig {
-            food_sensing_enabled: true,
-            food_vision_enabled: true,
+            scent_sensing_enabled: true,
+            plant_vision_enabled: true,
             obstacle_vision_enabled: true,
             chaos_input_enabled: true,
-            food_vision_front_range: 5,
-            food_vision_left_range: 3,
-            food_vision_right_range: 3,
+            plant_vision_front_range: 5,
+            plant_vision_left_range: 3,
+            plant_vision_right_range: 3,
             obstacle_vision_front_range: 5,
             obstacle_vision_left_range: 3,
             obstacle_vision_right_range: 3,
@@ -106,6 +110,10 @@ impl Default for MutationConfig {
             weight_perturbation_chance: 0.3,
             connection_flip_chance: 0.1,
             dna_mutation_chance: 0.1,
+            meat_vision_front_range: 5,
+            meat_vision_left_range: 3,
+            meat_vision_right_range: 3,
+            meat_vision_enabled: true,
         }
     }
 }
@@ -122,7 +130,7 @@ pub struct SimulationConfig {
     pub energy_per_segment: f32,
     pub wait_cost: f32,
     pub move_cost: f32,
-    pub energy_to_grow: f32,
+    pub new_segment_cost: f32,
     pub size_to_split: usize,
     pub species_threshold: f32,
     pub mutation: MutationConfig,
@@ -131,6 +139,8 @@ pub struct SimulationConfig {
     pub scent_dispersion_per_step: f32,
     pub create_scents: bool,
     pub snake_max_age: u32,
+    pub meat_energy_content: f32,
+    pub plant_energy_content: f32
 }
 
 #[derive(Debug, Clone)]
@@ -214,7 +224,7 @@ impl Simulation {
         let mut first_schedule = Schedule::default();
         let mut core_schedule = Schedule::default();
         let mut secondary_schedule = Schedule::default();
-        first_schedule.add_systems((assign_species, (assign_missing_segments, create_food, incease_move_potential), die_from_collisions, add_scents).chain().run_if(should_simulate_frame));
+        first_schedule.add_systems((assign_species, (assign_missing_segments, create_food, incease_move_potential, process_food), die_from_collisions, add_scents).chain().run_if(should_simulate_frame));
         core_schedule.add_systems(((think, increase_age, calculate_stats, diffuse_scents), (movement, update_positions, split).chain(), eat_food, destroy_old_food).chain().run_if(should_simulate_frame));
         secondary_schedule.add_systems(((assign_solid_positions, assign_segment_positions), (grow, starve,turn_counter, disperse_scents, despawn_food)).chain().run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();
