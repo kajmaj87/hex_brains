@@ -42,10 +42,10 @@ fn create_simulation_config(columns: usize, rows: usize, add_walls: bool) -> Sim
         starting_snakes: 10,
         starting_food: 100,
         food_per_step: 2,
-        energy_per_segment: 100.0,
+        plant_matter_per_segment: 100.0,
         wait_cost: 1.0,
         move_cost: 10.0,
-        new_segment_cost: 200.0,
+        new_segment_cost: 100.0,
         size_to_split: 10,
         species_threshold: 0.2,
         mutation: MutationConfig::default(),
@@ -268,7 +268,7 @@ impl MyEguiApp {
                 starting_snakes: 0,
                 starting_food: 0,
                 food_per_step: 2,
-                energy_per_segment: 100.0,
+                plant_matter_per_segment: 100.0,
                 wait_cost: 1.0,
                 move_cost: 10.0,
                 new_segment_cost: 200.0,
@@ -341,7 +341,7 @@ impl eframe::App for MyEguiApp {
             });
             ui.horizontal(|ui| {
                 ui.label("Energy per segment");
-                ui.add(egui::DragValue::new(&mut self.simulation_config.energy_per_segment).speed(1.0));
+                ui.add(egui::DragValue::new(&mut self.simulation_config.plant_matter_per_segment).speed(1.0));
             });
             ui.horizontal(|ui| {
                 ui.label("Wait cost");
@@ -439,6 +439,7 @@ impl eframe::App for MyEguiApp {
         egui::Window::new("Species").open(&mut self.show_species).show(ctx, |ui| {});
         egui::Window::new("Info").open(&mut self.show_info).show(ctx, |ui| {
             ui.label("Press 's' to add one snake");
+            ui.label("Press 'a' to stop simulation and advance one frame (useful for debug)");
             ui.label("Press '+' to increase speed");
             ui.label("Press '-' to decrease speed");
             ui.label("Press 'tab' to ignore speed limit");
@@ -488,6 +489,10 @@ impl eframe::App for MyEguiApp {
                 ui.label(format!("Species : {}", self.stats.species.species.len()));
                 ui.label(format!("Scents : {}", self.stats.total_scents));
                 ui.label(format!("Entities : {}", self.stats.total_entities));
+                ui.label(format!("Plants/Meat : {}/{}", self.stats.total_plants, self.stats.total_meat));
+                ui.label(format!("Stomachs: P/M: {}/{}", self.stats.total_plants_in_stomachs, self.stats.total_meat_in_stomachs));
+                ui.label(format!("Total snake energy : {}", self.stats.total_snake_energy));
+                ui.label(format!("Total energy : {}", self.stats.total_energy));
             });
             ui.horizontal(|ui| {
                 egui::stroke_ui(ui, &mut self.config.bg_color, "Background Color");
@@ -539,6 +544,9 @@ impl eframe::App for MyEguiApp {
             }
             if ctx.input(|i| i.key_pressed(Key::S)) {
                 self.engine_commands_sender.send(EngineCommand::CreateSnakes(1)).unwrap();
+            }
+            if ctx.input(|i| i.key_pressed(Key::A)) {
+                self.engine_commands_sender.send(EngineCommand::AdvanceOneFrame).unwrap();
             }
         });
         if self.can_draw_frame {

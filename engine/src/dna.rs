@@ -75,8 +75,8 @@ impl SegmentType {
     }
 }
 
-fn all_segment_types() -> [SegmentType; 4] {
-    [SegmentType::muscle(), SegmentType::solid(), SegmentType::solar(), SegmentType::stomach()]
+fn all_segment_types() -> [SegmentType; 3] {
+    [SegmentType::muscle(), SegmentType::solid(), SegmentType::stomach()]
 }
 
 

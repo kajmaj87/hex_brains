@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 use bevy_ecs::prelude::{IntoSystemConfigs, Res, ResMut, Resource, Schedule, World};
 use rand::{Rng, thread_rng};
-use crate::core::{create_food, create_snake, Decision, Direction, eat_food, MeatMatter, FoodMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments, increase_age, calculate_stats, RandomNeuralBrain, assign_species, Species};
+use crate::core::{create_food, create_snake, Decision, Direction, eat_food, FoodMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments, increase_age, calculate_stats, RandomNeuralBrain, assign_species, Species};
 use crate::dna::{Dna, SegmentType};
 use crate::neural::InnovationTracker;
 
@@ -53,7 +53,6 @@ pub enum HexType {
 pub struct Stats {
     pub total_snakes: usize,
     pub total_food: usize,
-    pub total_energy: i32,
     pub oldest_snake: u32,
     pub food: usize,
     pub total_segments: usize,
@@ -62,6 +61,12 @@ pub struct Stats {
     pub species: Species,
     pub total_entities: usize,
     pub total_scents: usize,
+    pub total_snake_energy: f32,
+    pub total_plants_in_stomachs: f32,
+    pub total_meat_in_stomachs: f32,
+    pub total_plants: f32,
+    pub total_meat: f32,
+    pub total_energy: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -127,7 +132,7 @@ pub struct SimulationConfig {
     pub starting_snakes: usize,
     pub starting_food: usize,
     pub food_per_step: usize,
-    pub energy_per_segment: f32,
+    pub plant_matter_per_segment: f32,
     pub wait_cost: f32,
     pub move_cost: f32,
     pub new_segment_cost: f32,
@@ -153,6 +158,7 @@ pub enum EngineCommand {
     CreateSnakes(usize),
     StopSimulation,
     UpdateSimulationConfig(SimulationConfig),
+    AdvanceOneFrame,
 }
 
 #[derive(Debug, Resource)]
@@ -224,9 +230,9 @@ impl Simulation {
         let mut first_schedule = Schedule::default();
         let mut core_schedule = Schedule::default();
         let mut secondary_schedule = Schedule::default();
-        first_schedule.add_systems((assign_species, (assign_missing_segments, create_food, incease_move_potential, process_food), die_from_collisions, add_scents).chain().run_if(should_simulate_frame));
-        core_schedule.add_systems(((think, increase_age, calculate_stats, diffuse_scents), (movement, update_positions, split).chain(), eat_food, destroy_old_food).chain().run_if(should_simulate_frame));
-        secondary_schedule.add_systems(((assign_solid_positions, assign_segment_positions), (grow, starve,turn_counter, disperse_scents, despawn_food)).chain().run_if(should_simulate_frame));
+        first_schedule.add_systems((assign_species, starve, (assign_missing_segments, create_food, incease_move_potential, process_food), die_from_collisions, grow, add_scents).chain().run_if(should_simulate_frame));
+        core_schedule.add_systems(((think, increase_age, calculate_stats, diffuse_scents, ), (movement, update_positions, split).chain(), eat_food, destroy_old_food).chain().run_if(should_simulate_frame));
+        secondary_schedule.add_systems(((assign_solid_positions, assign_segment_positions), (turn_counter, disperse_scents, despawn_food)).chain().run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();
         Simulation { first_schedule, core_schedule, secondary_schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
     }
@@ -257,10 +263,10 @@ impl Simulation {
                             engine_state.repaint_needed = true;
                         }
                         EngineCommand::IncreaseSpeed => {
-                            engine_state.speed_limit = engine_state.speed_limit.map(|limit| limit * 2.0).or(Some(0.02));
+                            engine_state.speed_limit = engine_state.speed_limit.map(|limit| limit.max(0.01) * 2.0).or(Some(0.02));
                         }
                         EngineCommand::DecreaseSpeed => {
-                            engine_state.speed_limit = engine_state.speed_limit.map(|limit| limit / 2.0).or(Some(0.02));
+                            engine_state.speed_limit = engine_state.speed_limit.map(|limit| limit.max(0.04) / 2.0).or(Some(0.02));
                         }
                         EngineCommand::IgnoreSpeedLimit => {
                             engine_state.ignore_speed_limit = !engine_state.ignore_speed_limit;
@@ -291,6 +297,11 @@ impl Simulation {
                         EngineCommand::UpdateSimulationConfig(new_config) => {
                             self.world.remove_resource::<SimulationConfig>();
                             self.world.insert_resource(new_config);
+                        }
+                        EngineCommand::AdvanceOneFrame => {
+                            engine_state.ignore_speed_limit = false;
+                            engine_state.speed_limit = Some(0.0);
+                            engine_state.frames_left += 1.0;
                         }
                     }
                 });
