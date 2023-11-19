@@ -58,7 +58,7 @@ pub enum Decision {
 }
 
 pub trait Brain: Sync + Send + Debug {
-    fn decide(&self, sensory_input: Vec<SensorInput>) -> Decision;
+    fn decide(&self, sensory_input: Vec<f32>) -> Decision;
     fn get_neural_network(&self) -> Option<&NeuralNetwork>;
 }
 
@@ -172,7 +172,7 @@ pub struct Age {
 }
 
 impl Brain for RandomBrain {
-    fn decide(&self, _: Vec<SensorInput>) -> Decision {
+    fn decide(&self, _: Vec<f32>) -> Decision {
         let mut rng = rand::thread_rng();
         match rng.gen_range(0..=3) {
             0 => Decision::MoveForward,
@@ -189,7 +189,7 @@ impl Brain for RandomBrain {
 
 impl RandomNeuralBrain {
     pub(crate) fn new(innovation_tracker: &mut InnovationTracker) -> Self {
-        let neural_network = NeuralNetwork::random_brain(14, 0.5, innovation_tracker);
+        let neural_network = NeuralNetwork::random_brain(18, 0.25, innovation_tracker);
         Self {
             neural_network
         }
@@ -202,8 +202,9 @@ impl RandomNeuralBrain {
 }
 
 impl Brain for RandomNeuralBrain {
-    fn decide(&self, sensor_input: Vec<SensorInput>) -> Decision {
+    fn decide(&self, sensor_input: Vec<f32>) -> Decision {
         debug!("Neural network input: {:?}", sensor_input);
+        let sensor_input = sensor_input.iter().enumerate().map(|(index, value)| SensorInput { index, value: *value }).collect();
         let output = self.neural_network.run(sensor_input);
         // return the index with the maximum value of the output vector
         let mut max_index = 0;
@@ -548,112 +549,90 @@ fn position_at_direction(direction: &Direction, position: &Position, config: &Re
     Position { x, y }
 }
 
-pub fn think(mut heads: Query<(&Position, &mut Snake)>, food_map: Res<FoodMap>, solids_map: Res<SolidsMap>, scent_map: Res<ScentMap>, config: Res<SimulationConfig>) {
+pub fn think(mut heads: Query<(&Position, &mut Snake, &Age)>, food_map: Res<FoodMap>, solids_map: Res<SolidsMap>, scent_map: Res<ScentMap>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
-    let bias = SensorInput { value: 1.0, index: 0 };
-    heads.par_iter_mut().for_each_mut(|(position, mut head)| {
+    let bias = 1.0;
+    heads.par_iter_mut().for_each(|(position, mut head, age)| {
         let mut rng = rand::thread_rng();
         let chaos = if config.mutation.chaos_input_enabled {
-            SensorInput { value: rng.gen_range(0.0..1.0), index: 1 }
+            rng.gen_range(0.0..1.0)
         } else {
-            SensorInput { value: 0.0, index: 1 }
+            0.0
         };
         let direction_left = turn_left(&head.direction);
         let direction_right = turn_right(&head.direction);
-        let scent_front;
-        let scent_left;
-        let scent_right;
-        if config.mutation.scent_sensing_enabled {
-            scent_front = scent(&position_at_direction(&head.direction, &position, &config), &scent_map, 2);
-            scent_left = scent(&position_at_direction(&direction_left, &position, &config), &scent_map, 3);
-            scent_right = scent(&position_at_direction(&direction_right, &position, &config), &scent_map, 4);
-        } else {
-            scent_front = SensorInput { value: 0.0, index: 2 };
-            scent_left = SensorInput { value: 0.0, index: 3 };
-            scent_right = SensorInput { value: 0.0, index: 4 };
-        }
-        let plant_vision_front;
-        let plant_vision_left;
-        let plant_vision_right;
-        if config.mutation.plant_vision_enabled {
-            plant_vision_front = see_plants(&head.direction, &position, config.mutation.plant_vision_front_range, &food_map, &config, 5);
-            plant_vision_left = see_plants(&direction_left, &position, config.mutation.plant_vision_left_range, &food_map, &config, 6);
-            plant_vision_right = see_plants(&direction_right, &position, config.mutation.plant_vision_right_range, &food_map, &config, 7);
-        } else {
-            plant_vision_front = SensorInput { value: 0.0, index: 5 };
-            plant_vision_left = SensorInput { value: 0.0, index: 6 };
-            plant_vision_right = SensorInput { value: 0.0, index: 7 };
-        }
-        let meat_vision_front;
-        let meat_vision_left;
-        let meat_vision_right;
-        if config.mutation.meat_vision_enabled {
-            meat_vision_front = see_meat(&head.direction, &position, config.mutation.meat_vision_front_range, &food_map, &config, 8);
-            meat_vision_left = see_meat(&direction_left, &position, config.mutation.meat_vision_left_range, &food_map, &config, 9);
-            meat_vision_right = see_meat(&direction_right, &position, config.mutation.meat_vision_right_range, &food_map, &config, 10);
-        } else {
-            meat_vision_front = SensorInput { value: 0.0, index: 5 };
-            meat_vision_left = SensorInput { value: 0.0, index: 6 };
-            meat_vision_right = SensorInput { value: 0.0, index: 7 };
-        }
-        let solid_vision_front;
-        let solid_vision_left;
-        let solid_vision_right;
-        if config.mutation.obstacle_vision_enabled {
-            solid_vision_front = see_obstacles(&head.direction, &position, config.mutation.obstacle_vision_front_range, &solids_map, &config, 11);
-            solid_vision_left = see_obstacles(&direction_left, &position, config.mutation.obstacle_vision_left_range, &solids_map, &config, 12);
-            solid_vision_right = see_obstacles(&direction_right, &position, config.mutation.obstacle_vision_right_range, &solids_map, &config, 13);
-        } else {
-            solid_vision_front = SensorInput { value: 0.0, index: 8 };
-            solid_vision_left = SensorInput { value: 0.0, index: 9 };
-            solid_vision_right = SensorInput { value: 0.0, index: 10 };
-        }
-        head.decision = head.brain.decide(vec![bias.clone(), chaos, scent_front, scent_left, scent_right, plant_vision_front, plant_vision_left, plant_vision_right, meat_vision_front, meat_vision_left, meat_vision_right, solid_vision_front, solid_vision_left, solid_vision_right]);
+        let scent_front = scent(&position_at_direction(&head.direction, &position, &config), &scent_map, &config);
+        let scent_left = scent(&position_at_direction(&direction_left, &position, &config), &scent_map, &config);
+        let scent_right = scent(&position_at_direction(&direction_right, &position, &config), &scent_map, &config);
+        let plant_vision_front = see_plants(&head.direction, &position, config.mutation.plant_vision_front_range, &food_map, &config);
+        let plant_vision_left = see_plants(&direction_left, &position, config.mutation.plant_vision_left_range, &food_map, &config);
+        let plant_vision_right = see_plants(&direction_right, &position, config.mutation.plant_vision_right_range, &food_map, &config);
+        let meat_vision_front = see_meat(&head.direction, &position, config.mutation.meat_vision_front_range, &food_map, &config);
+        let meat_vision_left = see_meat(&direction_left, &position, config.mutation.meat_vision_left_range, &food_map, &config);
+        let meat_vision_right = see_meat(&direction_right, &position, config.mutation.meat_vision_right_range, &food_map, &config);
+        let solid_vision_front = see_obstacles(&head.direction, &position, config.mutation.obstacle_vision_front_range, &solids_map, &config);
+        let solid_vision_left = see_obstacles(&direction_left, &position, config.mutation.obstacle_vision_left_range, &solids_map, &config);
+        let solid_vision_right = see_obstacles(&direction_right, &position, config.mutation.obstacle_vision_right_range, &solids_map, &config);
+        let plant_food_level = head.energy.plant_in_stomach / head.metabolism.max_plants_in_stomach;
+        let meat_food_level = head.energy.meat_in_stomach / head.metabolism.max_meat_in_stomach;
+        let energy_level = head.energy.energy / head.metabolism.max_energy;
+        let age_level = age.efficiency_factor;
+        head.decision = head.brain.decide(vec![bias.clone(), chaos, scent_front, scent_left, scent_right, plant_vision_front, plant_vision_left, plant_vision_right, meat_vision_front, meat_vision_left, meat_vision_right, solid_vision_front, solid_vision_left, solid_vision_right, plant_food_level, meat_food_level, energy_level, age_level]);
     });
 }
 
-fn scent(scenting_position: &Position, scent_map: &Res<ScentMap>, index: usize) -> SensorInput {
-    let scent = scent_map.map.get(scenting_position);
-    SensorInput { value: scent / 500.0, index }
+fn scent(scenting_position: &Position, scent_map: &Res<ScentMap>, config: &Res<SimulationConfig>) -> f32 {
+    if config.mutation.scent_sensing_enabled {
+        let scent = scent_map.map.get(scenting_position);
+        scent / 500.0
+    } else {
+        0.0
+    }
 }
 
-fn see_meat(head_direction: &Direction, position: &Position, range: u32, food_map: &Res<FoodMap>, config: &Res<SimulationConfig>, index: usize) -> SensorInput {
-    let current_vision_position = position;
-    let mut current_range = 0;
-    while current_range < range {
-        let current_vision_position = &position_at_direction(head_direction, &current_vision_position, &config).clone();
-        if food_map.map.get(current_vision_position).is_meat() {
-            return SensorInput { value: (range - current_range) as f32 / range as f32, index };
+fn see_meat(head_direction: &Direction, position: &Position, range: u32, food_map: &Res<FoodMap>, config: &Res<SimulationConfig>) -> f32 {
+    if config.mutation.meat_vision_enabled {
+        let current_vision_position = position;
+        let mut current_range = 0;
+        while current_range < range {
+            let current_vision_position = &position_at_direction(head_direction, &current_vision_position, &config).clone();
+            if food_map.map.get(current_vision_position).is_meat() {
+                return (range - current_range) as f32 / range as f32;
+            }
+            current_range += 1;
         }
-        current_range += 1;
     }
-    SensorInput { value: 0.0, index }
+    0.0
 }
 
-fn see_plants(head_direction: &Direction, position: &Position, range: u32, food_map: &Res<FoodMap>, config: &Res<SimulationConfig>, index: usize) -> SensorInput {
-    let current_vision_position = position;
-    let mut current_range = 0;
-    while current_range < range {
-        let current_vision_position = &position_at_direction(head_direction, &current_vision_position, &config).clone();
-        if food_map.map.get(current_vision_position).is_plant() {
-            return SensorInput { value: (range - current_range) as f32 / range as f32, index };
+fn see_plants(head_direction: &Direction, position: &Position, range: u32, food_map: &Res<FoodMap>, config: &Res<SimulationConfig>) -> f32 {
+    if config.mutation.plant_vision_enabled {
+        let current_vision_position = position;
+        let mut current_range = 0;
+        while current_range < range {
+            let current_vision_position = &position_at_direction(head_direction, &current_vision_position, &config).clone();
+            if food_map.map.get(current_vision_position).is_plant() {
+                return (range - current_range) as f32 / range as f32;
+            }
+            current_range += 1;
         }
-        current_range += 1;
     }
-    SensorInput { value: 0.0, index }
+    0.0
 }
 
-fn see_obstacles(head_direction: &Direction, position: &Position, range: u32, solids_map: &Res<SolidsMap>, config: &Res<SimulationConfig>, index: usize) -> SensorInput {
-    let mut current_vision_position = position.clone();
-    let mut current_range = 0;
-    while current_range < range {
-        current_vision_position = position_at_direction(head_direction, &current_vision_position, &config).clone();
-        if *solids_map.map.get(&current_vision_position) {
-            return SensorInput { value: (range - current_range) as f32 / range as f32, index };
+fn see_obstacles(head_direction: &Direction, position: &Position, range: u32, solids_map: &Res<SolidsMap>, config: &Res<SimulationConfig>) -> f32 {
+    if config.mutation.obstacle_vision_enabled {
+        let mut current_vision_position = position.clone();
+        let mut current_range = 0;
+        while current_range < range {
+            current_vision_position = position_at_direction(head_direction, &current_vision_position, &config).clone();
+            if *solids_map.map.get(&current_vision_position) {
+                return (range - current_range) as f32 / range as f32;
+            }
+            current_range += 1;
         }
-        current_range += 1;
     }
-    SensorInput { value: 0.0, index }
+    0.0
 }
 
 
