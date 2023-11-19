@@ -68,6 +68,7 @@ pub trait Brain: Sync + Send + Debug {
 pub struct Specie {
     pub id: u32,
     pub leader: Entity,
+    pub leader_network: NeuralNetwork,
     pub members: VecDeque<Entity>,
 }
 
@@ -1029,7 +1030,8 @@ pub fn assign_species(new_borns: Query<Entity, Added<JustBorn>>, mut snakes: Que
         }
         let (_, mut baby_snake) = snakes.get_mut(baby_id).unwrap();
         if baby_snake.species.is_none() {
-            let mut new_specie = Specie { id: species.last_id + 1, leader: baby_id, members: VecDeque::new() };
+            let baby_neural_network = baby_snake.brain.get_neural_network().unwrap().clone();
+            let mut new_specie = Specie { id: species.last_id + 1, leader: baby_id, members: VecDeque::new(), leader_network: baby_neural_network };
             new_specie.members.push_back(baby_id);
             species.species.push(new_specie);
             species.last_id += 1;

@@ -38,15 +38,15 @@ impl InnovationTracker {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ConnectionGene {
-    in_node: usize,
-    out_node: usize,
-    pub(crate) weight: f32,
-    pub(crate) enabled: bool,
-    pub(crate) innovation_number: InnovationNumber,
+    pub in_node: usize,
+    pub out_node: usize,
+    pub weight: f32,
+    pub enabled: bool,
+    pub innovation_number: InnovationNumber,
 }
 
-#[derive(Clone, Debug)]
-enum NodeType {
+#[derive(Clone, Debug, PartialEq)]
+pub enum NodeType {
     Input,
     Hidden,
     Output,
@@ -72,8 +72,8 @@ impl Activation {
 }
 
 #[derive(Clone, Debug)]
-struct NodeGene {
-    node_type: NodeType,
+pub struct NodeGene {
+    pub node_type: NodeType,
     activation: Activation,
 }
 
@@ -175,6 +175,10 @@ impl NeuralNetwork {
 
     pub fn get_active_connections(&self) -> Vec<&ConnectionGene> {
         self.connections.iter().filter(|connection| connection.enabled).collect()
+    }
+
+    pub fn get_nodes(&self) -> Vec<&NodeGene> {
+        self.nodes.iter().collect()
     }
 
     pub fn run(&self, inputs: Vec<SensorInput>) -> Vec<f32> {

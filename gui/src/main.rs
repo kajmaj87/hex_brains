@@ -7,14 +7,16 @@ use std::time::Instant;
 use bevy_ecs::prelude::*;
 use eframe::{egui, emath};
 use eframe::emath::{Pos2, Rect, Vec2};
-use eframe::epaint::Color32;
-use egui::{Frame, Key, Response, ScrollArea, Sense, Shape, Stroke, Ui};
+use eframe::epaint::{Color32, Fonts};
+use egui::{Align2, FontDefinitions, FontFamily, FontId, Frame, Key, Response, ScrollArea, Sense, Shape, Stroke, Ui};
 use egui::epaint::CircleShape;
 use egui::Shape::Circle;
 use tracing::{info, Level};
 use tracing_subscriber::fmt;
 use hex_brains_engine::core::{Food, Snake, Position, Solid, ScentMap, Scent};
 use hex_brains_engine::dna::SegmentType;
+use hex_brains_engine::neural;
+use hex_brains_engine::neural::{ConnectionGene, NodeGene, NodeType};
 use hex_brains_engine::simulation::{Simulation, EngineEvent, EngineCommand, EngineState, EngineEvents, Hex, HexType, SimulationConfig, Stats, MutationConfig};
 use hex_brains_engine::simulation_manager::simulate_batch;
 
@@ -103,6 +105,89 @@ fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Po
         Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Scent { value: *value } }
     })).collect();
     engine_events.events.lock().unwrap().send(EngineEvent::DrawData { hexes: all_hexes, stats: stats.clone() });
+}
+
+fn draw_neural_network(ui: &mut Ui, fonts: &Fonts, specie_id: u32, nodes: &Vec<&NodeGene>, connections: &Vec<&ConnectionGene>){
+    Frame::canvas(ui.style()).show(ui, |ui| {
+        let (mut response, _) =
+            ui.allocate_painter(ui.available_size_before_wrap(), Sense::drag());
+
+        let to_screen = emath::RectTransform::from_to(
+            Rect::from_min_size(Pos2::ZERO, response.rect.square_proportions()),
+            response.rect,
+        );
+
+        let input_nodes = nodes.iter().filter(|node| node.node_type == neural::NodeType::Input).collect::<Vec<_>>();
+        let output_nodes = nodes.iter().filter(|node| node.node_type == neural::NodeType::Output).collect::<Vec<_>>();
+
+        let specie_marker = Circle(CircleShape {
+            center: to_screen * Pos2 { x: 0.05, y: 0.05 },
+            radius: 0.02 * response.rect.height(), // Using the normalized radius for the screen
+            fill: u32_to_color(specie_id),
+            stroke: Default::default(),
+        });
+
+        let input_node_shapes: Vec<Shape> = input_nodes.iter().enumerate().map(|(index, node)| {
+            let position = get_node_position(index, NodeType::Input);
+            let screen_position = to_screen * position;
+            // let text = Shape::text(&fonts, screen_position, Align2::LEFT_CENTER, "Hello worlds", FontId::new(26.0, FontFamily::Monospace), Color32::WHITE);
+            let circle = Circle(CircleShape {
+                center: screen_position,
+                radius: 0.02 * response.rect.height(), // Using the normalized radius for the screen
+                fill: Color32::LIGHT_BLUE,
+                stroke: Default::default(),
+            });
+            circle
+        }).collect();
+        let output_node_shapes: Vec<Shape> = output_nodes.iter().enumerate().map(|(index, node)| {
+            let position = get_node_position(index, NodeType::Output);
+            let screen_position = to_screen * position;
+
+            Circle(CircleShape {
+                center: screen_position,
+                radius: 0.02 * response.rect.height(), // Using the normalized radius for the screen
+                fill: Color32::LIGHT_RED,
+                stroke: Default::default(),
+            })
+        }).collect();
+        let connection_shapes: Vec<Shape> = connections.iter().map(|connection| {
+            let from_node = connection.in_node;
+            let to_node = connection.out_node - input_nodes.len();
+            let from_position = get_node_position(from_node, NodeType::Input);
+            let to_position = get_node_position(to_node, NodeType::Output);
+            let from_screen_position = to_screen * from_position;
+            let to_screen_position = to_screen * to_position;
+            let color = if connection.weight > 0.0 {
+                Color32::LIGHT_GREEN
+            } else {
+                Color32::LIGHT_RED
+            };
+            Shape::line_segment(
+                [from_screen_position, to_screen_position],
+                Stroke::new(connection.weight.abs()/30.0 * response.rect.height(), color),
+            )
+        }).collect();
+        let painter = ui.painter();
+        painter.extend(vec![specie_marker]);
+        painter.extend(input_node_shapes);
+        painter.extend(output_node_shapes);
+        painter.extend(connection_shapes);
+        response
+    });
+}
+
+fn get_node_position(index: usize, node_type: NodeType) -> Pos2{
+    match node_type {
+        NodeType::Input => {
+            Pos2 { x: 0.15, y: 0.1 + index as f32 * 0.075 }
+        }
+        NodeType::Hidden => {
+            Pos2 { x: 0.5, y: 0.1 + index as f32 * 0.075 }
+        }
+        NodeType::Output => {
+            Pos2 { x: 0.85, y: 0.1 + index as f32 * 0.4 }
+        }
+    }
 }
 
 fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
@@ -229,6 +314,9 @@ struct MyEguiApp {
     show_info: bool,
     simulation_config: SimulationConfig,
     simulation_running: bool,
+    show_networks: bool,
+    selected_network: u32,
+    fonts: Fonts,
 }
 
 impl MyEguiApp {
@@ -286,8 +374,11 @@ impl MyEguiApp {
             show_simulation_settings: false,
             show_mutation_settings: false,
             show_species: false,
+            show_networks: false,
             show_info: false,
             simulation_running: false,
+            selected_network: 0,
+            fonts: Fonts::new(1.0, 2*1024, FontDefinitions::default())
         }
     }
 }
@@ -438,6 +529,31 @@ impl eframe::App for MyEguiApp {
             });
         });
         egui::Window::new("Species").open(&mut self.show_species).show(ctx, |ui| {});
+        egui::Window::new("Networks").open(&mut self.show_networks).show(ctx, |ui| {
+            let specie_ids = &self.stats.species.species.iter().map(|specie| specie.id).collect::<Vec<u32>>();
+            if specie_ids.len() == 0 {
+                ui.label("No networks yet");
+                return;
+            }
+            ui.horizontal(|ui| {
+                egui::ComboBox::from_label("Specie")
+                    .selected_text(format!("{:?}", self.selected_network))
+                    .show_ui(ui, |ui| {
+                        for specie_id in specie_ids {
+                            ui.selectable_value(&mut self.selected_network, *specie_id, format!("{:?}", specie_id));
+                        }
+                    });
+                if ui.button("Next").clicked() {
+                    self.selected_network = specie_ids[(specie_ids.iter().position(|id| *id == self.selected_network).unwrap() + 1) % specie_ids.len()];
+                }
+                if ui.button("Previous").clicked() {
+                    self.selected_network = specie_ids[(specie_ids.iter().position(|id| *id == self.selected_network).unwrap() + specie_ids.len() - 1) % specie_ids.len()];
+                }
+            });
+            if let Some(selected_specie) = self.stats.species.species.iter().find(|specie| specie.id == self.selected_network) {
+                draw_neural_network(ui, &self.fonts, selected_specie.id, &selected_specie.leader_network.get_nodes(), &selected_specie.leader_network.get_active_connections());
+            }
+        });
         egui::Window::new("Info").open(&mut self.show_info).show(ctx, |ui| {
             ui.label("Press 's' to add one snake");
             ui.label("Press 'a' to stop simulation and advance one frame (useful for debug)");
@@ -518,6 +634,9 @@ impl eframe::App for MyEguiApp {
                 }
                 if ui.button("Species").clicked() {
                     self.show_species = !self.show_species;
+                }
+                if ui.button("Networks").clicked() {
+                    self.show_networks = !self.show_networks;
                 }
                 if ui.button("Info").clicked() {
                     self.show_info = !self.show_info;
