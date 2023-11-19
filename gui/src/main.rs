@@ -107,7 +107,7 @@ fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Po
     engine_events.events.lock().unwrap().send(EngineEvent::DrawData { hexes: all_hexes, stats: stats.clone() });
 }
 
-fn draw_neural_network(ui: &mut Ui, fonts: &Fonts, specie_id: u32, nodes: &Vec<&NodeGene>, connections: &Vec<&ConnectionGene>){
+fn draw_neural_network(ui: &mut Ui, fonts: &Fonts, specie_id: u32, nodes: &Vec<&NodeGene>, connections: &Vec<&ConnectionGene>) {
     Frame::canvas(ui.style()).show(ui, |ui| {
         let (mut response, _) =
             ui.allocate_painter(ui.available_size_before_wrap(), Sense::drag());
@@ -127,6 +127,8 @@ fn draw_neural_network(ui: &mut Ui, fonts: &Fonts, specie_id: u32, nodes: &Vec<&
             stroke: Default::default(),
         });
 
+        let input_colors = vec![Color32::LIGHT_GRAY, Color32::DARK_GRAY, Color32::KHAKI, Color32::KHAKI, Color32::KHAKI, Color32::YELLOW, Color32::YELLOW, Color32::YELLOW, Color32::RED, Color32::RED, Color32::RED, Color32::LIGHT_RED, Color32::LIGHT_RED, Color32::LIGHT_RED, Color32::YELLOW, Color32::RED, Color32::BLUE, Color32::GRAY];
+
         let input_node_shapes: Vec<Shape> = input_nodes.iter().enumerate().map(|(index, node)| {
             let position = get_node_position(index, NodeType::Input);
             let screen_position = to_screen * position;
@@ -134,7 +136,7 @@ fn draw_neural_network(ui: &mut Ui, fonts: &Fonts, specie_id: u32, nodes: &Vec<&
             let circle = Circle(CircleShape {
                 center: screen_position,
                 radius: 0.02 * response.rect.height(), // Using the normalized radius for the screen
-                fill: Color32::LIGHT_BLUE,
+                fill: input_colors[index],
                 stroke: Default::default(),
             });
             circle
@@ -164,7 +166,7 @@ fn draw_neural_network(ui: &mut Ui, fonts: &Fonts, specie_id: u32, nodes: &Vec<&
             };
             Shape::line_segment(
                 [from_screen_position, to_screen_position],
-                Stroke::new(connection.weight.abs()/30.0 * response.rect.height(), color),
+                Stroke::new(connection.weight.abs() / 30.0 * response.rect.height(), color),
             )
         }).collect();
         let painter = ui.painter();
@@ -176,7 +178,7 @@ fn draw_neural_network(ui: &mut Ui, fonts: &Fonts, specie_id: u32, nodes: &Vec<&
     });
 }
 
-fn get_node_position(index: usize, node_type: NodeType) -> Pos2{
+fn get_node_position(index: usize, node_type: NodeType) -> Pos2 {
     match node_type {
         NodeType::Input => {
             Pos2 { x: 0.15, y: 0.1 + index as f32 * 0.075 }
@@ -378,7 +380,7 @@ impl MyEguiApp {
             show_info: false,
             simulation_running: false,
             selected_network: 0,
-            fonts: Fonts::new(1.0, 2*1024, FontDefinitions::default())
+            fonts: Fonts::new(1.0, 2 * 1024, FontDefinitions::default()),
         }
     }
 }
@@ -553,6 +555,41 @@ impl eframe::App for MyEguiApp {
                 if ui.button("Previous").clicked() {
                     self.selected_network = specie_ids[(specie_ids.iter().position(|id| *id == self.selected_network).unwrap() + specie_ids.len() - 1) % specie_ids.len()];
                 }
+            });
+            ui.collapsing("Information", |ui| {
+                ui.label("Green connections mean that the weight is positive, red connections mean that the weight is negative. The thicker the connection, the higher the weight.");
+                ui.label("Positive weight means the snake wants to do the given action if it encounters this sensory input.");
+                ui.label("Bias is a constant value of 1.0, chaos is a random number from range 0.0 .. 1.0 generated each tick");
+                ui.label("Network cost is the energy it takes each turn to 'think'");
+
+                ui.horizontal(|ui| {
+                    ui.label(
+               r#"Input Nodes:
+                    bias
+                    chaos
+                    scent_front
+                    scent_left
+                    scent_right
+                    plant_vision_front
+                    plant_vision_left
+                    plant_vision_right
+                    meat_vision_front
+                    meat_vision_left
+                    meat_vision_right
+                    solid_vision_front
+                    solid_vision_left
+                    solid_vision_right
+                    plant_food_level
+                    meat_food_level
+                    energy_level
+                    age_level"#);
+                    ui.label(
+               r#"Output Nodes
+                    Move Forward
+                    Move Left
+                    Move Right
+                    Wait"#);
+                });
             });
             if let Some(selected_specie) = self.stats.species.species.iter().find(|specie| specie.id == self.selected_network) {
                 ui.label(format!("Network run cost: {}", selected_specie.leader_network.run_cost()));
