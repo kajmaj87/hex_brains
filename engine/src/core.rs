@@ -773,6 +773,7 @@ fn remove_snake_from_species(species: &mut ResMut<Species>, head_id: Entity, sna
             specie.members.retain(|s| *s != head_id);
             if let Some(new_leader) = specie.members.pop_front() {
                 specie.leader = new_leader;
+                specie.leader_network = snake.brain.get_neural_network().unwrap().clone();
                 debug!("New leader for specie {:?}: {:?}", specie.id, specie.leader);
             } else {
                 let specie_id = specie.id;

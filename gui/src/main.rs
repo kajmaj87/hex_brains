@@ -171,9 +171,9 @@ fn draw_neural_network(ui: &mut Ui, fonts: &Fonts, specie_id: u32, nodes: &Vec<&
         }).collect();
         let painter = ui.painter();
         painter.extend(vec![specie_marker]);
+        painter.extend(connection_shapes);
         painter.extend(input_node_shapes);
         painter.extend(output_node_shapes);
-        painter.extend(connection_shapes);
         response
     });
 }

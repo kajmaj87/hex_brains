@@ -183,8 +183,8 @@ impl NeuralNetwork {
 
     pub fn run_cost(&self) -> f32 {
         let active_connections = self.get_active_connections();
-        let think_cost = active_connections.len() as f32 * 0.1 + active_connections.iter().map(|c| c.weight.abs()).sum::<f32>() * 0.05;
-        think_cost.max(1.0)
+        let think_cost = active_connections.len() as f32 * 0.05 + active_connections.iter().map(|c| c.weight.abs()).sum::<f32>() * 0.1;
+        think_cost + 0.5
     }
 
     pub fn run(&self, inputs: Vec<SensorInput>) -> Vec<f32> {
