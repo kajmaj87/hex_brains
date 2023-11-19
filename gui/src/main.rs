@@ -535,6 +535,10 @@ impl eframe::App for MyEguiApp {
                 ui.label("No networks yet");
                 return;
             }
+            let selected_specie_in_list = specie_ids.contains(&self.selected_network);
+            if !selected_specie_in_list {
+                self.selected_network = specie_ids[0];
+            }
             ui.horizontal(|ui| {
                 egui::ComboBox::from_label("Specie")
                     .selected_text(format!("{:?}", self.selected_network))
