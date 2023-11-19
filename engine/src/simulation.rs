@@ -191,6 +191,17 @@ fn should_simulate_frame(engine_state: Res<EngineState>) -> bool {
     engine_state.ignore_speed_limit || engine_state.speed_limit.is_none() || (engine_state.running && engine_state.frames_left > 0.0)
 }
 
+fn should_calculate_stats(engine_state: Res<EngineState>) -> bool {
+    engine_state.frames % 100 == 0
+}
+fn should_despawn_food(engine_state: Res<EngineState>) -> bool {
+    engine_state.frames % 10 == 0
+}
+
+fn should_increase_age(engine_state: Res<EngineState>) -> bool {
+    engine_state.frames % 10 == 0
+}
+
 impl Simulation {
     pub fn new(name: String, engine_events: Sender<EngineEvent>, engine_commands: Option<Arc<Mutex<Receiver<EngineCommand>>>>, config: SimulationConfig) -> Self {
         let mut world = World::new();
@@ -231,8 +242,8 @@ impl Simulation {
         let mut core_schedule = Schedule::default();
         let mut secondary_schedule = Schedule::default();
         first_schedule.add_systems((assign_species, starve, (assign_missing_segments, create_food, incease_move_potential, process_food), die_from_collisions, grow, add_scents).chain().run_if(should_simulate_frame));
-        core_schedule.add_systems(((think, increase_age, calculate_stats, diffuse_scents, ), (movement, update_positions, split).chain(), eat_food, destroy_old_food).chain().run_if(should_simulate_frame));
-        secondary_schedule.add_systems(((assign_solid_positions, assign_segment_positions), (turn_counter, disperse_scents, despawn_food)).chain().run_if(should_simulate_frame));
+        core_schedule.add_systems(((think, increase_age.run_if(should_increase_age), calculate_stats.run_if(should_calculate_stats), diffuse_scents, ), (movement, update_positions, split).chain(), eat_food, destroy_old_food).chain().run_if(should_simulate_frame));
+        secondary_schedule.add_systems(((assign_solid_positions, assign_segment_positions), (turn_counter, disperse_scents, despawn_food.run_if(should_despawn_food))).chain().run_if(should_simulate_frame));
         let gui_schedule = Schedule::default();
         Simulation { first_schedule, core_schedule, secondary_schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
     }

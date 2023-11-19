@@ -87,14 +87,14 @@ pub enum MutationType {
     ChangeJump
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Gene {
     pub segment_type: SegmentType,
     pub id: usize,
     pub jump: usize,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Dna {
     pub genes: Vec<Gene>,
     pub current_gene: usize,

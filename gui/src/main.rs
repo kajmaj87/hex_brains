@@ -84,19 +84,19 @@ fn draw_simulation(mut engine_events: ResMut<EngineEvents>, positions: Query<&Po
     let all_hexes: Vec<Hex> = solids.iter().map(|(solid, _)| {
         let position = positions.get(solid).unwrap();
         Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::SnakeTail }
-    }).chain(heads.iter().map(|(head, snake)| {
-        let position = positions.get(head).unwrap();
-        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::SnakeHead { specie: snake.species.unwrap_or(0) } }
-    })).chain(segments.iter().map(|(segment_id, segment_type)| {
-        let position = positions.get(segment_id).unwrap();
-        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Segment { segment_type: segment_type.clone() } }
-    })).chain(food.iter().map(|(food_id, food)| {
+    }).chain(food.iter().map(|(food_id, food)| {
         let position = positions.get(food_id).unwrap();
         if food.is_meat() {
             Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Meat }
         } else {
             Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Food }
         }
+    })).chain(heads.iter().map(|(head, snake)| {
+        let position = positions.get(head).unwrap();
+        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::SnakeHead { specie: snake.species.unwrap_or(0) } }
+    })).chain(segments.iter().map(|(segment_id, segment_type)| {
+        let position = positions.get(segment_id).unwrap();
+        Hex { x: position.x as usize, y: position.y as usize, hex_type: HexType::Segment { segment_type: segment_type.clone() } }
     })).chain(scents.iter().map(|(scent, _)| {
         let position = positions.get(scent).unwrap();
         let value = scent_map.map.get(position);
@@ -271,7 +271,7 @@ impl MyEguiApp {
                 plant_matter_per_segment: 100.0,
                 wait_cost: 1.0,
                 move_cost: 10.0,
-                new_segment_cost: 200.0,
+                new_segment_cost: 100.0,
                 size_to_split: 12,
                 species_threshold: 0.2,
                 add_walls: false,
@@ -443,7 +443,7 @@ impl eframe::App for MyEguiApp {
             ui.label("Press '+' to increase speed");
             ui.label("Press '-' to decrease speed");
             ui.label("Press 'tab' to ignore speed limit");
-            ui.label("Press 'space' to pause/resume");
+            ui.label("Press 'p' to pause/resume");
             ui.label("All enabled settings take effect immediately");
             ui.label("To change disabled settings, stop the simulation first");
         });
@@ -539,7 +539,7 @@ impl eframe::App for MyEguiApp {
             if ctx.input(|i| i.key_pressed(Key::Tab)) {
                 self.engine_commands_sender.send(EngineCommand::IgnoreSpeedLimit).unwrap();
             }
-            if ctx.input(|i| i.key_pressed(Key::Space)) {
+            if ctx.input(|i| i.key_pressed(Key::P)) {
                 self.engine_commands_sender.send(EngineCommand::FlipRunningState).unwrap();
             }
             if ctx.input(|i| i.key_pressed(Key::S)) {
