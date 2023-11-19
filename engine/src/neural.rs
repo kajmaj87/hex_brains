@@ -159,11 +159,15 @@ impl NeuralNetwork {
         self.connections[index].enabled = !self.connections[index].enabled;
     }
 
-    pub(crate) fn mutate_random_connection_weight(&mut self, mutation_strength: f32) {
+    pub(crate) fn mutate_random_connection_weight(&mut self, mutation_strength: f32, perturb_disabled_connections: bool) {
         let mut rng = rand::thread_rng();
         let mut index = rng.gen_range(0..self.connections.len());
-        while !self.connections[index].enabled {
+        if perturb_disabled_connections {
             index = rng.gen_range(0..self.connections.len());
+        } else {
+            while !self.connections[index].enabled {
+                index = rng.gen_range(0..self.connections.len());
+            }
         }
         self.connections[index].weight += rng.gen_range(-mutation_strength..mutation_strength);
         debug!("Mutating connection {} to value {}", index, self.connections[index].weight);

@@ -830,7 +830,7 @@ pub fn split(mut commands: Commands, mut snakes: Query<(Entity, &mut Snake)>, se
                     mutations += 1;
                 }
                 if rng.gen_bool(config.mutation.weight_perturbation_chance) {
-                    new_neural_network.mutate_random_connection_weight(config.mutation.weight_perturbation_range);
+                    new_neural_network.mutate_random_connection_weight(config.mutation.weight_perturbation_range, config.mutation.perturb_disabled_connections);
                     mutations += 1;
                 }
                 let mut dna = snake.dna.clone();
