@@ -162,12 +162,12 @@ impl NeuralNetwork {
     pub(crate) fn mutate_random_connection_weight(&mut self, mutation_strength: f32, perturb_disabled_connections: bool) {
         let mut rng = rand::thread_rng();
         let mut index = rng.gen_range(0..self.connections.len());
-        if perturb_disabled_connections {
+        let active_connections = self.get_active_connections();
+        if perturb_disabled_connections || active_connections.is_empty() {
             index = rng.gen_range(0..self.connections.len());
         } else {
-            while !self.connections[index].enabled {
-                index = rng.gen_range(0..self.connections.len());
-            }
+            index = rng.gen_range(0..self.get_active_connections().len());
+            index = self.connections.iter().position(|c| active_connections.get(index).unwrap() == &c).unwrap();
         }
         self.connections[index].weight += rng.gen_range(-mutation_strength..mutation_strength);
         debug!("Mutating connection {} to value {}", index, self.connections[index].weight);
@@ -179,6 +179,12 @@ impl NeuralNetwork {
 
     pub fn get_nodes(&self) -> Vec<&NodeGene> {
         self.nodes.iter().collect()
+    }
+
+    pub fn run_cost(&self) -> f32 {
+        let active_connections = self.get_active_connections();
+        let think_cost = active_connections.len() as f32 * 0.1 + active_connections.iter().map(|c| c.weight.abs()).sum::<f32>() * 0.05;
+        think_cost.max(1.0)
     }
 
     pub fn run(&self, inputs: Vec<SensorInput>) -> Vec<f32> {

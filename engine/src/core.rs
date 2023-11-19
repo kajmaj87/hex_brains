@@ -5,7 +5,7 @@ use bevy_ecs::prelude::*;
 use std::clone::Clone;
 use std::fmt::Debug;
 use bevy_ecs::query::QueryParIter;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use crate::neural::{ConnectionGene, InnovationTracker, NeuralNetwork, SensorInput};
 use crate::simulation::{SimulationConfig, Stats};
 use rand::Rng;
@@ -140,7 +140,7 @@ impl Default for Metabolism {
         Metabolism {
             mobility: 1.0,
             segment_move_cost: 1.0,
-            segment_basic_cost: 1.0,
+            segment_basic_cost: 0.0,
             segment_energy_production: 0.0,
             meat_processing_speed: 0.0,
             plant_processing_speed: 25.0,
@@ -190,7 +190,7 @@ impl Brain for RandomBrain {
 
 impl RandomNeuralBrain {
     pub(crate) fn new(innovation_tracker: &mut InnovationTracker) -> Self {
-        let neural_network = NeuralNetwork::random_brain(18, 0.25, innovation_tracker);
+        let neural_network = NeuralNetwork::random_brain(18, 0.1, innovation_tracker);
         Self {
             neural_network
         }
@@ -434,7 +434,10 @@ pub fn movement(mut snakes: Query<(Entity, &mut Snake, &Position, &Age)>, config
             debug!("Removing more energy for thinking: {}", snake.metabolism.segment_basic_cost / age.efficiency_factor);
         }
         snake.energy.energy -= snake.metabolism.segment_basic_cost / age.efficiency_factor;
-        snake.energy.energy += snake.metabolism.segment_energy_production * age.efficiency_factor;
+        // very old snakes wont produce energy anymore
+        if age.efficiency_factor > 0.2 {
+            snake.energy.energy += snake.metabolism.segment_energy_production * age.efficiency_factor;
+        }
     }
 }
 
@@ -765,20 +768,23 @@ fn remove_segment_and_transform_to_food(mut commands: &mut Commands, positions: 
 
 fn remove_snake_from_species(species: &mut ResMut<Species>, head_id: Entity, snake: &mut Mut<Snake>) {
     let specie = snake.species.unwrap();
-    let mut specie = species.species.iter_mut().find(|s| s.id == specie).unwrap();
-    if specie.leader == head_id {
-        specie.members.retain(|s| *s != head_id);
-        if let Some(new_leader) = specie.members.pop_front() {
-            specie.leader = new_leader;
-            debug!("New leader for specie {:?}: {:?}", specie.id, specie.leader);
+    if let Some(mut specie) = species.species.iter_mut().find(|s| s.id == specie) {
+        if specie.leader == head_id {
+            specie.members.retain(|s| *s != head_id);
+            if let Some(new_leader) = specie.members.pop_front() {
+                specie.leader = new_leader;
+                debug!("New leader for specie {:?}: {:?}", specie.id, specie.leader);
+            } else {
+                let specie_id = specie.id;
+                debug!("Specie {:?} is extinct", specie_id);
+                species.species.retain(|s| s.id != specie_id);
+            }
         } else {
-            let specie_id = specie.id;
-            debug!("Specie {:?} is extinct", specie_id);
-            species.species.retain(|s| s.id != specie_id);
+            specie.members.retain(|s| *s != head_id);
+            debug!("Snake {:?} died and was removed from specie {:?}", head_id, specie.id);
         }
     } else {
-        specie.members.retain(|s| *s != head_id);
-        debug!("Snake {:?} died and was removed from specie {:?}", head_id, specie.id);
+        warn!("Snake {:?} died and was not found in any specie", head_id);
     }
 }
 
@@ -901,6 +907,9 @@ fn recalculate_snake_params(snake: &mut Snake, segments: &Query<&SegmentType>, c
     snake.metabolism.segment_move_cost += move_cost;
     snake.metabolism.segment_basic_cost += segment_basic_cost;
     snake.metabolism.segment_energy_production += segment_energy_production;
+    if let Some(network) = snake.brain.get_neural_network() {
+        snake.metabolism.segment_basic_cost += network.run_cost();
+    }
 }
 
 pub fn increase_age(mut agables: Query<&mut Age>, config: Res<SimulationConfig>) {
@@ -913,7 +922,6 @@ pub fn increase_age(mut agables: Query<&mut Age>, config: Res<SimulationConfig>)
         }
     }
 }
-
 pub fn calculate_stats(entities: Query<Entity>, scents: Query<&Scent>, food: Query<&Food>, snakes: Query<(&Snake, &Age)>, segments: Query<&SegmentType>, mut stats: ResMut<Stats>, species: Res<Species>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     let max_age = snakes.iter().map(|(_, a)| a.age).reduce(|a, b| a.max(b));

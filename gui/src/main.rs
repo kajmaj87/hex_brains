@@ -555,6 +555,7 @@ impl eframe::App for MyEguiApp {
                 }
             });
             if let Some(selected_specie) = self.stats.species.species.iter().find(|specie| specie.id == self.selected_network) {
+                ui.label(format!("Network run cost: {}", selected_specie.leader_network.run_cost()));
                 draw_neural_network(ui, &self.fonts, selected_specie.id, &selected_specie.leader_network.get_nodes(), &selected_specie.leader_network.get_active_connections());
             }
         });
