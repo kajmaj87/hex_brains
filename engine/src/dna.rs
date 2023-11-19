@@ -36,7 +36,7 @@ impl SegmentType {
         SegmentType::Solar(Segment {
             energy_cost_move: 1.0,
             energy_cost_always: -0.1,
-            mobility: 0.5,
+            mobility: 0.2,
         })
     }
 
@@ -75,8 +75,8 @@ impl SegmentType {
     }
 }
 
-fn all_segment_types() -> [SegmentType; 3] {
-    [SegmentType::muscle(), SegmentType::solid(), SegmentType::stomach()]
+fn all_segment_types() -> [SegmentType; 4] {
+    [SegmentType::muscle(), SegmentType::solid(), SegmentType::solar(), SegmentType::stomach()]
 }
 
 
