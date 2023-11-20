@@ -161,7 +161,7 @@ pub struct JustBorn;
 #[derive(Debug)]
 pub struct RandomBrain;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RandomNeuralBrain {
     neural_network: NeuralNetwork,
 }
@@ -403,6 +403,7 @@ pub fn movement(mut snakes: Query<(Entity, &mut Snake, &Position, &Age)>, config
     puffin::profile_function!();
 
     for (_, mut snake, head_position, age) in &mut snakes {
+        debug!("Energy before move: {:?}, (eff: {}, age: {})", snake.energy.energy, age.efficiency_factor, age.age);
         if snake.energy.move_potential >= 1.0 {
             let move_cost = snake.metabolism.segment_move_cost / age.efficiency_factor;
             match snake.decision {
@@ -430,14 +431,15 @@ pub fn movement(mut snakes: Query<(Entity, &mut Snake, &Position, &Age)>, config
             }
             snake.energy.move_potential -= 1.0;
         }
-        if age.efficiency_factor < 1.0 {
-            debug!("Removing more energy for thinking: {}", snake.metabolism.segment_basic_cost / age.efficiency_factor);
-        }
         snake.energy.energy -= snake.metabolism.segment_basic_cost / age.efficiency_factor;
+        // snake.energy.energy -= snake.brain.get_neural_network().unwrap().run_cost();
         // very old snakes wont produce energy anymore
         if age.efficiency_factor > 0.2 {
             snake.energy.energy += snake.metabolism.segment_energy_production * age.efficiency_factor;
+        } else {
+            debug!("Snake {:#?} is too old to produce energy", snake);
         }
+        debug!("Energy after move: {:?}, (eff: {}, age: {})", snake.energy.energy, age.efficiency_factor, age.age);
     }
 }
 
@@ -909,7 +911,15 @@ fn recalculate_snake_params(snake: &mut Snake, segments: &Query<&SegmentType>, c
     snake.metabolism.segment_basic_cost += segment_basic_cost;
     snake.metabolism.segment_energy_production += segment_energy_production;
     if let Some(network) = snake.brain.get_neural_network() {
+        if network.run_cost() == 0.0 {
+            panic!("Neural network run cost is 0.0")
+        }
         snake.metabolism.segment_basic_cost += network.run_cost();
+    } else {
+        panic!("Snake without neural network");
+    }
+    if snake.metabolism.segment_basic_cost == 0.0 {
+        panic!("Snake with 0.0 segment basic cost");
     }
 }
 
@@ -945,9 +955,9 @@ pub fn calculate_stats(entities: Query<Entity>, scents: Query<&Scent>, food: Que
     stats.total_energy = stats.total_snake_energy + stats.total_plants * config.plant_energy_content + stats.total_meat * config.meat_energy_content;
 }
 
-pub fn process_food(mut snake: Query<&mut Snake>, config: Res<SimulationConfig>) {
+pub fn process_food(mut snake: Query<(&mut Snake, &Age)>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
-    for mut snake in &mut snake {
+    for (mut snake, age) in &mut snake {
         debug!("Snake energy at start: {}", snake.energy.energy);
         if snake.energy.energy < snake.metabolism.max_energy {
             let eaten_plants = snake.energy.plant_in_stomach.min(snake.metabolism.plant_processing_speed);
@@ -955,9 +965,9 @@ pub fn process_food(mut snake: Query<&mut Snake>, config: Res<SimulationConfig>)
             let eaten_meat = snake.energy.meat_in_stomach.min(snake.metabolism.meat_processing_speed);
             snake.energy.meat_in_stomach -= eaten_meat;
             debug!("Snake ate {} plants and {} meat and now has {} plants and {} meat in stomach", eaten_plants, eaten_meat, snake.energy.plant_in_stomach, snake.energy.meat_in_stomach);
-            let plant_energy_gain = eaten_plants * config.plant_energy_content;
-            let meat_energy_gain = eaten_meat * config.meat_energy_content;
-            debug!("Snake energy gain: {} from plants and {} from meat", plant_energy_gain, meat_energy_gain);
+            let plant_energy_gain = eaten_plants * config.plant_energy_content * age.efficiency_factor;
+            let meat_energy_gain = eaten_meat * config.meat_energy_content * age.efficiency_factor;
+            debug!("Snake energy gain: {} from plants and {} from meat (eff: {}, age: {})", plant_energy_gain, meat_energy_gain, age.efficiency_factor, age.age);
             snake.energy.energy += plant_energy_gain + meat_energy_gain;
         }
         if snake.energy.energy > 3.0 * snake.metabolism.max_energy / 4.0 {
@@ -1072,8 +1082,10 @@ fn calculate_gene_difference(leader: &NeuralNetwork, new_snake: &NeuralNetwork) 
     debug!("Matching genes: {}, max genes: {}, gene difference: {}, weight difference: {}", matching_genes_count, max_genes, gene_difference, weight_difference);
     0.6 * gene_difference + 0.4 * weight_difference
 }
-
 pub fn create_snake(meat_matter: f32, position: (i32, i32), brain: Box<dyn Brain>, dna: Dna) -> (Position, MeatMatter, Snake, Age, JustBorn) {
+    if brain.get_neural_network().is_none() {
+        panic!("Brain without neural network");
+    }
     let (head, age, just_born) = create_head(position, brain, 0, 0, dna);
     (Position { x: position.0, y: position.1 }, MeatMatter { amount: meat_matter }, head, age, just_born)
 }

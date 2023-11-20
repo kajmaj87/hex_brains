@@ -170,10 +170,36 @@ fn draw_neural_network(ui: &mut Ui, fonts: &Fonts, specie_id: u32, nodes: &Vec<&
             )
         }).collect();
         let painter = ui.painter();
+        let input_node_names = vec![
+            "bias",
+            "chaos",
+            "scent front",
+            "scent left",
+            "scent right",
+            "plant v. front",
+            "plant v. left",
+            "plant v. right",
+            "meat v. front",
+            "meat v. left",
+            "meat v. right",
+            "solid v. front",
+            "solid v. left",
+            "solid v. right",
+            "plant food level",
+            "meat food level",
+            "energy level",
+            "age level"];
+        let output_node_names = vec!["move forward", "move left", "move right", "wait"];
         painter.extend(vec![specie_marker]);
         painter.extend(connection_shapes);
         painter.extend(input_node_shapes);
         painter.extend(output_node_shapes);
+        input_node_names.iter().enumerate().for_each(|(i, name)| {
+            painter.text(to_screen * (get_node_position(i, NodeType::Input) - Vec2{ x: 0.05, y: 0.0 }), Align2::RIGHT_CENTER, name, FontId::new(12.0, FontFamily::Monospace), Color32::WHITE);
+        });
+        output_node_names.iter().enumerate().for_each(|(i, name)| {
+            painter.text(to_screen * (get_node_position(i, NodeType::Output) + Vec2{ x: 0.05, y: 0.0 }), Align2::LEFT_CENTER, name, FontId::new(12.0, FontFamily::Monospace), Color32::WHITE);
+        });
         response
     });
 }
@@ -181,7 +207,7 @@ fn draw_neural_network(ui: &mut Ui, fonts: &Fonts, specie_id: u32, nodes: &Vec<&
 fn get_node_position(index: usize, node_type: NodeType) -> Pos2 {
     match node_type {
         NodeType::Input => {
-            Pos2 { x: 0.15, y: 0.1 + index as f32 * 0.075 }
+            Pos2 { x: 0.25, y: 0.1 + index as f32 * 0.075 }
         }
         NodeType::Hidden => {
             Pos2 { x: 0.5, y: 0.1 + index as f32 * 0.075 }
@@ -564,27 +590,10 @@ impl eframe::App for MyEguiApp {
 
                 ui.horizontal(|ui| {
                     ui.label(
-               r#"Input Nodes:
-                    bias
-                    chaos
-                    scent_front
-                    scent_left
-                    scent_right
-                    plant_vision_front
-                    plant_vision_left
-                    plant_vision_right
-                    meat_vision_front
-                    meat_vision_left
-                    meat_vision_right
-                    solid_vision_front
-                    solid_vision_left
-                    solid_vision_right
-                    plant_food_level
-                    meat_food_level
-                    energy_level
-                    age_level"#);
+                        r#"Input Nodes:
+                    "#);
                     ui.label(
-               r#"Output Nodes
+                        r#"Output Nodes
                     Move Forward
                     Move Left
                     Move Right

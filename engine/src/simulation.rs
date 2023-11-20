@@ -1,4 +1,4 @@
-use crate::core::{assign_segment_positions, despawn_food, Food, incease_move_potential, Map2d, Map3d, process_food, ScentMap, SegmentMap};
+use crate::core::{assign_segment_positions, Brain, despawn_food, Food, incease_move_potential, Map2d, Map3d, process_food, ScentMap, SegmentMap};
 use std::sync::Arc;
 use std::f32::consts::PI;
 use crate::core::{add_scents, assign_solid_positions, destroy_old_food, diffuse_scents, disperse_scents, Solid};
@@ -300,7 +300,9 @@ impl Simulation {
                                 let x = rng.gen_range(0..config.columns) as i32;
                                 let y = rng.gen_range(0..config.rows) as i32;
                                 {
-                                    self.world.spawn(create_snake(100.0, (x, y), Box::new(brain), Dna::random(8)));
+                                    let (a,b,mut c,d,e) = create_snake(100.0, (x, y), Box::new(brain.clone()), Dna::random(8));
+                                    c.metabolism.segment_basic_cost = brain.get_neural_network().unwrap().run_cost();
+                                    self.world.spawn((a,b,c,d,e));
                                 }
                             }
                         }
