@@ -97,6 +97,9 @@ pub struct MutationConfig {
     pub perturb_disabled_connections: bool,
     pub connection_flip_chance: f64,
     pub dna_mutation_chance: f64,
+    pub weight_reset_chance: f64,
+    pub weight_reset_range: f32,
+    pub perturb_reset_connections: bool
 }
 
 impl Default for MutationConfig {
@@ -117,6 +120,9 @@ impl Default for MutationConfig {
             perturb_disabled_connections: false,
             connection_flip_chance: 0.3,
             dna_mutation_chance: 0.5,
+            weight_reset_chance: 0.1,
+            weight_reset_range: 1.0,
+            perturb_reset_connections: true,
             meat_vision_front_range: 5,
             meat_vision_left_range: 3,
             meat_vision_right_range: 3,

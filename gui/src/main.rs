@@ -548,6 +548,15 @@ impl eframe::App for MyEguiApp {
             });
             ui.add(egui::Checkbox::new(&mut self.simulation_config.mutation.perturb_disabled_connections, "Perturb disabled connections"));
             ui.horizontal(|ui| {
+                ui.label("Weights reset chance");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.weight_reset_chance).speed(1.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Weights reset range");
+                ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.weight_reset_range).speed(1.0));
+            });
+            ui.add(egui::Checkbox::new(&mut self.simulation_config.mutation.perturb_disabled_connections, "Perturb reset connections"));
+            ui.horizontal(|ui| {
                 ui.label("Connection flip chance");
                 ui.add(egui::DragValue::new(&mut self.simulation_config.mutation.connection_flip_chance).speed(1.0));
             });
