@@ -30,6 +30,11 @@ RUN apt-get install -y \
 RUN apt-get install -y \
     libasound2
 
+# Install mingw-w64 for Windows cross-compilation
+RUN apt-get update && apt-get install -y \
+    gcc-mingw-w64 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Clean up apt cache to reduce image size
 RUN rm -rf /var/lib/apt/lists/*
 
