@@ -49,14 +49,12 @@ jobs:
         id: set-image
         run: echo "image=ghcr.io/${{ github.repository }}/hex-brains-builder:${{ github.sha }}" >> $GITHUB_OUTPUT
 
-  # Job 2: Build the Rust project in the shared container across multiple targets (parallel matrix)
-  # Uses cargo build --release; caches dependencies; uploads binaries as artifacts
+  # Job 2: Build the Rust project using the shared Docker image via volume mount (avoids containerized actions)
+  # Checkout and cache on host; run cargo build inside container with mounted workspace for consistency
   build:
     name: Build Project
-    runs-on: ubuntu-latest  # Host VM (Docker runtime); steps run in container below
+    runs-on: ubuntu-latest  # Host VM with Docker; build runs via docker run
     needs: setup  # Depends on image build
-    container:
-      image: ${{ needs.setup.outputs.image }}  # Always uses the custom pushed image from GHCR (fails loudly if build/push failed)
     strategy:
       fail-fast: false
       matrix:
@@ -65,25 +63,33 @@ jobs:
 #          - wasm32-unknown-unknown
           - x86_64-pc-windows-gnu
     steps:
-      - name: Verify Environment (for logging)
-        run: |
-          rustc --version  # Should match local devcontainer
-          uname -a  # Debian base from Dockerfile
-          echo "Running in container: $(cat /etc/os-release)"
       - uses: actions/checkout@v4
-      - name: Install Rust Targets (if needed for cross-compile)
+      - name: Install Rust Targets (for host cache setup)
         run: rustup target add ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: cargo-build-target-${{ matrix.target }}  # Simplified key (no OS, since containerized)
-      - uses: actions-rs/cargo@v1
+          cache-on-failure: true
+          workspaces: "engine -> target/${{ matrix.target }}/deps; gui -> target/${{ matrix.target }}/deps"
+          prefix-key: "cargo-build-target-${{ matrix.target }}-${{ runner.os }}"
+      - name: Log in to GHCR (for pulling the image)
+        uses: docker/login-action@v3
         with:
-          command: build
-          args: --workspace --release --target ${{ matrix.target }}
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build with Cargo in Container
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -v ${{ github.workspace }}/target/${{ matrix.target }}:/workspace/target/${{ matrix.target }} \
+            -w /workspace \
+            ${{ needs.setup.outputs.image }} \
+            bash -c "rustup target add ${{ matrix.target }} && cargo build --workspace --release --target ${{ matrix.target }}"
         env:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_HEAD_REF: ${{ github.head_ref }}
-      - run: mv target/${{ matrix.target }}/release/hex_brains_gui* .
+      - name: Prepare Artifact
+        run: mv target/${{ matrix.target }}/release/hex_brains_gui* .
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
