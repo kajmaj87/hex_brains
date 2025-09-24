@@ -1,3 +1,4 @@
+# Trigger the workflow on pushes or PRs to the master branch
 on:
   push:
     branches:
@@ -6,34 +7,75 @@ on:
     branches:
       - master
 
+# Permissions for pushing to GitHub Container Registry (ghcr.io)
+permissions:
+  contents: read
+  packages: write
+
 name: Continuous integration
 
 jobs:
+  # Job 1: Build a shared Docker image from .devcontainer/Dockerfile for consistent CI environment
+  # This ensures reproducibility across build targets; image is loaded locally (no push to registry)
+  setup:
+    name: Build Shared Environment Image
+    runs-on: ubuntu-latest  # Host VM only (provides Docker)
+    outputs:
+      image: ${{ steps.set-image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v3
+
+      # Log in to GitHub Container Registry for pushing/pulling the custom image
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Always build and push custom image (pulls existing if available, rebuilds changed layers only)
+      # Fast due to layer cache; unique tag ensures versioned reproducibility; fails loudly if Dockerfile issues
+      - name: Build and Push Docker Image from Dockerfile
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .devcontainer
+          file: .devcontainer/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}/hex-brains-builder:${{ github.sha }}
+
+      # Set output to the full tagged image for use in build job
+      - name: Set image output
+        id: set-image
+        run: echo "image=ghcr.io/${{ github.repository }}/hex-brains-builder:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+  # Job 2: Build the Rust project in the shared container across multiple targets (parallel matrix)
+  # Uses cargo build --release; caches dependencies; uploads binaries as artifacts
   build:
-    name: Build
-    runs-on: ubuntu-latest
+    name: Build Project
+    runs-on: ubuntu-latest  # Host VM (Docker runtime); steps run in container below
+    needs: setup  # Depends on image build
     container:
-      image: docker://kajmaj87/rust-builder:latest
+      image: ${{ needs.setup.outputs.image }}  # Always uses the custom pushed image from GHCR (fails loudly if build/push failed)
     strategy:
       fail-fast: false
       matrix:
-        rust:
-          - stable
         target:
           - x86_64-unknown-linux-gnu
 #          - wasm32-unknown-unknown
           - x86_64-pc-windows-gnu
     steps:
+      - name: Verify Environment (for logging)
+        run: |
+          rustc --version  # Should match local devcontainer
+          uname -a  # Debian base from Dockerfile
+          echo "Running in container: $(cat /etc/os-release)"
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ matrix.rust }}
-          target: ${{ matrix.target }}
-          override: true
+      - name: Install Rust Targets (if needed for cross-compile)
+        run: rustup target add ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ runner.os }}-cargo-build-target-${{ matrix.target }}
+          shared-key: cargo-build-target-${{ matrix.target }}  # Simplified key (no OS, since containerized)
       - uses: actions-rs/cargo@v1
         with:
           command: build
@@ -41,15 +83,17 @@ jobs:
         env:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_HEAD_REF: ${{ github.head_ref }}
-      - run: mv target/${{ matrix.target}}/release/hex_brains_gui* .
+      - run: mv target/${{ matrix.target }}/release/hex_brains_gui* .
       - name: Upload Artifact
-        id: upload-artifact
         uses: actions/upload-artifact@v2
         with:
           name: hex-brains-${{ matrix.target }}
           path: |
             hex_brains_gui*
             !hex_brains_gui.d
+
+  # Job 3: Send notification to Discord on build completion
+  # Uses webhook secret; provides status, commit info, and artifact links
   notify:
     name: Notify
     runs-on: ubuntu-latest
@@ -64,4 +108,3 @@ jobs:
             Build succeeded! :white_check_mark:
             Commit Message: "${{ github.event.head_commit.message }}"
             Artifacts: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            Status: ${{ job.status }}

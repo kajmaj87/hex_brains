@@ -1,12 +1,23 @@
 {
     "name": "Rust Dev Container",
-    "image": "mcr.microsoft.com/devcontainers/rust:1@sha256:6dc904cfd55a32deb51907c7101e0e4fc6ecf31bcd139439f0962a0b79332add",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+    },
+    "runArgs": [
+        "--volume=/tmp/.X11-unix:/tmp/.X11-unix",
+        "--device=/dev/dri"
+    ],
     "features": {},
+    "containerEnv": {
+        "DISPLAY": ":0"
+    },
     "customizations": {
         "vscode": {
             "extensions": [
                 "rust-lang.rust-analyzer",
-                "kilocode.kilo-code"
+                "kilocode.kilo-code",
+                "ms-azuretools.vscode-containers"
             ]
         }
     }
