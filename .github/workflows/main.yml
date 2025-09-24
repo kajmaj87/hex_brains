@@ -60,7 +60,6 @@ jobs:
       matrix:
         target:
           - x86_64-unknown-linux-gnu
-#          - wasm32-unknown-unknown
           - x86_64-pc-windows-gnu
     steps:
       - uses: actions/checkout@v4
@@ -79,7 +78,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build with Cargo in Container
         run: |
+          mkdir -p target/${{ matrix.target }}
           docker run --rm \
+            --user $(id -u):$(id -g) \
             -v ${{ github.workspace }}:/workspace \
             -v ${{ github.workspace }}/target/${{ matrix.target }}:/workspace/target/${{ matrix.target }} \
             -w /workspace \
