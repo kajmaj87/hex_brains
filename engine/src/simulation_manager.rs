@@ -1,6 +1,5 @@
 use crate::simulation::{EngineEvent, Simulation};
 use rayon::prelude::*;
-use std::sync::mpsc::{channel, Sender};
 
 pub fn simulate_batch(simulations: Vec<Simulation>) -> Vec<EngineEvent> {
     // let simulations: Vec<Simulation> = (0..num_simulations)

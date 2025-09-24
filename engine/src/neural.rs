@@ -1,8 +1,7 @@
 use bevy_ecs::prelude::Resource;
 use rand::Rng;
-use rayon::join;
 use std::collections::HashMap;
-use tracing::{debug, info};
+use tracing::debug;
 
 // Define a trait that all sensor inputs will implement.
 #[derive(Debug, Clone)]
@@ -308,7 +307,7 @@ impl NeuralNetwork {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
     //
     // struct FloatInput {
     //     value: f32,

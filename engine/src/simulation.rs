@@ -5,8 +5,7 @@ use crate::core::{
 };
 use crate::core::{
     assign_missing_segments, assign_species, calculate_stats, create_food, create_snake, eat_food,
-    grow, increase_age, movement, reproduce, split, starve, think, update_positions, Decision,
-    Direction, FoodMap, Position, RandomBrain, RandomNeuralBrain, Snake, Species,
+    grow, increase_age, movement, split, starve, think, update_positions, FoodMap, Position, RandomNeuralBrain, Species,
 };
 use crate::core::{
     assign_segment_positions, despawn_food, incease_move_potential, process_food, Brain, Food,
@@ -16,7 +15,6 @@ use crate::dna::{Dna, SegmentType};
 use crate::neural::InnovationTracker;
 use bevy_ecs::prelude::{IntoSystemConfigs, Res, ResMut, Resource, Schedule, World};
 use rand::{thread_rng, Rng};
-use std::f32::consts::PI;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::sync::Mutex;

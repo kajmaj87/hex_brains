@@ -3,14 +3,12 @@ use crate::dna::{Dna, SegmentType};
 use crate::neural::{ConnectionGene, InnovationTracker, NeuralNetwork, SensorInput};
 use crate::simulation::{SimulationConfig, Stats};
 use bevy_ecs::prelude::*;
-use bevy_ecs::query::QueryParIter;
 use rand::prelude::SliceRandom;
 use rand::Rng;
-use std::cell::RefCell;
 use std::clone::Clone;
-use std::collections::{HashMap, LinkedList, VecDeque};
+use std::collections::VecDeque;
 use std::fmt::Debug;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 #[derive(Component, Clone, Default, Debug)]
 pub struct Position {
@@ -460,7 +458,7 @@ pub fn update_positions(
     mut commands: Commands,
     mut positions: Query<&mut Position>,
     mut snakes: Query<(Entity, &mut Snake)>,
-    mut solids_map: ResMut<SolidsMap>,
+    solids_map: ResMut<SolidsMap>,
 ) {
     puffin::profile_function!();
     for (head_id, mut snake) in &mut snakes {
@@ -469,7 +467,7 @@ pub fn update_positions(
             .get_mut(*snake.segments.last().unwrap())
             .unwrap()
             .clone();
-        let mut head_position = positions.get_mut(head_id).unwrap();
+        let head_position = positions.get_mut(head_id).unwrap();
         debug!(
             "Snake {:?} with {} segements is moving from {:?} to {:?} (last tail position: {:?})",
             head_id,
@@ -507,7 +505,7 @@ pub fn update_positions(
 }
 
 fn update_segment_positions(
-    mut positions: &mut Query<&mut Position>,
+    positions: &mut Query<&mut Position>,
     new_position: Position,
     segments: &Vec<Entity>,
 ) {
@@ -819,7 +817,7 @@ pub fn add_scents(
                 "Adding scent at position {:?} with energy {}",
                 position, meat.amount
             );
-            let mut current_scent = scent_map.map.get_mut(position);
+            let current_scent = scent_map.map.get_mut(position);
             if current_scent <= &mut 0.0 {
                 debug!(
                     "Adding scent at position {:?} with energy {}",
@@ -858,7 +856,7 @@ pub fn diffuse_scents(
         let new_position = &position_at_direction(random_direction, &position, &config);
         let diffused_scent = scent_map.map.get(position) * config.scent_diffusion_rate;
         *scent_map.map.get_mut(position) -= diffused_scent;
-        let mut new_scent = scent_map.map.get_mut(new_position);
+        let new_scent = scent_map.map.get_mut(new_position);
         if new_scent <= &mut 0.0 {
             debug!(
                 "Adding scent throuhg diffusion at position {:?} with energy {}",
@@ -890,7 +888,7 @@ pub fn disperse_scents(
 ) {
     puffin::profile_function!();
     for (scent_id, _, position) in &scents {
-        let mut scent = scent_map.map.get_mut(position);
+        let scent = scent_map.map.get_mut(position);
         *scent -= config.scent_dispersion_per_step;
         if scent <= &mut 0.0 {
             debug!(
@@ -915,7 +913,7 @@ pub fn create_food(
     for _ in 0..config.food_per_step {
         let x = rng.gen_range(0..columns);
         let y = rng.gen_range(0..rows);
-        let mut food = food_map.map.get_mut(&Position { x, y });
+        let food = food_map.map.get_mut(&Position { x, y });
         if !food.contains_food() {
             commands.spawn((
                 Position { x, y },
@@ -934,7 +932,7 @@ pub fn create_food(
 }
 
 pub fn destroy_old_food(
-    mut commands: Commands,
+    commands: Commands,
     mut food: Query<(Entity, &Position, &Food, &Age)>,
     mut food_map: ResMut<FoodMap>,
     config: Res<SimulationConfig>,
@@ -974,7 +972,7 @@ pub fn eat_food(
 pub fn despawn_food(
     mut commands: Commands,
     food: Query<(Entity, &Position, &Food)>,
-    mut food_map: ResMut<FoodMap>,
+    food_map: ResMut<FoodMap>,
 ) {
     puffin::profile_function!();
     for (food_id, position, _) in &food {
@@ -1019,10 +1017,10 @@ pub fn starve(
 }
 
 fn remove_segment_and_transform_to_food(
-    mut commands: &mut Commands,
+    commands: &mut Commands,
     positions: &Query<&Position>,
-    mut food_map: &mut ResMut<FoodMap>,
-    mut solids_map: &mut ResMut<SolidsMap>,
+    food_map: &mut ResMut<FoodMap>,
+    solids_map: &mut ResMut<SolidsMap>,
     config: &Res<SimulationConfig>,
     segment_id: &Entity,
 ) {
@@ -1048,7 +1046,7 @@ fn remove_snake_from_species(
     snake: &mut Mut<Snake>,
 ) {
     let specie = snake.species.unwrap();
-    if let Some(mut specie) = species.species.iter_mut().find(|s| s.id == specie) {
+    if let Some(specie) = species.species.iter_mut().find(|s| s.id == specie) {
         if specie.leader == head_id {
             specie.members.retain(|s| *s != head_id);
             if let Some(new_leader) = specie.members.pop_front() {
@@ -1122,8 +1120,8 @@ fn kill_snake(
 }
 
 pub fn reproduce(
-    mut commands: Commands,
-    mut snakes: Query<(&mut MeatMatter, &Position)>,
+    commands: Commands,
+    snakes: Query<(&mut MeatMatter, &Position)>,
     config: Res<SimulationConfig>,
 ) {
     puffin::profile_function!();
@@ -1143,14 +1141,14 @@ pub fn split(
     segments: Query<&SegmentType>,
     positions: Query<&Position>,
     config: Res<SimulationConfig>,
-    mut innovation_tracker: ResMut<InnovationTracker>,
+    innovation_tracker: ResMut<InnovationTracker>,
 ) {
     puffin::profile_function!();
     for (head_id, mut snake) in &mut snakes {
         let snake_length = snake.segments.len();
         if snake_length >= config.size_to_split {
             debug!("Snake splits: {:#?}, {:#?}", snake.metabolism, snake.energy);
-            let mut new_snake_segments = snake.segments.split_off(snake_length / 2);
+            let new_snake_segments = snake.segments.split_off(snake_length / 2);
             let new_head_id = new_snake_segments.first().unwrap();
             let new_head_position = positions.get(*new_head_id).unwrap();
             // new_snake_segments.reverse();

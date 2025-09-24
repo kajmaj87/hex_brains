@@ -23,7 +23,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Instant;
-use tracing::{info, Level};
+use tracing::Level;
 use tracing_subscriber::fmt;
 
 fn main() {
@@ -107,7 +107,7 @@ fn start_simulation(
 }
 
 fn draw_simulation(
-    mut engine_events: ResMut<EngineEvents>,
+    engine_events: ResMut<EngineEvents>,
     positions: Query<&Position>,
     scents: Query<(Entity, &Scent)>,
     scent_map: Res<ScentMap>,
@@ -192,7 +192,7 @@ fn draw_neural_network(
     connections: &Vec<&ConnectionGene>,
 ) {
     Frame::canvas(ui.style()).show(ui, |ui| {
-        let (mut response, _) = ui.allocate_painter(ui.available_size_before_wrap(), Sense::drag());
+        let (response, _) = ui.allocate_painter(ui.available_size_before_wrap(), Sense::drag());
 
         let to_screen = emath::RectTransform::from_to(
             Rect::from_min_size(Pos2::ZERO, response.rect.square_proportions()),
