@@ -5,7 +5,8 @@ use crate::core::{
 };
 use crate::core::{
     assign_missing_segments, assign_species, calculate_stats, create_food, create_snake, eat_food,
-    grow, increase_age, movement, split, starve, think, update_positions, FoodMap, Position, RandomNeuralBrain, Species,
+    grow, increase_age, movement, split, starve, think, update_positions, FoodMap, Position,
+    RandomNeuralBrain, Species,
 };
 use crate::core::{
     assign_segment_positions, despawn_food, incease_move_potential, process_food, Brain, Food,
@@ -141,8 +142,6 @@ impl Default for MutationConfig {
         }
     }
 }
-
-type EnergyValue = f32;
 
 #[derive(Debug, Resource, Clone, Copy)]
 pub struct SimulationConfig {
@@ -450,7 +449,7 @@ impl Simulation {
             name: self.name.clone(),
             duration,
         };
-        self.engine_events.send(result.clone());
+        let _ = self.engine_events.send(result.clone());
         result
     }
 

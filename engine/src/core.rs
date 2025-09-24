@@ -411,7 +411,7 @@ pub fn movement(
                 Decision::MoveForward => {
                     snake.energy.energy -= move_cost;
                     let new_position =
-                        position_at_direction(&snake.direction, &head_position, &config);
+                        position_at_direction(&snake.direction, head_position.clone(), *config);
                     snake.new_position.0 = new_position.x;
                     snake.new_position.1 = new_position.y;
                 }
@@ -419,7 +419,7 @@ pub fn movement(
                     snake.energy.energy -= move_cost;
                     snake.direction = turn_left(&snake.direction);
                     let new_position =
-                        position_at_direction(&snake.direction, &head_position, &config);
+                        position_at_direction(&snake.direction, head_position.clone(), *config);
                     snake.new_position.0 = new_position.x;
                     snake.new_position.1 = new_position.y;
                 }
@@ -427,7 +427,7 @@ pub fn movement(
                     snake.energy.energy -= move_cost;
                     snake.direction = turn_right(&snake.direction);
                     let new_position =
-                        position_at_direction(&snake.direction, &head_position, &config);
+                        position_at_direction(&snake.direction, head_position.clone(), *config);
                     snake.new_position.0 = new_position.x;
                     snake.new_position.1 = new_position.y;
                 }
@@ -545,21 +545,10 @@ fn turn_right(direction: &Direction) -> Direction {
     }
 }
 
-fn flip_direction(direction: &Direction) -> Direction {
-    match direction {
-        NorthEast => SouthWest,
-        East => West,
-        SouthEast => NorthWest,
-        SouthWest => NorthEast,
-        West => East,
-        NorthWest => SouthEast,
-    }
-}
-
 fn position_at_direction(
     direction: &Direction,
-    position: &Position,
-    config: &Res<SimulationConfig>,
+    position: Position,
+    config: SimulationConfig,
 ) -> Position {
     let mut x = position.x;
     let mut y = position.y;
@@ -621,89 +610,89 @@ pub fn think(
         let direction_left = turn_left(&head.direction);
         let direction_right = turn_right(&head.direction);
         let scent_front = scent(
-            &position_at_direction(&head.direction, &position, &config),
+            &position_at_direction(&head.direction, position.clone(), *config),
             &scent_map,
-            &config,
+            *config,
         );
         let scent_left = scent(
-            &position_at_direction(&direction_left, &position, &config),
+            &position_at_direction(&direction_left, position.clone(), *config),
             &scent_map,
-            &config,
+            *config,
         );
         let scent_right = scent(
-            &position_at_direction(&direction_right, &position, &config),
+            &position_at_direction(&direction_right, position.clone(), *config),
             &scent_map,
-            &config,
+            *config,
         );
         let plant_vision_front = see_plants(
             &head.direction,
-            &position,
+            position.clone(),
             config.mutation.plant_vision_front_range,
             &food_map,
-            &config,
+            *config,
         );
         let plant_vision_left = see_plants(
             &direction_left,
-            &position,
+            position.clone(),
             config.mutation.plant_vision_left_range,
             &food_map,
-            &config,
+            *config,
         );
         let plant_vision_right = see_plants(
             &direction_right,
-            &position,
+            position.clone(),
             config.mutation.plant_vision_right_range,
             &food_map,
-            &config,
+            *config,
         );
         let meat_vision_front = see_meat(
             &head.direction,
-            &position,
+            position.clone(),
             config.mutation.meat_vision_front_range,
             &food_map,
-            &config,
+            *config,
         );
         let meat_vision_left = see_meat(
             &direction_left,
-            &position,
+            position.clone(),
             config.mutation.meat_vision_left_range,
             &food_map,
-            &config,
+            *config,
         );
         let meat_vision_right = see_meat(
             &direction_right,
-            &position,
+            position.clone(),
             config.mutation.meat_vision_right_range,
             &food_map,
-            &config,
+            *config,
         );
         let solid_vision_front = see_obstacles(
             &head.direction,
-            &position,
+            position.clone(),
             config.mutation.obstacle_vision_front_range,
             &solids_map,
-            &config,
+            *config,
         );
         let solid_vision_left = see_obstacles(
             &direction_left,
-            &position,
+            position.clone(),
             config.mutation.obstacle_vision_left_range,
             &solids_map,
-            &config,
+            *config,
         );
         let solid_vision_right = see_obstacles(
             &direction_right,
-            &position,
+            position.clone(),
             config.mutation.obstacle_vision_right_range,
             &solids_map,
-            &config,
+            *config,
         );
         let plant_food_level = head.energy.plant_in_stomach / head.metabolism.max_plants_in_stomach;
         let meat_food_level = head.energy.meat_in_stomach / head.metabolism.max_meat_in_stomach;
         let energy_level = head.energy.energy / head.metabolism.max_energy;
         let age_level = age.efficiency_factor;
         head.decision = head.brain.decide(vec![
-            bias.clone(),
+            bias,
             chaos,
             scent_front,
             scent_left,
@@ -725,11 +714,7 @@ pub fn think(
     });
 }
 
-fn scent(
-    scenting_position: &Position,
-    scent_map: &Res<ScentMap>,
-    config: &Res<SimulationConfig>,
-) -> f32 {
+fn scent(scenting_position: &Position, scent_map: &ScentMap, config: SimulationConfig) -> f32 {
     if config.mutation.scent_sensing_enabled {
         let scent = scent_map.map.get(scenting_position);
         scent / 500.0
@@ -740,18 +725,18 @@ fn scent(
 
 fn see_meat(
     head_direction: &Direction,
-    position: &Position,
+    position: Position,
     range: u32,
-    food_map: &Res<FoodMap>,
-    config: &Res<SimulationConfig>,
+    food_map: &FoodMap,
+    config: SimulationConfig,
 ) -> f32 {
     if config.mutation.meat_vision_enabled {
-        let current_vision_position = position;
+        let mut current_vision_position = position.clone();
         let mut current_range = 0;
         while current_range < range {
-            let current_vision_position =
-                &position_at_direction(head_direction, &current_vision_position, &config).clone();
-            if food_map.map.get(current_vision_position).is_meat() {
+            current_vision_position =
+                position_at_direction(head_direction, current_vision_position, config);
+            if food_map.map.get(&current_vision_position).is_meat() {
                 return (range - current_range) as f32 / range as f32;
             }
             current_range += 1;
@@ -762,18 +747,18 @@ fn see_meat(
 
 fn see_plants(
     head_direction: &Direction,
-    position: &Position,
+    position: Position,
     range: u32,
-    food_map: &Res<FoodMap>,
-    config: &Res<SimulationConfig>,
+    food_map: &FoodMap,
+    config: SimulationConfig,
 ) -> f32 {
     if config.mutation.plant_vision_enabled {
-        let current_vision_position = position;
+        let mut current_vision_position = position.clone();
         let mut current_range = 0;
         while current_range < range {
-            let current_vision_position =
-                &position_at_direction(head_direction, &current_vision_position, &config).clone();
-            if food_map.map.get(current_vision_position).is_plant() {
+            current_vision_position =
+                position_at_direction(head_direction, current_vision_position, config);
+            if food_map.map.get(&current_vision_position).is_plant() {
                 return (range - current_range) as f32 / range as f32;
             }
             current_range += 1;
@@ -784,17 +769,17 @@ fn see_plants(
 
 fn see_obstacles(
     head_direction: &Direction,
-    position: &Position,
+    position: Position,
     range: u32,
-    solids_map: &Res<SolidsMap>,
-    config: &Res<SimulationConfig>,
+    solids_map: &SolidsMap,
+    config: SimulationConfig,
 ) -> f32 {
     if config.mutation.obstacle_vision_enabled {
         let mut current_vision_position = position.clone();
         let mut current_range = 0;
         while current_range < range {
             current_vision_position =
-                position_at_direction(head_direction, &current_vision_position, &config).clone();
+                position_at_direction(head_direction, current_vision_position, config);
             if *solids_map.map.get(&current_vision_position) {
                 return (range - current_range) as f32 / range as f32;
             }
@@ -853,10 +838,10 @@ pub fn diffuse_scents(
     let mut rng = rand::thread_rng();
     for (_, position) in &scents {
         let random_direction = directions.choose(&mut rng).unwrap();
-        let new_position = &position_at_direction(random_direction, &position, &config);
+        let new_position = position_at_direction(random_direction, position.clone(), *config);
         let diffused_scent = scent_map.map.get(position) * config.scent_diffusion_rate;
         *scent_map.map.get_mut(position) -= diffused_scent;
-        let new_scent = scent_map.map.get_mut(new_position);
+        let new_scent = scent_map.map.get_mut(&new_position);
         if new_scent <= &mut 0.0 {
             debug!(
                 "Adding scent throuhg diffusion at position {:?} with energy {}",
@@ -932,13 +917,13 @@ pub fn create_food(
 }
 
 pub fn destroy_old_food(
-    commands: Commands,
+    _commands: Commands,
     mut food: Query<(Entity, &Position, &Food, &Age)>,
     mut food_map: ResMut<FoodMap>,
-    config: Res<SimulationConfig>,
+    _config: Res<SimulationConfig>,
 ) {
     puffin::profile_function!();
-    for (food_id, postition, food, age) in &mut food {
+    for (_food_id, postition, _food, age) in &mut food {
         if age.age >= 5000 {
             food_map.map.set(postition, Food::default());
         }
@@ -948,7 +933,7 @@ pub fn destroy_old_food(
 pub fn eat_food(
     mut snakes: Query<(&Position, &mut Snake)>,
     mut food_map: ResMut<FoodMap>,
-    config: Res<SimulationConfig>,
+    _config: Res<SimulationConfig>,
 ) {
     puffin::profile_function!();
     for (position, mut snake) in &mut snakes {
@@ -1095,34 +1080,30 @@ pub fn die_from_collisions(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn kill_snake(
-    mut commands: &mut Commands,
+    commands: &mut Commands,
     positions: &Query<&Position>,
-    mut food_map: &mut ResMut<FoodMap>,
-    mut species: &mut ResMut<Species>,
-    mut solids_map: &mut ResMut<SolidsMap>,
+    food_map: &mut ResMut<FoodMap>,
+    species: &mut ResMut<Species>,
+    solids_map: &mut ResMut<SolidsMap>,
     config: &Res<SimulationConfig>,
     head_id: Entity,
-    mut snake: &mut Mut<Snake>,
+    snake: &mut Mut<Snake>,
 ) {
     commands.entity(head_id).remove::<Snake>();
-    remove_snake_from_species(&mut species, head_id, &mut snake);
+    remove_snake_from_species(species, head_id, snake);
     for segment_id in &snake.segments {
         remove_segment_and_transform_to_food(
-            &mut commands,
-            &positions,
-            &mut food_map,
-            &mut solids_map,
-            &config,
-            segment_id,
+            commands, positions, food_map, solids_map, config, segment_id,
         );
     }
 }
 
 pub fn reproduce(
-    commands: Commands,
-    snakes: Query<(&mut MeatMatter, &Position)>,
-    config: Res<SimulationConfig>,
+    _commands: Commands,
+    _snakes: Query<(&mut MeatMatter, &Position)>,
+    _config: Res<SimulationConfig>,
 ) {
     puffin::profile_function!();
     // for (mut energy, position) in &mut snakes {
@@ -1141,7 +1122,7 @@ pub fn split(
     segments: Query<&SegmentType>,
     positions: Query<&Position>,
     config: Res<SimulationConfig>,
-    innovation_tracker: ResMut<InnovationTracker>,
+    _innovation_tracker: ResMut<InnovationTracker>,
 ) {
     puffin::profile_function!();
     for (head_id, mut snake) in &mut snakes {
@@ -1193,11 +1174,11 @@ pub fn split(
                 );
                 new_head.0.segments = new_snake_segments;
                 new_head.0.energy.energy = snake.energy.energy / 2.0;
-                snake.energy.energy = snake.energy.energy / 2.0;
+                snake.energy.energy /= 2.0;
                 new_head.0.energy.plant_in_stomach = snake.energy.plant_in_stomach / 2.0;
-                snake.energy.plant_in_stomach = snake.energy.plant_in_stomach / 2.0;
+                snake.energy.plant_in_stomach /= 2.0;
                 new_head.0.energy.meat_in_stomach = snake.energy.meat_in_stomach / 2.0;
-                snake.energy.meat_in_stomach = snake.energy.meat_in_stomach / 2.0;
+                snake.energy.meat_in_stomach /= 2.0;
                 recalculate_snake_params(&mut snake, &segments, &config, None);
                 recalculate_snake_params(&mut new_head.0, &segments, &config, None);
                 debug!(
@@ -1226,7 +1207,7 @@ pub fn split(
 fn recalculate_snake_params(
     snake: &mut Snake,
     segments: &Query<&SegmentType>,
-    config: &Res<SimulationConfig>,
+    _config: &Res<SimulationConfig>,
     new_segment: Option<&SegmentType>,
 ) {
     let mut mobility = 0.0;
@@ -1250,13 +1231,10 @@ fn recalculate_snake_params(
         } else {
             segment_energy_production -= segment.energy_cost_always();
         }
-        match segment {
-            SegmentType::Stomach(_) => {
-                // TODO: this should come from config
-                snake.metabolism.meat_processing_speed += 1.0;
-                snake.metabolism.max_meat_in_stomach += 200.0;
-            }
-            _ => {}
+        if let SegmentType::Stomach(_) = segment {
+            // TODO: this should come from config
+            snake.metabolism.meat_processing_speed += 1.0;
+            snake.metabolism.max_meat_in_stomach += 200.0;
         }
     }
     let len = snake.segments.len() as f32;
@@ -1290,6 +1268,7 @@ pub fn increase_age(mut agables: Query<&mut Age>, config: Res<SimulationConfig>)
         }
     }
 }
+#[allow(clippy::too_many_arguments)]
 pub fn calculate_stats(
     entities: Query<Entity>,
     scents: Query<&Scent>,
@@ -1379,7 +1358,7 @@ pub fn grow(
     segments: Query<&SegmentType>,
 ) {
     puffin::profile_function!();
-    for (snake_id, mut snake) in &mut snakes {
+    for (_snake_id, mut snake) in &mut snakes {
         // tail always takes energy from head when growing
         let position_empty = segment_map
             .map
@@ -1406,11 +1385,8 @@ pub fn grow(
                     },
                 ))
                 .id();
-            match segment_type {
-                SegmentType::Solid(_) => {
-                    commands.entity(new_tail).insert(Solid {});
-                }
-                _ => {}
+            if let SegmentType::Solid(_) = segment_type {
+                commands.entity(new_tail).insert(Solid {});
             }
             snake.segments.push(new_tail);
             recalculate_snake_params(&mut snake, &segments, &config, Some(&segment_type));
@@ -1421,7 +1397,7 @@ pub fn grow(
 pub fn assign_missing_segments(mut snakes: Query<(Entity, &mut Snake), Added<Snake>>) {
     puffin::profile_function!();
     for (snake_id, mut snake) in &mut snakes {
-        if snake.segments.len() == 0 {
+        if snake.segments.is_empty() {
             snake.segments.push(snake_id);
         }
     }
@@ -1430,8 +1406,8 @@ pub fn assign_missing_segments(mut snakes: Query<(Entity, &mut Snake), Added<Sna
 pub fn assign_solid_positions(
     mut solids: Query<(&Position, &Solid)>,
     mut solids_map: ResMut<SolidsMap>,
-    segment_map: Res<SegmentMap>,
-    config: Res<SimulationConfig>,
+    _segment_map: Res<SegmentMap>,
+    _config: Res<SimulationConfig>,
 ) {
     puffin::profile_function!();
     solids_map.map.clear();
@@ -1461,12 +1437,12 @@ pub fn assign_species(
     for baby_id in &new_borns {
         // let mut baby_snake = None;
         for specie in species.species.iter_mut() {
-            if let Ok([(snake_id, mut snake), (leader_id, leader_snake)]) =
+            if let Ok([(snake_id, mut snake), (_leader_id, leader_snake)]) =
                 snakes.get_many_mut([baby_id, specie.leader])
             {
                 let compatibility = calculate_gene_difference(
-                    &leader_snake.brain.get_neural_network().unwrap(),
-                    &snake.brain.get_neural_network().unwrap(),
+                    leader_snake.brain.get_neural_network().unwrap(),
+                    snake.brain.get_neural_network().unwrap(),
                 );
                 debug!("Difference: {}", compatibility);
                 if compatibility < config.species_threshold {
@@ -1475,13 +1451,11 @@ pub fn assign_species(
                     specie.members.push_back(snake_id);
                     break;
                 }
-            } else {
-                if baby_id != specie.leader {
-                    panic!(
-                        "Unable to find leader {:?} for baby {:?} for specie {:?}",
-                        specie.leader, baby_id, specie.id
-                    );
-                }
+            } else if baby_id != specie.leader {
+                panic!(
+                    "Unable to find leader {:?} for baby {:?} for specie {:?}",
+                    specie.leader, baby_id, specie.id
+                );
             }
         }
         let (_, mut baby_snake) = snakes.get_mut(baby_id).unwrap();
@@ -1507,13 +1481,11 @@ fn calculate_gene_difference(leader: &NeuralNetwork, new_snake: &NeuralNetwork) 
         .connections
         .iter()
         .filter(|c| c.enabled)
-        .map(|c| c)
         .collect::<Vec<&ConnectionGene>>();
     let new_snake_genes = new_snake
         .connections
         .iter()
         .filter(|c| c.enabled)
-        .map(|c| c)
         .collect::<Vec<&ConnectionGene>>();
     let leader_innovations: Vec<_> = leader_genes.iter().map(|c| c.innovation_number).collect();
     let new_snake_innovations: Vec<_> = new_snake_genes

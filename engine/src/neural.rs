@@ -187,7 +187,7 @@ impl NeuralNetwork {
         perturb_disabled_connections: bool,
     ) {
         let mut rng = rand::thread_rng();
-        let mut index = rng.gen_range(0..self.connections.len());
+        let mut index;
         let active_connections = self.get_active_connections();
         if perturb_disabled_connections || active_connections.is_empty() {
             index = rng.gen_range(0..self.connections.len());
@@ -212,7 +212,7 @@ impl NeuralNetwork {
         perturb_disabled_connections: bool,
     ) {
         let mut rng = rand::thread_rng();
-        let mut index = rng.gen_range(0..self.connections.len());
+        let mut index;
         let active_connections = self.get_active_connections();
         if perturb_disabled_connections || active_connections.is_empty() {
             index = rng.gen_range(0..self.connections.len());
@@ -307,7 +307,7 @@ impl NeuralNetwork {
 
 #[cfg(test)]
 mod tests {
-    
+
     //
     // struct FloatInput {
     //     value: f32,

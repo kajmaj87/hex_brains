@@ -27,15 +27,17 @@ use tracing::Level;
 use tracing_subscriber::fmt;
 
 fn main() {
-    let mut native_options = eframe::NativeOptions::default();
-    native_options.initial_window_size = Some(Vec2 {
-        x: 1200.0,
-        y: 1200.0,
-    });
+    let native_options = eframe::NativeOptions {
+        initial_window_size: Some(Vec2 {
+            x: 1200.0,
+            y: 1200.0,
+        }),
+        ..Default::default()
+    };
     fmt().with_max_level(Level::INFO).init();
     let (engine_commands_sender, engine_commands_receiver) = std::sync::mpsc::channel();
     let (engine_events_sender, engine_events_receiver) = std::sync::mpsc::channel();
-    eframe::run_native(
+    let _ = eframe::run_native(
         "My egui App",
         native_options,
         Box::new(|cc| {
@@ -87,7 +89,7 @@ fn start_simulation(
         Some(Arc::clone(&engine_commands_receiver)),
         simulation_config,
     );
-    let egui_context = EguiEcsContext { context };
+    let egui_context = EguiEcsContext { _context: context };
     simulation.insert_resource(egui_context);
     simulation.insert_resource(config);
     simulation.insert_resource(EngineState {
@@ -106,6 +108,7 @@ fn start_simulation(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_simulation(
     engine_events: ResMut<EngineEvents>,
     positions: Query<&Position>,
@@ -174,7 +177,7 @@ fn draw_simulation(
             }
         }))
         .collect();
-    engine_events
+    let _ = engine_events
         .events
         .lock()
         .unwrap()
@@ -186,7 +189,7 @@ fn draw_simulation(
 
 fn draw_neural_network(
     ui: &mut Ui,
-    fonts: &Fonts,
+    _fonts: &Fonts,
     specie_id: u32,
     nodes: &Vec<&NodeGene>,
     connections: &Vec<&ConnectionGene>,
@@ -215,7 +218,7 @@ fn draw_neural_network(
             stroke: Default::default(),
         });
 
-        let input_colors = vec![
+        let input_colors = [
             Color32::LIGHT_GRAY,
             Color32::DARK_GRAY,
             Color32::KHAKI,
@@ -239,23 +242,22 @@ fn draw_neural_network(
         let input_node_shapes: Vec<Shape> = input_nodes
             .iter()
             .enumerate()
-            .map(|(index, node)| {
+            .map(|(index, _node)| {
                 let position = get_node_position(index, NodeType::Input);
                 let screen_position = to_screen * position;
                 // let text = Shape::text(&fonts, screen_position, Align2::LEFT_CENTER, "Hello worlds", FontId::new(26.0, FontFamily::Monospace), Color32::WHITE);
-                let circle = Circle(CircleShape {
+                Circle(CircleShape {
                     center: screen_position,
                     radius: 0.02 * response.rect.height(), // Using the normalized radius for the screen
                     fill: input_colors[index],
                     stroke: Default::default(),
-                });
-                circle
+                })
             })
             .collect();
         let output_node_shapes: Vec<Shape> = output_nodes
             .iter()
             .enumerate()
-            .map(|(index, node)| {
+            .map(|(index, _node)| {
                 let position = get_node_position(index, NodeType::Output);
                 let screen_position = to_screen * position;
 
@@ -311,7 +313,7 @@ fn draw_neural_network(
             "energy level",
             "age level",
         ];
-        let output_node_names = vec!["move forward", "move left", "move right", "wait"];
+        let output_node_names = ["move forward", "move left", "move right", "wait"];
         painter.extend(vec![specie_marker]);
         painter.extend(connection_shapes);
         painter.extend(input_node_shapes);
@@ -355,7 +357,7 @@ fn get_node_position(index: usize, node_type: NodeType) -> Pos2 {
     }
 }
 
-fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
+fn draw_hexes(ui: &mut Ui, hexes: &[Hex], config: &Config) {
     Frame::canvas(ui.style())
         .fill(config.bg_color.color)
         .show(ui, |ui| {
@@ -397,14 +399,14 @@ fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
                             SegmentType::Stomach(_) => stomach_color,
                         },
                     };
-                    transform_to_circle(&position, &to_screen, &response, &config, color)
+                    transform_to_circle(&position, &to_screen, &response, config, color)
                 })
                 .collect();
 
             // let positions: Vec<Pos2> = (0..config.columns)
             //     .flat_map(|x| (0..config.rows).map(move |y| Pos2 { x: x as f32, y: y as f32 }))
             //     .collect();
-            let positions = vec![];
+            let positions = [];
 
             let mut ground: Vec<Shape> = positions
                 .iter()
@@ -413,7 +415,7 @@ fn draw_hexes(ui: &mut Ui, hexes: &Vec<Hex>, config: &Config) {
                         position,
                         &to_screen,
                         &response,
-                        &config,
+                        config,
                         config.bg_color.color,
                     )
                 })
@@ -470,7 +472,7 @@ fn should_draw_simulation(engine_state: Res<EngineState>) -> bool {
 
 #[derive(Resource)]
 struct EguiEcsContext {
-    context: egui::Context,
+    _context: egui::Context,
 }
 
 #[derive(Resource, Clone, Copy)]
@@ -514,7 +516,7 @@ struct MyEguiApp {
 
 impl MyEguiApp {
     fn new(
-        cc: &eframe::CreationContext<'_>,
+        _cc: &eframe::CreationContext<'_>,
         engine_commands_sender: Sender<EngineCommand>,
         engine_events_sender: Sender<EngineEvent>,
         engine_events_receiver: Receiver<EngineEvent>,
@@ -586,7 +588,7 @@ impl MyEguiApp {
 }
 
 impl eframe::App for MyEguiApp {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         puffin::profile_scope!("gui::update");
         if puffin::are_scopes_on() {
             puffin_egui::profiler_window(ctx);
@@ -601,18 +603,15 @@ impl eframe::App for MyEguiApp {
                     duration,
                 } => {
                     self.text.push_str(&format!(
-                        "\nSimulation {} finished in {} steps in {} ms",
-                        name, steps, duration
+                        "\nSimulation {name} finished in {steps} steps in {duration} ms"
                     ));
                 }
                 EngineEvent::FrameDrawn {
                     updates_left,
                     updates_done,
                 } => {
-                    self.text = format!(
-                        "{:.1} updates left, {} updates done",
-                        updates_left, updates_done
-                    );
+                    self.text =
+                        format!("{updates_left:.1} updates left, {updates_done} updates done");
                     self.can_draw_frame = true;
                     self.total_frames += 1;
                     self.updates_last_second += updates_done;
@@ -884,10 +883,10 @@ impl eframe::App for MyEguiApp {
             });
         egui::Window::new("Species")
             .open(&mut self.show_species)
-            .show(ctx, |ui| {});
+            .show(ctx, |_ui| {});
         egui::Window::new("Networks").open(&mut self.show_networks).show(ctx, |ui| {
             let specie_ids = &self.stats.species.species.iter().map(|specie| specie.id).collect::<Vec<u32>>();
-            if specie_ids.len() == 0 {
+            if specie_ids.is_empty() {
                 ui.label("No networks yet");
                 return;
             }
@@ -900,7 +899,7 @@ impl eframe::App for MyEguiApp {
                     .selected_text(format!("{:?}", self.selected_network))
                     .show_ui(ui, |ui| {
                         for specie_id in specie_ids {
-                            ui.selectable_value(&mut self.selected_network, *specie_id, format!("{:?}", specie_id));
+                            ui.selectable_value(&mut self.selected_network, *specie_id, format!("{specie_id:?}"));
                         }
                     });
                 if ui.button("Next").clicked() {
@@ -947,7 +946,7 @@ impl eframe::App for MyEguiApp {
             });
         self.engine_commands_sender
             .send(EngineCommand::UpdateSimulationConfig(
-                self.simulation_config.clone(),
+                self.simulation_config,
             ))
             .unwrap();
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -959,7 +958,7 @@ impl eframe::App for MyEguiApp {
                     let simulations = (0..64)
                         .map(|i| {
                             let mut result = Simulation::new(
-                                format!("Simulation {}", i),
+                                format!("Simulation {i}"),
                                 self.engine_events_sender.clone(),
                                 None,
                                 create_simulation_config(
@@ -1118,7 +1117,8 @@ impl eframe::App for MyEguiApp {
             self.can_draw_frame = false;
         }
         self.last_frame = Instant::now();
-        self.engine_commands_sender
+        let _ = self
+            .engine_commands_sender
             .send(EngineCommand::RepaintRequested);
     }
 }

@@ -1,5 +1,6 @@
 [workspace]
 members = ["engine", "gui"]
+resolver = "2"
 
 [profile.ultra-release]
 inherits = "release"
