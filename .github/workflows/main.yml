@@ -23,7 +23,7 @@ jobs:
     outputs:
       image: ${{ steps.set-image.outputs.image }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       # Log in to GitHub Container Registry for pushing/pulling the custom image
       - name: Log in to GHCR
@@ -70,7 +70,7 @@ jobs:
           rustc --version  # Should match local devcontainer
           uname -a  # Debian base from Dockerfile
           echo "Running in container: $(cat /etc/os-release)"
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install Rust Targets (if needed for cross-compile)
         run: rustup target add ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
