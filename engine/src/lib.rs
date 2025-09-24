@@ -1,8 +1,8 @@
+pub mod core;
+pub mod dna;
+pub mod neural;
 pub mod simulation;
 pub mod simulation_manager;
-pub mod core;
-pub mod neural;
-pub mod dna;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right

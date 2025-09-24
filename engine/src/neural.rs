@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use bevy_ecs::prelude::Resource;
 use rand::Rng;
 use rayon::join;
+use std::collections::HashMap;
 use tracing::{debug, info};
 
 // Define a trait that all sensor inputs will implement.
@@ -57,7 +57,7 @@ pub enum Activation {
     Sigmoid,
     Relu,
     Tanh,
-    None
+    None,
 }
 
 impl Activation {
@@ -79,7 +79,10 @@ pub struct NodeGene {
 
 impl NodeGene {
     pub fn new(node_type: NodeType, activation: Activation) -> Self {
-        NodeGene { node_type, activation }
+        NodeGene {
+            node_type,
+            activation,
+        }
     }
 
     pub fn activate(&self, input: f32) -> f32 {
@@ -95,10 +98,7 @@ pub struct NeuralNetwork {
 }
 
 impl NeuralNetwork {
-    pub fn new(
-        input_activations: Vec<Activation>,
-        output_activations: Vec<Activation>,
-    ) -> Self {
+    pub fn new(input_activations: Vec<Activation>, output_activations: Vec<Activation>) -> Self {
         let mut network = NeuralNetwork {
             nodes: Vec::new(),
             connections: Vec::new(),
@@ -122,7 +122,11 @@ impl NeuralNetwork {
         network
     }
 
-    pub fn random_brain(total_inputs: usize, connection_active_probability: f32, innovation_tracker: &mut InnovationTracker) -> NeuralNetwork {
+    pub fn random_brain(
+        total_inputs: usize,
+        connection_active_probability: f32,
+        innovation_tracker: &mut InnovationTracker,
+    ) -> NeuralNetwork {
         // Define input activations: one for bias (using ReLU to keep it at 1) and one for the actual input.
         let input_activations = vec![Activation::Relu; total_inputs];
 
@@ -131,15 +135,28 @@ impl NeuralNetwork {
 
         let mut network = NeuralNetwork::new(input_activations.clone(), output_activations.clone());
         let rng = &mut rand::thread_rng();
-        for (i,_) in input_activations.iter().enumerate(){
-            for (j,_) in output_activations.iter().enumerate() {
-               network.add_connection(i, j + input_activations.len(), rng.gen_range(0.0..1.0)-0.5, rng.gen_range(0.0..1.0) < connection_active_probability, innovation_tracker.get_innovation_number(i, j))
+        for (i, _) in input_activations.iter().enumerate() {
+            for (j, _) in output_activations.iter().enumerate() {
+                network.add_connection(
+                    i,
+                    j + input_activations.len(),
+                    rng.gen_range(0.0..1.0) - 0.5,
+                    rng.gen_range(0.0..1.0) < connection_active_probability,
+                    innovation_tracker.get_innovation_number(i, j),
+                )
             }
         }
         network
     }
 
-    pub fn add_connection(&mut self, in_node: usize, out_node: usize, weight: f32, enabled: bool, innovation_number: InnovationNumber) {
+    pub fn add_connection(
+        &mut self,
+        in_node: usize,
+        out_node: usize,
+        weight: f32,
+        enabled: bool,
+        innovation_number: InnovationNumber,
+    ) {
         let connection = ConnectionGene {
             in_node,
             out_node,
@@ -147,19 +164,29 @@ impl NeuralNetwork {
             enabled,
             innovation_number,
         };
-        assert!(in_node < self.nodes.len(), "The input node index is out of bounds");
-        assert!(out_node < self.nodes.len(), "The output node index is out of bounds");
+        assert!(
+            in_node < self.nodes.len(),
+            "The input node index is out of bounds"
+        );
+        assert!(
+            out_node < self.nodes.len(),
+            "The output node index is out of bounds"
+        );
         self.connections.push(connection);
     }
 
-    pub fn flip_random_connection(&mut self){
+    pub fn flip_random_connection(&mut self) {
         let mut rng = rand::thread_rng();
         let index = rng.gen_range(0..self.connections.len());
         debug!("Flipping connection {}", index);
         self.connections[index].enabled = !self.connections[index].enabled;
     }
 
-    pub(crate) fn mutate_perturb_random_connection_weight(&mut self, mutation_strength: f32, perturb_disabled_connections: bool) {
+    pub(crate) fn mutate_perturb_random_connection_weight(
+        &mut self,
+        mutation_strength: f32,
+        perturb_disabled_connections: bool,
+    ) {
         let mut rng = rand::thread_rng();
         let mut index = rng.gen_range(0..self.connections.len());
         let active_connections = self.get_active_connections();
@@ -167,13 +194,24 @@ impl NeuralNetwork {
             index = rng.gen_range(0..self.connections.len());
         } else {
             index = rng.gen_range(0..self.get_active_connections().len());
-            index = self.connections.iter().position(|c| active_connections.get(index).unwrap() == &c).unwrap();
+            index = self
+                .connections
+                .iter()
+                .position(|c| active_connections.get(index).unwrap() == &c)
+                .unwrap();
         }
         self.connections[index].weight += rng.gen_range(-mutation_strength..mutation_strength);
-        debug!("Mutating connection {} to value {}", index, self.connections[index].weight);
+        debug!(
+            "Mutating connection {} to value {}",
+            index, self.connections[index].weight
+        );
     }
 
-    pub(crate) fn mutate_reset_random_connection_weight(&mut self, mutation_strength: f32, perturb_disabled_connections: bool) {
+    pub(crate) fn mutate_reset_random_connection_weight(
+        &mut self,
+        mutation_strength: f32,
+        perturb_disabled_connections: bool,
+    ) {
         let mut rng = rand::thread_rng();
         let mut index = rng.gen_range(0..self.connections.len());
         let active_connections = self.get_active_connections();
@@ -181,14 +219,24 @@ impl NeuralNetwork {
             index = rng.gen_range(0..self.connections.len());
         } else {
             index = rng.gen_range(0..self.get_active_connections().len());
-            index = self.connections.iter().position(|c| active_connections.get(index).unwrap() == &c).unwrap();
+            index = self
+                .connections
+                .iter()
+                .position(|c| active_connections.get(index).unwrap() == &c)
+                .unwrap();
         }
         self.connections[index].weight = rng.gen_range(-mutation_strength..mutation_strength);
-        debug!("Mutating connection {} to value {}", index, self.connections[index].weight);
+        debug!(
+            "Mutating connection {} to value {}",
+            index, self.connections[index].weight
+        );
     }
 
     pub fn get_active_connections(&self) -> Vec<&ConnectionGene> {
-        self.connections.iter().filter(|connection| connection.enabled).collect()
+        self.connections
+            .iter()
+            .filter(|connection| connection.enabled)
+            .collect()
     }
 
     pub fn get_nodes(&self) -> Vec<&NodeGene> {
@@ -197,7 +245,12 @@ impl NeuralNetwork {
 
     pub fn run_cost(&self) -> f32 {
         let active_connections = self.get_active_connections();
-        let think_cost = active_connections.len() as f32 * 0.15 + active_connections.iter().map(|c| c.weight.abs()).sum::<f32>() * 0.1;
+        let think_cost = active_connections.len() as f32 * 0.15
+            + active_connections
+                .iter()
+                .map(|c| c.weight.abs())
+                .sum::<f32>()
+                * 0.1;
         think_cost + 0.01
     }
 
@@ -220,7 +273,10 @@ impl NeuralNetwork {
             if connection.enabled {
                 let input_value = node_values[connection.in_node];
                 node_values[connection.out_node] += input_value * connection.weight;
-                debug!("Propagating value {} from node {} to node {}", input_value, connection.in_node, connection.out_node)
+                debug!(
+                    "Propagating value {} from node {} to node {}",
+                    input_value, connection.in_node, connection.out_node
+                )
             }
         }
 
@@ -228,12 +284,16 @@ impl NeuralNetwork {
         for (i, node) in self.nodes.iter().enumerate() {
             if matches!(node.node_type, NodeType::Hidden | NodeType::Output) {
                 node_values[i] = node.activation.apply(node_values[i]);
-                debug!("Applying activation function to node {} with value {}", i, node_values[i]);
+                debug!(
+                    "Applying activation function to node {} with value {}",
+                    i, node_values[i]
+                );
             }
         }
 
         // Extract the output values and return them
-        self.nodes.iter()
+        self.nodes
+            .iter()
             .enumerate()
             .filter_map(|(i, node)| {
                 if matches!(node.node_type, NodeType::Output) {
@@ -245,7 +305,6 @@ impl NeuralNetwork {
             .collect()
     }
 }
-
 
 #[cfg(test)]
 mod tests {

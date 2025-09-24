@@ -76,15 +76,19 @@ impl SegmentType {
 }
 
 fn all_segment_types() -> [SegmentType; 4] {
-    [SegmentType::muscle(), SegmentType::solid(), SegmentType::solar(), SegmentType::stomach()]
+    [
+        SegmentType::muscle(),
+        SegmentType::solid(),
+        SegmentType::solar(),
+        SegmentType::stomach(),
+    ]
 }
-
 
 pub enum MutationType {
     AddGene,
     RemoveGene,
     ChangeSegmentType,
-    ChangeJump
+    ChangeJump,
 }
 
 #[derive(Clone, Debug)]
@@ -121,7 +125,12 @@ impl Dna {
     }
     pub fn mutate(&mut self) {
         let rng = &mut rand::thread_rng();
-        let mutations = [MutationType::AddGene, MutationType::RemoveGene, MutationType::ChangeSegmentType, MutationType::ChangeJump];
+        let mutations = [
+            MutationType::AddGene,
+            MutationType::RemoveGene,
+            MutationType::ChangeSegmentType,
+            MutationType::ChangeJump,
+        ];
         let random_mutation = mutations.choose(rng).unwrap();
         let segment_types = all_segment_types();
         match random_mutation {

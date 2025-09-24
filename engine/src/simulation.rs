@@ -1,17 +1,26 @@
-use crate::core::{assign_segment_positions, Brain, despawn_food, Food, incease_move_potential, Map2d, Map3d, process_food, ScentMap, SegmentMap};
-use std::sync::Arc;
-use std::f32::consts::PI;
-use crate::core::{add_scents, assign_solid_positions, destroy_old_food, diffuse_scents, disperse_scents, Solid};
-use crate::core::{die_from_collisions};
+use crate::core::die_from_collisions;
 use crate::core::SolidsMap;
-use std::sync::mpsc::{Receiver, Sender};
-use std::sync::Mutex;
-use std::time::Instant;
-use bevy_ecs::prelude::{IntoSystemConfigs, Res, ResMut, Resource, Schedule, World};
-use rand::{Rng, thread_rng};
-use crate::core::{create_food, create_snake, Decision, Direction, eat_food, FoodMap, grow, Snake, movement, Position, RandomBrain, reproduce, split, starve, think, update_positions, assign_missing_segments, increase_age, calculate_stats, RandomNeuralBrain, assign_species, Species};
+use crate::core::{
+    add_scents, assign_solid_positions, destroy_old_food, diffuse_scents, disperse_scents, Solid,
+};
+use crate::core::{
+    assign_missing_segments, assign_species, calculate_stats, create_food, create_snake, eat_food,
+    grow, increase_age, movement, reproduce, split, starve, think, update_positions, Decision,
+    Direction, FoodMap, Position, RandomBrain, RandomNeuralBrain, Snake, Species,
+};
+use crate::core::{
+    assign_segment_positions, despawn_food, incease_move_potential, process_food, Brain, Food,
+    Map2d, Map3d, ScentMap, SegmentMap,
+};
 use crate::dna::{Dna, SegmentType};
 use crate::neural::InnovationTracker;
+use bevy_ecs::prelude::{IntoSystemConfigs, Res, ResMut, Resource, Schedule, World};
+use rand::{thread_rng, Rng};
+use std::f32::consts::PI;
+use std::sync::mpsc::{Receiver, Sender};
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::Instant;
 
 pub struct Simulation {
     first_schedule: Schedule,
@@ -36,16 +45,10 @@ pub struct Hex {
 #[derive(Debug, Clone)]
 pub enum HexType {
     Food,
-    SnakeHead {
-        specie: u32,
-    },
+    SnakeHead { specie: u32 },
     SnakeTail,
-    Scent {
-        value: f32,
-    },
-    Segment {
-        segment_type: SegmentType
-    },
+    Scent { value: f32 },
+    Segment { segment_type: SegmentType },
     Meat,
 }
 
@@ -71,9 +74,19 @@ pub struct Stats {
 
 #[derive(Debug, Clone)]
 pub enum EngineEvent {
-    SimulationFinished { steps: u32, name: String, duration: u128 },
-    DrawData { hexes: Vec<Hex>, stats: Stats },
-    FrameDrawn { updates_left: f32, updates_done: u32 },
+    SimulationFinished {
+        steps: u32,
+        name: String,
+        duration: u128,
+    },
+    DrawData {
+        hexes: Vec<Hex>,
+        stats: Stats,
+    },
+    FrameDrawn {
+        updates_left: f32,
+        updates_done: u32,
+    },
 }
 
 #[derive(Debug, Resource, Clone, Copy)]
@@ -99,7 +112,7 @@ pub struct MutationConfig {
     pub dna_mutation_chance: f64,
     pub weight_reset_chance: f64,
     pub weight_reset_range: f32,
-    pub perturb_reset_connections: bool
+    pub perturb_reset_connections: bool,
 }
 
 impl Default for MutationConfig {
@@ -153,7 +166,7 @@ pub struct SimulationConfig {
     pub create_scents: bool,
     pub snake_max_age: u32,
     pub meat_energy_content: f32,
-    pub plant_energy_content: f32
+    pub plant_energy_content: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -196,7 +209,9 @@ fn turn_counter(mut engine_state: ResMut<EngineState>) {
 }
 
 fn should_simulate_frame(engine_state: Res<EngineState>) -> bool {
-    engine_state.ignore_speed_limit || engine_state.speed_limit.is_none() || (engine_state.running && engine_state.frames_left > 0.0)
+    engine_state.ignore_speed_limit
+        || engine_state.speed_limit.is_none()
+        || (engine_state.running && engine_state.frames_left > 0.0)
 }
 
 fn should_calculate_stats(engine_state: Res<EngineState>) -> bool {
@@ -211,7 +226,12 @@ fn should_increase_age(engine_state: Res<EngineState>) -> bool {
 }
 
 impl Simulation {
-    pub fn new(name: String, engine_events: Sender<EngineEvent>, engine_commands: Option<Arc<Mutex<Receiver<EngineCommand>>>>, config: SimulationConfig) -> Self {
+    pub fn new(
+        name: String,
+        engine_events: Sender<EngineEvent>,
+        engine_commands: Option<Arc<Mutex<Receiver<EngineCommand>>>>,
+        config: SimulationConfig,
+    ) -> Self {
         let mut world = World::new();
         let innovation_tracker = InnovationTracker::new();
         // for _ in 0..config.starting_snakes {
@@ -220,18 +240,29 @@ impl Simulation {
         // for _ in 0..config.starting_food {
         //     world.spawn(
         // }
-        let mut solids = SolidsMap { map: Map2d::new(config.columns, config.rows, false) };
+        let mut solids = SolidsMap {
+            map: Map2d::new(config.columns, config.rows, false),
+        };
         if config.add_walls {
             for x in 0..config.columns {
                 let middle = config.rows / 2;
                 if x != middle && x != middle + 1 && x != middle - 1 {
-                    let position = Position { x: x as i32, y: (config.rows / 4) as i32 };
+                    let position = Position {
+                        x: x as i32,
+                        y: (config.rows / 4) as i32,
+                    };
                     solids.map.set(&position, true);
                     world.spawn((Solid, position));
-                    let position = Position { x: x as i32, y: (2 * config.rows / 4) as i32 };
+                    let position = Position {
+                        x: x as i32,
+                        y: (2 * config.rows / 4) as i32,
+                    };
                     solids.map.set(&position, true);
                     world.spawn((Solid, position));
-                    let position = Position { x: x as i32, y: (3 * config.rows / 4) as i32 };
+                    let position = Position {
+                        x: x as i32,
+                        y: (3 * config.rows / 4) as i32,
+                    };
                     solids.map.set(&position, true);
                     world.spawn((Solid, position));
                 }
@@ -239,21 +270,80 @@ impl Simulation {
         }
         world.insert_resource(config);
         world.insert_resource(Stats::default());
-        world.insert_resource(FoodMap { map: Map2d::new(config.columns, config.rows, Food::default()) });
+        world.insert_resource(FoodMap {
+            map: Map2d::new(config.columns, config.rows, Food::default()),
+        });
         world.insert_resource(solids);
-        world.insert_resource(ScentMap { map: Map2d::new(config.columns, config.rows, 0.0) });
-        world.insert_resource(SegmentMap { map: Map3d::new(config.columns, config.rows) });
-        world.insert_resource(EngineEvents { events: Mutex::new(engine_events.clone()) });
+        world.insert_resource(ScentMap {
+            map: Map2d::new(config.columns, config.rows, 0.0),
+        });
+        world.insert_resource(SegmentMap {
+            map: Map3d::new(config.columns, config.rows),
+        });
+        world.insert_resource(EngineEvents {
+            events: Mutex::new(engine_events.clone()),
+        });
         world.insert_resource(innovation_tracker);
         world.insert_resource(Species::default());
         let mut first_schedule = Schedule::default();
         let mut core_schedule = Schedule::default();
         let mut secondary_schedule = Schedule::default();
-        first_schedule.add_systems((assign_species, starve, (assign_missing_segments, create_food, incease_move_potential, process_food), die_from_collisions, grow, add_scents).chain().run_if(should_simulate_frame));
-        core_schedule.add_systems(((think, increase_age.run_if(should_increase_age), calculate_stats.run_if(should_calculate_stats), diffuse_scents, ), (movement, update_positions, split).chain(), eat_food, destroy_old_food).chain().run_if(should_simulate_frame));
-        secondary_schedule.add_systems(((assign_solid_positions, assign_segment_positions), (turn_counter, disperse_scents, despawn_food.run_if(should_despawn_food))).chain().run_if(should_simulate_frame));
+        first_schedule.add_systems(
+            (
+                assign_species,
+                starve,
+                (
+                    assign_missing_segments,
+                    create_food,
+                    incease_move_potential,
+                    process_food,
+                ),
+                die_from_collisions,
+                grow,
+                add_scents,
+            )
+                .chain()
+                .run_if(should_simulate_frame),
+        );
+        core_schedule.add_systems(
+            (
+                (
+                    think,
+                    increase_age.run_if(should_increase_age),
+                    calculate_stats.run_if(should_calculate_stats),
+                    diffuse_scents,
+                ),
+                (movement, update_positions, split).chain(),
+                eat_food,
+                destroy_old_food,
+            )
+                .chain()
+                .run_if(should_simulate_frame),
+        );
+        secondary_schedule.add_systems(
+            (
+                (assign_solid_positions, assign_segment_positions),
+                (
+                    turn_counter,
+                    disperse_scents,
+                    despawn_food.run_if(should_despawn_food),
+                ),
+            )
+                .chain()
+                .run_if(should_simulate_frame),
+        );
         let gui_schedule = Schedule::default();
-        Simulation { first_schedule, core_schedule, secondary_schedule, gui_schedule, world, name, engine_events, engine_commands, has_gui: false }
+        Simulation {
+            first_schedule,
+            core_schedule,
+            secondary_schedule,
+            gui_schedule,
+            world,
+            name,
+            engine_events,
+            engine_commands,
+            has_gui: false,
+        }
     }
 
     pub fn step(&mut self) {
@@ -273,7 +363,7 @@ impl Simulation {
         while !self.is_done() {
             if let Some(commands) = match &self.engine_commands {
                 Some(arc_mutex) => arc_mutex.lock().ok(),
-                None => None
+                None => None,
             } {
                 commands.try_iter().for_each(|command| {
                     let mut engine_state = self.world.get_resource_mut::<EngineState>().unwrap();
@@ -282,10 +372,16 @@ impl Simulation {
                             engine_state.repaint_needed = true;
                         }
                         EngineCommand::IncreaseSpeed => {
-                            engine_state.speed_limit = engine_state.speed_limit.map(|limit| limit.max(0.01) * 2.0).or(Some(0.02));
+                            engine_state.speed_limit = engine_state
+                                .speed_limit
+                                .map(|limit| limit.max(0.01) * 2.0)
+                                .or(Some(0.02));
                         }
                         EngineCommand::DecreaseSpeed => {
-                            engine_state.speed_limit = engine_state.speed_limit.map(|limit| limit.max(0.04) / 2.0).or(Some(0.02));
+                            engine_state.speed_limit = engine_state
+                                .speed_limit
+                                .map(|limit| limit.max(0.04) / 2.0)
+                                .or(Some(0.02));
                         }
                         EngineCommand::IgnoreSpeedLimit => {
                             engine_state.ignore_speed_limit = !engine_state.ignore_speed_limit;
@@ -297,7 +393,8 @@ impl Simulation {
                             // let config = self.world.get_resource::<SimulationConfig>().unwrap();
                             let mut brains = vec![];
                             for _ in 0..amount {
-                                let mut innovation_tracker = self.world.get_resource_mut::<InnovationTracker>().unwrap();
+                                let mut innovation_tracker =
+                                    self.world.get_resource_mut::<InnovationTracker>().unwrap();
                                 brains.push(RandomNeuralBrain::new(&mut innovation_tracker));
                             }
                             for brain in brains {
@@ -306,9 +403,15 @@ impl Simulation {
                                 let x = rng.gen_range(0..config.columns) as i32;
                                 let y = rng.gen_range(0..config.rows) as i32;
                                 {
-                                    let (a,b,mut c,d,e) = create_snake(100.0, (x, y), Box::new(brain.clone()), Dna::random(8));
-                                    c.metabolism.segment_basic_cost = brain.get_neural_network().unwrap().run_cost();
-                                    self.world.spawn((a,b,c,d,e));
+                                    let (a, b, mut c, d, e) = create_snake(
+                                        100.0,
+                                        (x, y),
+                                        Box::new(brain.clone()),
+                                        Dna::random(8),
+                                    );
+                                    c.metabolism.segment_basic_cost =
+                                        brain.get_neural_network().unwrap().run_cost();
+                                    self.world.spawn((a, b, c, d, e));
                                 }
                             }
                         }
@@ -331,7 +434,12 @@ impl Simulation {
             let mut engine_state = self.world.get_resource_mut::<EngineState>().unwrap();
             if engine_state.repaint_needed && engine_state.running {
                 engine_state.frames_left += engine_state.speed_limit.unwrap_or(0.00);
-                self.engine_events.send(EngineEvent::FrameDrawn { updates_left: engine_state.frames_left, updates_done: engine_state.updates_done }).unwrap();
+                self.engine_events
+                    .send(EngineEvent::FrameDrawn {
+                        updates_left: engine_state.frames_left,
+                        updates_done: engine_state.updates_done,
+                    })
+                    .unwrap();
                 engine_state.updates_done = 0;
             }
             engine_state.repaint_needed = false;
@@ -339,7 +447,11 @@ impl Simulation {
         let duration = start_time.elapsed().as_millis();
 
         let engine_state = self.world.get_resource::<EngineState>().unwrap();
-        let result = EngineEvent::SimulationFinished { steps: engine_state.frames, name: self.name.clone(), duration };
+        let result = EngineEvent::SimulationFinished {
+            steps: engine_state.frames,
+            name: self.name.clone(),
+            duration,
+        };
         self.engine_events.send(result.clone());
         result
     }
