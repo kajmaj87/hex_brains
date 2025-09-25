@@ -21,7 +21,7 @@ use tinyrand::{RandRange, SplitMix, Wyrand};
 pub struct RngResource(pub Wyrand);
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 pub struct Simulation {
@@ -390,7 +390,7 @@ impl Simulation {
         let start_time = Instant::now();
         while !self.is_done() {
             if let Some(commands) = match &self.engine_commands {
-                Some(arc_mutex) => arc_mutex.lock().ok(),
+                Some(arc_mutex) => Some(arc_mutex.lock()),
                 None => None,
             } {
                 commands.try_iter().for_each(|command| {

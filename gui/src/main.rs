@@ -20,7 +20,8 @@ use hex_brains_engine::simulation_manager::simulate_batch;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use std::thread;
 use std::time::Instant;
 use tracing::Level;
@@ -180,7 +181,6 @@ fn draw_simulation(
     let _ = engine_events
         .events
         .lock()
-        .unwrap()
         .send(EngineEvent::DrawData {
             hexes: all_hexes,
             stats: stats.clone(),
