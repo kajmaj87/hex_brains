@@ -9,6 +9,10 @@ The Memory Bank for Hex Brains has been initialized with core documentation file
 - Created architecture.md documenting system design, component relationships, and key implementation paths.
 - Created tech.md outlining technologies, dependencies, development setup, and constraints.
 - Confirmed existing brief.md aligns with project as an evolutionary simulation engine using Bevy ECS for snake agents in a hex grid world.
+- Fixed bug in DNA mutation jump adjustment to prevent underflow when removing genes.
+- Fixed condition in grow system to prevent index out of bounds when current_gene equals genes length.
+- Updated integration test to use proper mocking for RNG to avoid hangs.
+- Fixed bug in DNA mutation current_gene adjustment to prevent underflow when removing genes at index 0 with current_gene 0.
 
 ## Next Steps
 - Verify memory bank contents with user for accuracy and completeness.

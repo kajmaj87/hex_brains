@@ -1906,7 +1906,6 @@ mod tests {
         schedule_solid.add_systems(assign_solid_positions);
         schedule_solid.run(&mut world);
 
-        let mut rng = tinyrand::SplitMix::default();
         let mut innovation_tracker = InnovationTracker::new();
         let mut rng = tinyrand::SplitMix::default();
         let brain = Box::new(RandomNeuralBrain::new(&mut innovation_tracker, &mut rng));
