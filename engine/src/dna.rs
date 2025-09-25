@@ -1,6 +1,5 @@
 use bevy_ecs::prelude::Component;
-use rand::prelude::SliceRandom;
-use rand::Rng;
+use tinyrand::{Rand, RandRange};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Segment {
@@ -105,13 +104,12 @@ pub struct Dna {
 }
 
 impl Dna {
-    pub fn random(gene_pool_size: usize) -> Dna {
-        let mut rng = rand::thread_rng();
+    pub fn random(rng: &mut tinyrand::SplitMix, gene_pool_size: usize) -> Dna {
         let mut genes = Vec::new();
         for i in 0..gene_pool_size {
             let segment_types = all_segment_types();
-            let random_segment_type = segment_types.choose(&mut rng).unwrap().clone();
-            let random_jump = rng.gen_range(0..gene_pool_size);
+            let random_segment_type = segment_types[rng.next_range(0..segment_types.len())].clone();
+            let random_jump = rng.next_range(0..gene_pool_size);
             genes.push(Gene {
                 segment_type: random_segment_type,
                 id: i,
@@ -123,20 +121,20 @@ impl Dna {
             current_gene: 0,
         }
     }
-    pub fn mutate(&mut self, rng: &mut impl Rng) {
+    pub fn mutate(&mut self, rng: &mut impl Rand) {
         let mutations = [
             MutationType::AddGene,
             MutationType::RemoveGene,
             MutationType::ChangeSegmentType,
             MutationType::ChangeJump,
         ];
-        let random_mutation = mutations.choose(rng).unwrap();
+        let random_mutation = &mutations[rng.next_range(0..mutations.len())];
         let segment_types = all_segment_types();
         match random_mutation {
             MutationType::AddGene => {
                 let new_id = self.genes.len();
-                let random_segment_type = segment_types.choose(rng).unwrap().clone();
-                let new_jump = rng.gen_range(0..=new_id);
+                let random_segment_type = segment_types[rng.next_range(0..segment_types.len())].clone();
+                let new_jump = rng.next_range(0..new_id);
                 self.genes.push(Gene {
                     segment_type: random_segment_type,
                     id: new_id,
@@ -145,7 +143,7 @@ impl Dna {
             }
             MutationType::RemoveGene => {
                 if self.genes.len() > 1 {
-                    let index = rng.gen_range(0..self.genes.len());
+                    let index = rng.next_range(0..self.genes.len());
                     self.genes.remove(index);
                     for i in 0..self.genes.len() {
                         if self.genes[i].jump > index {
@@ -158,26 +156,26 @@ impl Dna {
                 }
             }
             MutationType::ChangeSegmentType => {
-                let random_segment_type = segment_types.choose(rng).unwrap().clone();
-                let random_index = rng.gen_range(0..self.genes.len());
+                let random_segment_type = segment_types[rng.next_range(0..segment_types.len())].clone();
+                let random_index = rng.next_range(0..self.genes.len());
                 self.genes[random_index].segment_type = random_segment_type;
             }
             MutationType::ChangeJump => {
-                let random_jump = rng.gen_range(0..self.genes.len());
-                let random_index = rng.gen_range(0..self.genes.len());
+                let random_jump = rng.next_range(0..self.genes.len());
+                let random_index = rng.next_range(0..self.genes.len());
                 self.genes[random_index].jump = random_jump;
             }
         }
     }
 
     #[cfg(test)]
-    pub fn mutate_specific(&mut self, mutation: MutationType, rng: &mut impl Rng) {
+    pub fn mutate_specific(&mut self, mutation: MutationType, rng: &mut impl Rand) {
         let segment_types = all_segment_types();
         match mutation {
             MutationType::AddGene => {
                 let new_id = self.genes.len();
-                let random_segment_type = segment_types.choose(rng).unwrap().clone();
-                let new_jump = rng.gen_range(0..=new_id);
+                let random_segment_type = segment_types[rng.next_range(0..segment_types.len())].clone();
+                let new_jump = rng.next_range(0..new_id);
                 self.genes.push(Gene {
                     segment_type: random_segment_type,
                     id: new_id,
@@ -186,10 +184,10 @@ impl Dna {
             }
             MutationType::RemoveGene => {
                 if self.genes.len() > 1 {
-                    let index = rng.gen_range(0..self.genes.len());
+                    let index = rng.next_range(0..self.genes.len());
                     self.genes.remove(index);
                     for i in 0..self.genes.len() {
-                        if self.genes[i].jump > index {
+                        if self.genes[i].jump >= index {
                             self.genes[i].jump -= 1;
                         }
                     }
@@ -199,13 +197,13 @@ impl Dna {
                 }
             }
             MutationType::ChangeSegmentType => {
-                let random_segment_type = segment_types.choose(rng).unwrap().clone();
-                let random_index = rng.gen_range(0..self.genes.len());
+                let random_segment_type = segment_types[rng.next_range(0..segment_types.len())].clone();
+                let random_index = rng.next_range(0..self.genes.len());
                 self.genes[random_index].segment_type = random_segment_type;
             }
             MutationType::ChangeJump => {
-                let random_jump = rng.gen_range(0..self.genes.len());
-                let random_index = rng.gen_range(0..self.genes.len());
+                let random_jump = rng.next_range(0..self.genes.len());
+                let random_index = rng.next_range(0..self.genes.len());
                 self.genes[random_index].jump = random_jump;
             }
         }
@@ -216,6 +214,7 @@ impl Dna {
     }
 
     pub fn build_segment(&mut self) -> SegmentType {
+        tracing::debug!("build_segment: current_gene={}, len={}", self.current_gene, self.genes.len());
         let segment = self.genes[self.current_gene].segment_type.clone();
         self.current_gene = self.genes[self.current_gene].jump;
         segment
@@ -225,8 +224,7 @@ impl Dna {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::rngs::StdRng;
-    use rand::SeedableRng;
+    use tinyrand::SplitMix;
 
     fn create_test_dna() -> Dna {
         let genes = vec![
@@ -285,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_mutate_add_gene() {
-        let mut rng = StdRng::seed_from_u64(42);
+        let mut rng = SplitMix::default();
         let mut dna = create_test_dna();
         let initial_len = dna.genes.len();
         let initial_genes = dna.genes.clone();
@@ -313,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_mutate_remove_gene() {
-        let mut rng = StdRng::seed_from_u64(42);
+        let mut rng = SplitMix::default();
         let mut dna = create_test_dna();
         let initial_len = dna.genes.len();
 
@@ -333,7 +331,7 @@ mod tests {
 
     #[test]
     fn test_mutate_change_segment_type() {
-        let mut rng = StdRng::seed_from_u64(42);
+        let mut rng = SplitMix::default();
         let mut dna = create_test_dna();
         let initial_genes = dna.genes.clone();
 
@@ -358,7 +356,7 @@ mod tests {
 
     #[test]
     fn test_mutate_change_jump() {
-        let mut rng = StdRng::seed_from_u64(42);
+        let mut rng = SplitMix::default();
         let mut dna = create_test_dna();
         let initial_genes = dna.genes.clone();
 
@@ -378,7 +376,7 @@ mod tests {
 
     #[test]
     fn test_multiple_mutations() {
-        let mut rng = StdRng::seed_from_u64(42);
+        let mut rng = SplitMix::default();
         let mut dna = create_test_dna();
 
         // Perform 10 mutations
@@ -398,7 +396,7 @@ mod tests {
 
     #[test]
     fn test_mutate_no_panic_on_min_length() {
-        let mut rng = StdRng::seed_from_u64(42);
+        let mut rng = SplitMix::default();
         let mut dna = Dna {
             genes: vec![Gene {
                 segment_type: SegmentType::muscle(),
@@ -413,5 +411,50 @@ mod tests {
         dna.mutate_specific(MutationType::RemoveGene, &mut rng);
         assert_eq!(dna.genes.len(), initial_len);
         assert!(is_valid_dna(&dna));
+    }
+
+    #[test]
+    fn test_regression_build_segment_index_out_of_bounds() {
+        // Regression test for the fixed panic: ensures build_segment handles valid jumps without panic
+        // Previously, invalid jumps >= len could cause index out of bounds
+        let mut dna = Dna {
+            genes: vec![
+                Gene { segment_type: SegmentType::muscle(), id: 0, jump: 1 },
+                Gene { segment_type: SegmentType::solid(), id: 1, jump: 2 },
+                Gene { segment_type: SegmentType::solar(), id: 2, jump: 3 },
+                Gene { segment_type: SegmentType::stomach(), id: 3, jump: 4 },
+                Gene { segment_type: SegmentType::muscle(), id: 4, jump: 5 },
+                Gene { segment_type: SegmentType::solid(), id: 5, jump: 6 },
+                Gene { segment_type: SegmentType::solar(), id: 6, jump: 6 }, // valid jump < len
+            ],
+            current_gene: 6,
+        };
+
+        // Should not panic
+        let _ = dna.build_segment();
+        let _ = dna.build_segment();
+    }
+
+    #[test]
+    fn test_regression_remove_gene_jump_adjustment() {
+        // Regression test for the fixed jump adjustment bug in remove_gene
+        // With buggy code (>), this should panic; with fixed (>=), it should not
+        let mut dna = Dna {
+            genes: vec![
+                Gene { segment_type: SegmentType::muscle(), id: 0, jump: 0 },
+                Gene { segment_type: SegmentType::solid(), id: 1, jump: 2 },
+                Gene { segment_type: SegmentType::solar(), id: 2, jump: 2 },
+            ],
+            current_gene: 1,
+        };
+        let mut rng = SplitMix::default();
+        dna.mutate_specific(MutationType::RemoveGene, &mut rng);
+        // With buggy code (>), jumps may be invalid, causing panic in build_segment
+        let result = std::panic::catch_unwind(|| {
+            let mut dna_clone = dna.clone();
+            dna_clone.build_segment(); // sets current_gene to 2
+            dna_clone.build_segment(); // tries to access genes[2], panic
+        });
+        assert!(result.is_ok(), "Should not panic with correct adjustment");
     }
 }

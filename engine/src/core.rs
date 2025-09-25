@@ -2,8 +2,7 @@ use crate::dna::{Dna, SegmentType};
 use crate::neural::{ConnectionGene, InnovationTracker, NeuralNetwork, SensorInput};
 use crate::simulation::{SimulationConfig, Stats};
 use bevy_ecs::prelude::*;
-use rand::prelude::SliceRandom;
-use rand::Rng;
+use tinyrand::{Rand, RandRange};
 use std::clone::Clone;
 use std::collections::VecDeque;
 use std::fmt::Debug;
@@ -32,9 +31,8 @@ pub enum Direction {
 }
 
 impl Direction {
-    pub fn random() -> Self {
-        let mut rng = rand::thread_rng();
-        match rng.gen_range(0..=5) {
+    pub fn random(rng: &mut tinyrand::SplitMix) -> Self {
+        match rng.next_range(0u32..6u32) as i32 {
             0 => Direction::NorthEast,
             1 => Direction::East,
             2 => Direction::SouthEast,
@@ -45,7 +43,7 @@ impl Direction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Decision {
     MoveForward,
     MoveLeft,
@@ -54,7 +52,7 @@ pub enum Decision {
 }
 
 pub trait Brain: Sync + Send + Debug {
-    fn decide(&self, sensory_input: Vec<f32>) -> Decision;
+    fn decide(&self, sensory_input: Vec<f32>, rng: &mut tinyrand::SplitMix) -> Decision;
     fn get_neural_network(&self) -> Option<&NeuralNetwork>;
 }
 
@@ -153,7 +151,7 @@ pub struct Solid;
 #[derive(Component)]
 pub struct JustBorn;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RandomBrain;
 
 #[derive(Debug, Clone)]
@@ -168,9 +166,10 @@ pub struct Age {
 }
 
 impl Brain for RandomBrain {
-    fn decide(&self, _: Vec<f32>) -> Decision {
-        let mut rng = rand::thread_rng();
-        match rng.gen_range(0..=3) {
+    fn decide(&self, _: Vec<f32>, rng: &mut tinyrand::SplitMix) -> Decision {
+        let val = rng.next_range(0u32..4u32);
+        debug!("RandomBrain decision value: {}", val);
+        match val as i32 {
             0 => Decision::MoveForward,
             1 => Decision::MoveLeft,
             2 => Decision::MoveRight,
@@ -184,8 +183,8 @@ impl Brain for RandomBrain {
 }
 
 impl RandomNeuralBrain {
-    pub fn new(innovation_tracker: &mut InnovationTracker) -> Self {
-        let neural_network = NeuralNetwork::random_brain(18, 0.1, innovation_tracker);
+    pub fn new(innovation_tracker: &mut InnovationTracker, rng: &mut tinyrand::SplitMix) -> Self {
+        let neural_network = NeuralNetwork::random_brain(18, 0.1, innovation_tracker, rng);
         Self { neural_network }
     }
     pub fn from_neural_network(neural_network: NeuralNetwork) -> Self {
@@ -194,7 +193,7 @@ impl RandomNeuralBrain {
 }
 
 impl Brain for RandomNeuralBrain {
-    fn decide(&self, sensor_input: Vec<f32>) -> Decision {
+    fn decide(&self, sensor_input: Vec<f32>, _rng: &mut tinyrand::SplitMix) -> Decision {
         debug!("Neural network input: {:?}", sensor_input);
         let sensor_input = sensor_input
             .iter()
@@ -205,6 +204,7 @@ impl Brain for RandomNeuralBrain {
             })
             .collect();
         let output = self.neural_network.run(sensor_input);
+        debug!("Neural network output: {:?}", output);
         // return the index with the maximum value of the output vector
         let mut max_index = 0;
         let mut max_value = 0.0;
@@ -214,6 +214,7 @@ impl Brain for RandomNeuralBrain {
                 max_index = index;
             }
         }
+        debug!("Max index: {}", max_index);
         let decision = match max_index {
             0 => Decision::MoveForward,
             1 => Decision::MoveLeft,
@@ -611,13 +612,13 @@ pub fn think(
     solids_map: Res<SolidsMap>,
     scent_map: Res<ScentMap>,
     config: Res<SimulationConfig>,
+    mut rng: ResMut<crate::simulation::RngResource>,
 ) {
     puffin::profile_function!();
     let bias = 1.0;
-    heads.par_iter_mut().for_each(|(position, mut head, age)| {
-        let mut rng = rand::thread_rng();
+    heads.iter_mut().for_each(|(position, mut head, age)| {
         let chaos = if config.mutation.chaos_input_enabled {
-            rng.gen_range(0.0..1.0)
+            (rng.0.next_u32() as f64) / (u32::MAX as f64)
         } else {
             0.0
         };
@@ -707,7 +708,7 @@ pub fn think(
         let age_level = age.efficiency_factor;
         head.decision = head.brain.decide(vec![
             bias,
-            chaos,
+            chaos as f32,
             scent_front,
             scent_left,
             scent_right,
@@ -724,7 +725,9 @@ pub fn think(
             meat_food_level,
             energy_level,
             age_level,
-        ]);
+        ], &mut rng.0);
+        debug!("Snake decision: {:?}", head.decision);
+        debug!("Is neural brain: {}", head.brain.get_neural_network().is_some());
     });
 }
 
@@ -847,6 +850,7 @@ pub fn diffuse_scents(
     scents: Query<(&Scent, &Position)>,
     mut scent_map: ResMut<ScentMap>,
     config: Res<SimulationConfig>,
+    mut rng: ResMut<crate::simulation::RngResource>,
 ) {
     let directions = [
         Direction::NorthEast,
@@ -856,9 +860,9 @@ pub fn diffuse_scents(
         Direction::West,
         Direction::NorthWest,
     ];
-    let mut rng = rand::thread_rng();
+    let rng = &mut rng.0;
     for (_, position) in &scents {
-        let random_direction = directions.choose(&mut rng).unwrap();
+        let random_direction = &directions[rng.next_range(0..directions.len())];
         let new_position = position_at_direction(random_direction, position.clone(), *config);
         let diffused_scent = scent_map.map.get(position) * config.scent_diffusion_rate;
         *scent_map.map.get_mut(position) -= diffused_scent;
@@ -911,14 +915,15 @@ pub fn create_food(
     mut commands: Commands,
     mut food_map: ResMut<FoodMap>,
     config: Res<SimulationConfig>,
+    mut rng: ResMut<crate::simulation::RngResource>,
 ) {
     puffin::profile_function!();
-    let mut rng = rand::thread_rng();
+    let rng = &mut rng.0;
     let rows = config.rows as i32;
     let columns = config.columns as i32;
     for _ in 0..config.food_per_step {
-        let x = rng.gen_range(0..columns);
-        let y = rng.gen_range(0..rows);
+        let x = (rng.next_u32() % columns as u32) as i32;
+        let y = (rng.next_u32() % rows as u32) as i32;
         let food = food_map.map.get_mut(&Position { x, y });
         if !food.contains_food() {
             commands.spawn((
@@ -1151,28 +1156,29 @@ pub fn split(
     positions: Query<&Position>,
     config: Res<SimulationConfig>,
     _innovation_tracker: ResMut<InnovationTracker>,
+    mut rng: ResMut<crate::simulation::RngResource>,
 ) {
     puffin::profile_function!();
-    for (head_id, mut snake) in &mut snakes {
+    let rng = &mut rng.0;
+    for (_head_id, mut snake) in &mut snakes {
         let snake_length = snake.segments.len();
         if snake_length >= config.size_to_split {
-            let mut rng = rand::thread_rng();
             let new_neural_network = if let Some(neural_network) = snake.brain.get_neural_network()
             {
                 let mut nn = neural_network.clone();
                 let mut mutations = snake.mutations;
-                if rng.gen_bool(config.mutation.connection_flip_chance) {
+                if (rng.next_u32() as f64) / (u32::MAX as f64) < config.mutation.connection_flip_chance {
                     nn.flip_random_connection();
                     mutations += 1;
                 }
-                if rng.gen_bool(config.mutation.weight_perturbation_chance) {
+                if (rng.next_u32() as f64) / (u32::MAX as f64) < config.mutation.weight_perturbation_chance {
                     nn.mutate_perturb_random_connection_weight(
                         config.mutation.weight_perturbation_range,
                         config.mutation.perturb_disabled_connections,
                     );
                     mutations += 1;
                 }
-                if rng.gen_bool(config.mutation.weight_reset_chance) {
+                if (rng.next_u32() as f64) / (u32::MAX as f64) < config.mutation.weight_reset_chance {
                     nn.mutate_reset_random_connection_weight(
                         config.mutation.weight_reset_range,
                         config.mutation.perturb_reset_connections,
@@ -1180,8 +1186,8 @@ pub fn split(
                     mutations += 1;
                 }
                 let mut dna = snake.dna.clone();
-                if rng.gen_bool(config.mutation.dna_mutation_chance) {
-                    dna.mutate(&mut rng);
+                if (rng.next_u32() as f64) / (u32::MAX as f64) < config.mutation.dna_mutation_chance {
+                    dna.mutate(rng);
                     mutations += 1;
                 }
                 (nn, mutations, dna)
@@ -1200,6 +1206,7 @@ pub fn split(
                 snake.generation + 1,
                 mutations,
                 dna,
+                rng,
             );
             new_snake.segments = new_snake_segments;
             new_snake.energy.energy = snake.energy.energy / 2.0;
@@ -1218,7 +1225,7 @@ pub fn split(
                 "New snake after split: {:#?}, {:#?}",
                 new_snake.metabolism, new_snake.energy
             );
-            if rng.gen_bool(0.5) {
+            if (rng.next_u32() as f64) / (u32::MAX as f64) < 0.5 {
                 new_snake.direction = turn_left(&snake.direction);
             } else {
                 new_snake.direction = turn_right(&snake.direction);
@@ -1557,11 +1564,12 @@ pub fn create_snake(
     position: (i32, i32),
     brain: Box<dyn Brain>,
     dna: Dna,
+    rng: &mut tinyrand::SplitMix,
 ) -> (Position, MeatMatter, Snake, Age, JustBorn) {
     if brain.get_neural_network().is_none() {
         panic!("Brain without neural network");
     }
-    let (head, age, just_born) = create_head(position, brain, 0, 0, dna);
+    let (head, age, just_born) = create_head(position, brain, 0, 0, dna, rng);
     (
         Position {
             x: position.0,
@@ -1582,10 +1590,11 @@ fn create_head(
     generation: u32,
     mutations: u32,
     dna: Dna,
+    rng: &mut tinyrand::SplitMix,
 ) -> (Snake, Age, JustBorn) {
     (
         Snake {
-            direction: Direction::random(),
+            direction: Direction::random(rng),
             decision: Decision::Wait,
             brain,
             new_position: position,
@@ -1652,12 +1661,14 @@ mod tests {
         world.insert_resource(ScentMap {
             map: Map2d::new(5, 5, 0.0f32),
         });
+        world.insert_resource(crate::simulation::RngResource(tinyrand::SplitMix::default()));
         world
     }
 
     #[test]
     fn test_movement_forward() {
         let mut world = setup_world();
+        let mut rng = tinyrand::SplitMix::default();
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::MoveForward,
@@ -1668,7 +1679,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(1),
+            dna: Dna::random(&mut rng, 1),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -1715,6 +1726,7 @@ mod tests {
     #[test]
     fn test_movement_wait() {
         let mut world = setup_world();
+        let mut rng = tinyrand::SplitMix::default();
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::Wait,
@@ -1725,7 +1737,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(1),
+            dna: Dna::random(&mut rng, 1),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -1771,6 +1783,7 @@ mod tests {
     #[test]
     fn test_movement_left() {
         let mut world = setup_world();
+        let mut rng = tinyrand::SplitMix::default();
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::MoveLeft,
@@ -1781,7 +1794,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(1),
+            dna: Dna::random(&mut rng, 1),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -1828,6 +1841,7 @@ mod tests {
     #[test]
     fn test_movement_right() {
         let mut world = setup_world();
+        let mut rng = tinyrand::SplitMix::default();
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::MoveRight,
@@ -1838,7 +1852,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(1),
+            dna: Dna::random(&mut rng, 1),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -1892,8 +1906,10 @@ mod tests {
         schedule_solid.add_systems(assign_solid_positions);
         schedule_solid.run(&mut world);
 
+        let mut rng = tinyrand::SplitMix::default();
         let mut innovation_tracker = InnovationTracker::new();
-        let brain = Box::new(RandomNeuralBrain::new(&mut innovation_tracker));
+        let mut rng = tinyrand::SplitMix::default();
+        let brain = Box::new(RandomNeuralBrain::new(&mut innovation_tracker, &mut rng));
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::MoveForward,
@@ -1904,7 +1920,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(1),
+            dna: Dna::random(&mut rng, 1),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -1955,6 +1971,7 @@ mod tests {
     #[test]
     fn test_movement_wrap_around() {
         let mut world = setup_world();
+        let mut rng = tinyrand::SplitMix::default();
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::MoveForward,
@@ -1965,7 +1982,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(1),
+            dna: Dna::random(&mut rng, 1),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -2058,7 +2075,7 @@ mod tests {
 
         // Spawn head
         let head_pos = Position { x: 0, y: 0 };
-        let (snake, age, justborn) = create_head((0, 0), brain, 0, 0, dna);
+        let (snake, age, justborn) = create_head((0, 0), brain, 0, 0, dna, &mut world.resource_mut::<crate::simulation::RngResource>().0);
         let mut snake = snake;
         snake.energy.energy = 100.0;
         snake.energy.move_potential = 1.0; // Allow one move, but will wait
@@ -2161,7 +2178,7 @@ mod tests {
 
         let starve_head_pos = Position { x: 0, y: 0 };
         let (mut starve_snake, starve_age, starve_justborn) =
-            create_head((0, 0), starve_brain, 0, 0, starve_dna);
+            create_head((0, 0), starve_brain, 0, 0, starve_dna, &mut starve_world.resource_mut::<crate::simulation::RngResource>().0);
         starve_snake.energy.energy = -1.0; // Low energy to trigger starvation
         starve_snake.energy.move_potential = 0.0;
         let starve_head = starve_world
@@ -2231,7 +2248,7 @@ mod tests {
 
         // Mutated DNA: to stomach (higher always cost 1.0)
         let mut mutated_dna = normal_dna.clone();
-        let mut rng = rand::thread_rng();
+        let mut rng = tinyrand::SplitMix::default();
         mutated_dna.mutate_specific(MutationType::ChangeSegmentType, &mut rng);
         // Force to stomach for determinism
         if let Some(gene) = mutated_dna.genes.first_mut() {
@@ -2244,7 +2261,7 @@ mod tests {
         normal_brain_nn.add_connection(0, 21, 2.0, true, 0); // hardcoded
         let normal_brain = Box::new(RandomNeuralBrain::from_neural_network(normal_brain_nn));
         let (mut normal_snake, normal_age, normal_justborn) =
-            create_head((0, 0), normal_brain, 0, 0, normal_dna);
+            create_head((0, 0), normal_brain, 0, 0, normal_dna, &mut mutation_world.resource_mut::<crate::simulation::RngResource>().0);
         normal_snake.energy.energy = 100.0;
         normal_snake.energy.move_potential = 1.0;
         let normal_head = mutation_world
@@ -2275,7 +2292,7 @@ mod tests {
         mutated_brain_nn.add_connection(0, 21, 2.0, true, 0); // hardcoded
         let mutated_brain = Box::new(RandomNeuralBrain::from_neural_network(mutated_brain_nn));
         let (mut mutated_snake, mutated_age, mutated_justborn) =
-            create_head((0, 0), mutated_brain, 0, 0, mutated_dna);
+            create_head((0, 0), mutated_brain, 0, 0, mutated_dna, &mut mutation_world.resource_mut::<crate::simulation::RngResource>().0);
         mutated_snake.energy.energy = 100.0;
         mutated_snake.energy.move_potential = 1.0;
         let mutated_head = mutation_world

@@ -9,6 +9,7 @@ use hex_brains_engine::neural::{InnovationTracker, NeuralNetwork};
 use hex_brains_engine::simulation::{
     EngineEvent, EngineState, MutationConfig, Simulation, SimulationConfig, Stats,
 };
+use tinyrand::Seeded;
 
 #[test]
 fn test_agent_reproduction_and_splitting_size_one() {
@@ -43,16 +44,19 @@ fn test_agent_reproduction_and_splitting_size_one() {
     world.insert_resource(SegmentMap {
         map: Map3d::new(10, 10),
     });
+    world.insert_resource(hex_brains_engine::simulation::RngResource(tinyrand::SplitMix::seed(42)));
     let mut innovation_tracker = world.get_resource_mut::<InnovationTracker>().unwrap();
 
     // Create and spawn initial snake with sufficient energy
-    let initial_dna = Dna::random(5);
-    let brain = Box::new(RandomNeuralBrain::new(&mut *innovation_tracker));
+    let mut rng = tinyrand::SplitMix::seed(42);
+    let initial_dna = Dna::random(&mut rng, 5);
+    let brain = Box::new(RandomNeuralBrain::new(&mut *innovation_tracker, &mut rng));
     let (pos, meat, snake, age, justborn) = create_snake(
         200.0,  // High energy to test halving
         (5, 5), // Central position
         brain,
         initial_dna.clone(),
+        &mut world.resource_mut::<hex_brains_engine::simulation::RngResource>().0,
     );
     let head_id = world.spawn((pos, meat, snake, age, justborn)).id();
 

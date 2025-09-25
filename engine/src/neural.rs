@@ -1,5 +1,5 @@
 use bevy_ecs::prelude::Resource;
-use rand::Rng;
+use tinyrand::{Rand, RandRange};
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -125,6 +125,7 @@ impl NeuralNetwork {
         total_inputs: usize,
         connection_active_probability: f32,
         innovation_tracker: &mut InnovationTracker,
+        rng: &mut tinyrand::SplitMix,
     ) -> NeuralNetwork {
         // Define input activations: one for bias (using ReLU to keep it at 1) and one for the actual input.
         let input_activations = vec![Activation::Relu; total_inputs];
@@ -133,14 +134,15 @@ impl NeuralNetwork {
         let output_activations = vec![Activation::Sigmoid; 4];
 
         let mut network = NeuralNetwork::new(input_activations.clone(), output_activations.clone());
-        let rng = &mut rand::thread_rng();
         for (i, _) in input_activations.iter().enumerate() {
             for (j, _) in output_activations.iter().enumerate() {
+                let weight = ((rng.next_u32() as f64) / (u32::MAX as f64) - 0.5) as f32;
+                let active = (rng.next_u32() as f64) / (u32::MAX as f64) < connection_active_probability as f64;
                 network.add_connection(
                     i,
                     j + input_activations.len(),
-                    rng.gen_range(0.0..1.0) - 0.5,
-                    rng.gen_range(0.0..1.0) < connection_active_probability,
+                    weight,
+                    active,
                     innovation_tracker.get_innovation_number(i, j),
                 )
             }
@@ -175,8 +177,8 @@ impl NeuralNetwork {
     }
 
     pub fn flip_random_connection(&mut self) {
-        let mut rng = rand::thread_rng();
-        let index = rng.gen_range(0..self.connections.len());
+        let mut rng = tinyrand::SplitMix::default();
+        let index = rng.next_range(0..self.connections.len());
         debug!("Flipping connection {}", index);
         self.connections[index].enabled = !self.connections[index].enabled;
     }
@@ -186,20 +188,20 @@ impl NeuralNetwork {
         mutation_strength: f32,
         perturb_disabled_connections: bool,
     ) {
-        let mut rng = rand::thread_rng();
+        let mut rng = tinyrand::SplitMix::default();
         let mut index;
         let active_connections = self.get_active_connections();
         if perturb_disabled_connections || active_connections.is_empty() {
-            index = rng.gen_range(0..self.connections.len());
+            index = rng.next_range(0..self.connections.len());
         } else {
-            index = rng.gen_range(0..self.get_active_connections().len());
+            index = rng.next_range(0..self.get_active_connections().len());
             index = self
                 .connections
                 .iter()
                 .position(|c| active_connections.get(index).unwrap() == &c)
                 .unwrap();
         }
-        self.connections[index].weight += rng.gen_range(-mutation_strength..mutation_strength);
+        self.connections[index].weight += ((rng.next_u32() as f32) / (u32::MAX as f32)) * (mutation_strength * 2.0) - mutation_strength;
         debug!(
             "Mutating connection {} to value {}",
             index, self.connections[index].weight
@@ -211,20 +213,20 @@ impl NeuralNetwork {
         mutation_strength: f32,
         perturb_disabled_connections: bool,
     ) {
-        let mut rng = rand::thread_rng();
+        let mut rng = tinyrand::SplitMix::default();
         let mut index;
         let active_connections = self.get_active_connections();
         if perturb_disabled_connections || active_connections.is_empty() {
-            index = rng.gen_range(0..self.connections.len());
+            index = rng.next_range(0..self.connections.len());
         } else {
-            index = rng.gen_range(0..self.get_active_connections().len());
+            index = rng.next_range(0..self.get_active_connections().len());
             index = self
                 .connections
                 .iter()
                 .position(|c| active_connections.get(index).unwrap() == &c)
                 .unwrap();
         }
-        self.connections[index].weight = rng.gen_range(-mutation_strength..mutation_strength);
+        self.connections[index].weight = ((rng.next_u32() as f32) / (u32::MAX as f32)) * (mutation_strength * 2.0) - mutation_strength;
         debug!(
             "Mutating connection {} to value {}",
             index, self.connections[index].weight
