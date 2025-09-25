@@ -12,14 +12,14 @@ pub struct SensorInput {
 
 type InnovationNumber = usize;
 
-#[derive(Default, Resource)]
+#[derive(Default, Resource, Clone)]
 pub struct InnovationTracker {
     current_innovation: InnovationNumber,
     innovation_map: HashMap<(usize, usize), InnovationNumber>,
 }
 
 impl InnovationTracker {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         InnovationTracker::default()
     }
 
@@ -41,7 +41,7 @@ pub struct ConnectionGene {
     pub out_node: usize,
     pub weight: f32,
     pub enabled: bool,
-    pub innovation_number: InnovationNumber,
+    pub innovation_number: usize,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -51,7 +51,7 @@ pub enum NodeType {
     Output,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Activation {
     Sigmoid,
     Relu,
@@ -70,7 +70,7 @@ impl Activation {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct NodeGene {
     pub node_type: NodeType,
     activation: Activation,
@@ -90,7 +90,7 @@ impl NodeGene {
 }
 
 // Your neural network with a generic vector for input values.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct NeuralNetwork {
     nodes: Vec<NodeGene>,
     pub connections: Vec<ConnectionGene>,
@@ -307,6 +307,47 @@ impl NeuralNetwork {
 
 #[cfg(test)]
 mod tests {
+    use super::{Activation, NeuralNetwork, SensorInput};
+    #[test]
+    fn test_neural_network_forward_pass() {
+        let input_activations = vec![Activation::None; 2];
+        let output_activations = vec![Activation::Sigmoid];
+        let mut network = NeuralNetwork::new(input_activations, output_activations);
+        network.add_connection(0, 2, 0.5, true, 0);
+        network.add_connection(1, 2, 0.5, true, 1);
+        let inputs = vec![
+            SensorInput {
+                value: 1.0,
+                index: 0,
+            },
+            SensorInput {
+                value: 1.0,
+                index: 1,
+            },
+        ];
+        let outputs = network.run(inputs);
+        let expected = 1.0 / (1.0 + (1.0f32).exp().recip());
+        assert!((outputs[0] - expected).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_neural_network_empty_forward_pass() {
+        let input_activations = vec![Activation::None; 2];
+        let output_activations = vec![Activation::Sigmoid];
+        let network = NeuralNetwork::new(input_activations, output_activations);
+        let inputs = vec![
+            SensorInput {
+                value: 1.0,
+                index: 0,
+            },
+            SensorInput {
+                value: 1.0,
+                index: 1,
+            },
+        ];
+        let outputs = network.run(inputs);
+        assert!((outputs[0] - 0.5).abs() < 1e-6);
+    }
 
     //
     // struct FloatInput {

@@ -2,13 +2,13 @@ use bevy_ecs::prelude::Component;
 use rand::prelude::SliceRandom;
 use rand::Rng;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Segment {
     pub energy_cost_move: f32,
     pub energy_cost_always: f32,
     pub mobility: f32,
 }
-#[derive(Clone, Debug, Component)]
+#[derive(Clone, Debug, PartialEq, Component)]
 pub enum SegmentType {
     Muscle(Segment),
     Solid(Segment),
@@ -91,21 +91,21 @@ pub enum MutationType {
     ChangeJump,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Gene {
     pub segment_type: SegmentType,
     pub id: usize,
     pub jump: usize,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Dna {
     pub genes: Vec<Gene>,
     pub current_gene: usize,
 }
 
 impl Dna {
-    pub(crate) fn random(gene_pool_size: usize) -> Dna {
+    pub fn random(gene_pool_size: usize) -> Dna {
         let mut rng = rand::thread_rng();
         let mut genes = Vec::new();
         for i in 0..gene_pool_size {
@@ -123,8 +123,7 @@ impl Dna {
             current_gene: 0,
         }
     }
-    pub fn mutate(&mut self) {
-        let rng = &mut rand::thread_rng();
+    pub fn mutate(&mut self, rng: &mut impl Rng) {
         let mutations = [
             MutationType::AddGene,
             MutationType::RemoveGene,
@@ -134,8 +133,71 @@ impl Dna {
         let random_mutation = mutations.choose(rng).unwrap();
         let segment_types = all_segment_types();
         match random_mutation {
-            MutationType::AddGene => {}
-            MutationType::RemoveGene => {}
+            MutationType::AddGene => {
+                let new_id = self.genes.len();
+                let random_segment_type = segment_types.choose(rng).unwrap().clone();
+                let new_jump = rng.gen_range(0..=new_id);
+                self.genes.push(Gene {
+                    segment_type: random_segment_type,
+                    id: new_id,
+                    jump: new_jump,
+                });
+            }
+            MutationType::RemoveGene => {
+                if self.genes.len() > 1 {
+                    let index = rng.gen_range(0..self.genes.len());
+                    self.genes.remove(index);
+                    for i in 0..self.genes.len() {
+                        if self.genes[i].jump > index {
+                            self.genes[i].jump -= 1;
+                        }
+                    }
+                    for i in index..self.genes.len() {
+                        self.genes[i].id -= 1;
+                    }
+                }
+            }
+            MutationType::ChangeSegmentType => {
+                let random_segment_type = segment_types.choose(rng).unwrap().clone();
+                let random_index = rng.gen_range(0..self.genes.len());
+                self.genes[random_index].segment_type = random_segment_type;
+            }
+            MutationType::ChangeJump => {
+                let random_jump = rng.gen_range(0..self.genes.len());
+                let random_index = rng.gen_range(0..self.genes.len());
+                self.genes[random_index].jump = random_jump;
+            }
+        }
+    }
+
+    #[cfg(test)]
+    pub fn mutate_specific(&mut self, mutation: MutationType, rng: &mut impl Rng) {
+        let segment_types = all_segment_types();
+        match mutation {
+            MutationType::AddGene => {
+                let new_id = self.genes.len();
+                let random_segment_type = segment_types.choose(rng).unwrap().clone();
+                let new_jump = rng.gen_range(0..=new_id);
+                self.genes.push(Gene {
+                    segment_type: random_segment_type,
+                    id: new_id,
+                    jump: new_jump,
+                });
+            }
+            MutationType::RemoveGene => {
+                if self.genes.len() > 1 {
+                    let index = rng.gen_range(0..self.genes.len());
+                    self.genes.remove(index);
+                    for i in 0..self.genes.len() {
+                        if self.genes[i].jump > index {
+                            self.genes[i].jump -= 1;
+                        }
+                    }
+                    for i in index..self.genes.len() {
+                        self.genes[i].id -= 1;
+                    }
+                }
+            }
             MutationType::ChangeSegmentType => {
                 let random_segment_type = segment_types.choose(rng).unwrap().clone();
                 let random_index = rng.gen_range(0..self.genes.len());
@@ -157,5 +219,199 @@ impl Dna {
         let segment = self.genes[self.current_gene].segment_type.clone();
         self.current_gene = self.genes[self.current_gene].jump;
         segment
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
+
+    fn create_test_dna() -> Dna {
+        let genes = vec![
+            Gene {
+                segment_type: SegmentType::muscle(),
+                id: 0,
+                jump: 0,
+            },
+            Gene {
+                segment_type: SegmentType::solid(),
+                id: 1,
+                jump: 2,
+            },
+            Gene {
+                segment_type: SegmentType::solar(),
+                id: 2,
+                jump: 1,
+            },
+            Gene {
+                segment_type: SegmentType::stomach(),
+                id: 3,
+                jump: 3,
+            },
+            Gene {
+                segment_type: SegmentType::muscle(),
+                id: 4,
+                jump: 4,
+            },
+        ];
+        Dna {
+            genes,
+            current_gene: 0,
+        }
+    }
+
+    fn is_valid_dna(dna: &Dna) -> bool {
+        if dna.genes.is_empty() {
+            return false;
+        }
+        for (i, gene) in dna.genes.iter().enumerate() {
+            if gene.id != i {
+                return false;
+            }
+            if gene.jump >= dna.genes.len() {
+                return false;
+            }
+            match &gene.segment_type {
+                SegmentType::Muscle(_)
+                | SegmentType::Solid(_)
+                | SegmentType::Solar(_)
+                | SegmentType::Stomach(_) => {}
+            }
+        }
+        true
+    }
+
+    #[test]
+    fn test_mutate_add_gene() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let mut dna = create_test_dna();
+        let initial_len = dna.genes.len();
+        let initial_genes = dna.genes.clone();
+
+        dna.mutate_specific(MutationType::AddGene, &mut rng);
+
+        assert_eq!(dna.genes.len(), initial_len + 1);
+        let new_gene = &dna.genes[initial_len];
+        assert_eq!(new_gene.id, initial_len);
+        assert!(new_gene.jump <= initial_len);
+        match &new_gene.segment_type {
+            SegmentType::Muscle(_)
+            | SegmentType::Solid(_)
+            | SegmentType::Solar(_)
+            | SegmentType::Stomach(_) => {}
+        }
+        // Other genes unchanged
+        for i in 0..initial_len {
+            assert_eq!(dna.genes[i].id, initial_genes[i].id);
+            assert_eq!(dna.genes[i].jump, initial_genes[i].jump);
+            assert_eq!(dna.genes[i].segment_type, initial_genes[i].segment_type);
+        }
+        assert!(is_valid_dna(&dna));
+    }
+
+    #[test]
+    fn test_mutate_remove_gene() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let mut dna = create_test_dna();
+        let initial_len = dna.genes.len();
+
+        dna.mutate_specific(MutationType::RemoveGene, &mut rng);
+
+        assert_eq!(dna.genes.len(), initial_len - 1);
+        // Check ids are renumbered correctly
+        for (i, gene) in dna.genes.iter().enumerate() {
+            assert_eq!(gene.id, i);
+        }
+        // Jumps should be adjusted if necessary, but since we don't adjust jumps, just check bounds
+        for gene in &dna.genes {
+            assert!(gene.jump < dna.genes.len());
+        }
+        assert!(is_valid_dna(&dna));
+    }
+
+    #[test]
+    fn test_mutate_change_segment_type() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let mut dna = create_test_dna();
+        let initial_genes = dna.genes.clone();
+
+        dna.mutate_specific(MutationType::ChangeSegmentType, &mut rng);
+
+        // One gene should have changed segment type
+        let mut changed_count = 0;
+        for (i, gene) in dna.genes.iter().enumerate() {
+            if gene.segment_type != initial_genes[i].segment_type {
+                changed_count += 1;
+                match &gene.segment_type {
+                    SegmentType::Muscle(_)
+                    | SegmentType::Solid(_)
+                    | SegmentType::Solar(_)
+                    | SegmentType::Stomach(_) => {}
+                }
+            }
+        }
+        assert_eq!(changed_count, 1);
+        assert!(is_valid_dna(&dna));
+    }
+
+    #[test]
+    fn test_mutate_change_jump() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let mut dna = create_test_dna();
+        let initial_genes = dna.genes.clone();
+
+        dna.mutate_specific(MutationType::ChangeJump, &mut rng);
+
+        // One gene should have changed jump
+        let mut changed_count = 0;
+        for (i, gene) in dna.genes.iter().enumerate() {
+            if gene.jump != initial_genes[i].jump {
+                changed_count += 1;
+                assert!(gene.jump < dna.genes.len());
+            }
+        }
+        assert_eq!(changed_count, 1);
+        assert!(is_valid_dna(&dna));
+    }
+
+    #[test]
+    fn test_multiple_mutations() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let mut dna = create_test_dna();
+
+        // Perform 10 mutations
+        for _ in 0..10 {
+            dna.mutate(&mut rng);
+            assert!(is_valid_dna(&dna));
+            // Length should be at least 1
+            assert!(dna.genes.len() >= 1);
+        }
+
+        // Length may vary, but jumps and ids valid
+        for (i, gene) in dna.genes.iter().enumerate() {
+            assert_eq!(gene.id, i);
+            assert!(gene.jump < dna.genes.len());
+        }
+    }
+
+    #[test]
+    fn test_mutate_no_panic_on_min_length() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let mut dna = Dna {
+            genes: vec![Gene {
+                segment_type: SegmentType::muscle(),
+                id: 0,
+                jump: 0,
+            }],
+            current_gene: 0,
+        };
+
+        // Try remove on length 1, should not change
+        let initial_len = dna.genes.len();
+        dna.mutate_specific(MutationType::RemoveGene, &mut rng);
+        assert_eq!(dna.genes.len(), initial_len);
+        assert!(is_valid_dna(&dna));
     }
 }

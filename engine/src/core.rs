@@ -1,4 +1,3 @@
-use crate::core::Direction::{East, NorthEast, NorthWest, SouthEast, SouthWest, West};
 use crate::dna::{Dna, SegmentType};
 use crate::neural::{ConnectionGene, InnovationTracker, NeuralNetwork, SensorInput};
 use crate::simulation::{SimulationConfig, Stats};
@@ -22,7 +21,7 @@ impl Position {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Direction {
     NorthEast,
     East,
@@ -36,12 +35,12 @@ impl Direction {
     pub fn random() -> Self {
         let mut rng = rand::thread_rng();
         match rng.gen_range(0..=5) {
-            0 => NorthEast,
-            1 => East,
-            2 => SouthEast,
-            3 => SouthWest,
-            4 => West,
-            _ => NorthWest,
+            0 => Direction::NorthEast,
+            1 => Direction::East,
+            2 => Direction::SouthEast,
+            3 => Direction::SouthWest,
+            4 => Direction::West,
+            _ => Direction::NorthWest,
         }
     }
 }
@@ -91,7 +90,7 @@ pub struct Snake {
 }
 
 // those change after eating or moving
-#[derive(Debug)]
+#[derive(Component, Clone, Debug)]
 pub struct Energy {
     pub move_potential: f32,
     pub meat_in_stomach: f32,
@@ -115,7 +114,7 @@ impl Default for Energy {
 }
 
 // those change only when growing or splitting
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Metabolism {
     pub segment_move_cost: f32,
     pub segment_basic_cost: f32,
@@ -185,11 +184,11 @@ impl Brain for RandomBrain {
 }
 
 impl RandomNeuralBrain {
-    pub(crate) fn new(innovation_tracker: &mut InnovationTracker) -> Self {
+    pub fn new(innovation_tracker: &mut InnovationTracker) -> Self {
         let neural_network = NeuralNetwork::random_brain(18, 0.1, innovation_tracker);
         Self { neural_network }
     }
-    pub(crate) fn from_neural_network(neural_network: NeuralNetwork) -> Self {
+    pub fn from_neural_network(neural_network: NeuralNetwork) -> Self {
         Self { neural_network }
     }
 }
@@ -463,20 +462,35 @@ pub fn update_positions(
     puffin::profile_function!();
     for (head_id, mut snake) in &mut snakes {
         let new_position = snake.new_position;
-        let last_position = positions
-            .get_mut(*snake.segments.last().unwrap())
-            .unwrap()
-            .clone();
-        let head_position = positions.get_mut(head_id).unwrap();
+
+        // Scope mutable borrow for head position
+        let old_head_position = {
+            let head_pos_mut = positions.get_mut(head_id).unwrap();
+            head_pos_mut.clone()
+        };
+
+        // Defensive handling for single-segment snakes (empty segments vec)
+        let last_position = if snake.segments.is_empty() {
+            // For single segment, last position is current head position
+            old_head_position.clone()
+        } else {
+            let last_tail_entity = *snake.segments.last().unwrap();
+            let last_tail_pos = {
+                let last_tail_mut = positions.get_mut(last_tail_entity).unwrap();
+                last_tail_mut.clone()
+            };
+            last_tail_pos
+        };
+
         debug!(
-            "Snake {:?} with {} segements is moving from {:?} to {:?} (last tail position: {:?})",
+            "Snake {:?} with {} segments is moving from {:?} to {:?} (last tail position: {:?})",
             head_id,
             snake.segments.len(),
-            head_position,
+            old_head_position,
             new_position,
             snake.last_position
         );
-        let old_head_position = head_position.clone();
+
         if new_position == old_head_position.as_pair() {
             debug!("Snake is not moving");
             continue;
@@ -525,27 +539,27 @@ fn update_segment_positions(
 
 fn turn_left(direction: &Direction) -> Direction {
     match direction {
-        NorthEast => NorthWest,
-        East => NorthEast,
-        SouthEast => East,
-        SouthWest => SouthEast,
-        West => SouthWest,
-        NorthWest => West,
+        Direction::NorthEast => Direction::NorthWest,
+        Direction::East => Direction::NorthEast,
+        Direction::SouthEast => Direction::East,
+        Direction::SouthWest => Direction::SouthEast,
+        Direction::West => Direction::SouthWest,
+        Direction::NorthWest => Direction::West,
     }
 }
 
 fn turn_right(direction: &Direction) -> Direction {
     match direction {
-        NorthEast => East,
-        East => SouthEast,
-        SouthEast => SouthWest,
-        SouthWest => West,
-        West => NorthWest,
-        NorthWest => NorthEast,
+        Direction::NorthEast => Direction::East,
+        Direction::East => Direction::SouthEast,
+        Direction::SouthEast => Direction::SouthWest,
+        Direction::SouthWest => Direction::West,
+        Direction::West => Direction::NorthWest,
+        Direction::NorthWest => Direction::NorthEast,
     }
 }
 
-fn position_at_direction(
+pub fn position_at_direction(
     direction: &Direction,
     position: Position,
     config: SimulationConfig,
@@ -553,31 +567,31 @@ fn position_at_direction(
     let mut x = position.x;
     let mut y = position.y;
     match direction {
-        NorthEast => {
+        Direction::NorthEast => {
             if y % 2 == 0 {
                 x += 1;
             }
             y -= 1;
         }
-        East => {
+        Direction::East => {
             x += 1;
         }
-        SouthEast => {
+        Direction::SouthEast => {
             if y % 2 == 0 {
                 x += 1;
             }
             y += 1;
         }
-        SouthWest => {
+        Direction::SouthWest => {
             if y % 2 == 1 {
                 x -= 1;
             }
             y += 1;
         }
-        West => {
+        Direction::West => {
             x -= 1;
         }
-        NorthWest => {
+        Direction::NorthWest => {
             if y % 2 == 1 {
                 x -= 1;
             }
@@ -834,7 +848,14 @@ pub fn diffuse_scents(
     mut scent_map: ResMut<ScentMap>,
     config: Res<SimulationConfig>,
 ) {
-    let directions = [NorthEast, East, SouthEast, SouthWest, West, NorthWest];
+    let directions = [
+        Direction::NorthEast,
+        Direction::East,
+        Direction::SouthEast,
+        Direction::SouthWest,
+        Direction::West,
+        Direction::NorthWest,
+    ];
     let mut rng = rand::thread_rng();
     for (_, position) in &scents {
         let random_direction = directions.choose(&mut rng).unwrap();
@@ -1030,28 +1051,34 @@ fn remove_snake_from_species(
     head_id: Entity,
     snake: &mut Mut<Snake>,
 ) {
-    let specie = snake.species.unwrap();
-    if let Some(specie) = species.species.iter_mut().find(|s| s.id == specie) {
-        if specie.leader == head_id {
-            specie.members.retain(|s| *s != head_id);
-            if let Some(new_leader) = specie.members.pop_front() {
-                specie.leader = new_leader;
-                specie.leader_network = snake.brain.get_neural_network().unwrap().clone();
-                debug!("New leader for specie {:?}: {:?}", specie.id, specie.leader);
+    if let Some(specie_id) = snake.species {
+        if let Some(specie) = species.species.iter_mut().find(|s| s.id == specie_id) {
+            if specie.leader == head_id {
+                specie.members.retain(|s| *s != head_id);
+                if let Some(new_leader) = specie.members.pop_front() {
+                    specie.leader = new_leader;
+                    specie.leader_network = snake.brain.get_neural_network().unwrap().clone();
+                    debug!("New leader for specie {:?}: {:?}", specie.id, specie.leader);
+                } else {
+                    let specie_id = specie.id;
+                    debug!("Specie {:?} is extinct", specie_id);
+                    species.species.retain(|s| s.id != specie_id);
+                }
             } else {
-                let specie_id = specie.id;
-                debug!("Specie {:?} is extinct", specie_id);
-                species.species.retain(|s| s.id != specie_id);
+                specie.members.retain(|s| *s != head_id);
+                debug!(
+                    "Snake {:?} died and was removed from specie {:?}",
+                    head_id, specie.id
+                );
             }
         } else {
-            specie.members.retain(|s| *s != head_id);
-            debug!(
-                "Snake {:?} died and was removed from specie {:?}",
-                head_id, specie.id
-            );
+            warn!("Snake {:?} died and was not found in any specie", head_id);
         }
     } else {
-        warn!("Snake {:?} died and was not found in any specie", head_id);
+        debug!(
+            "Snake {:?} has no species assigned, skipping removal",
+            head_id
+        );
     }
 }
 
@@ -1091,13 +1118,14 @@ fn kill_snake(
     head_id: Entity,
     snake: &mut Mut<Snake>,
 ) {
-    commands.entity(head_id).remove::<Snake>();
     remove_snake_from_species(species, head_id, snake);
     for segment_id in &snake.segments {
         remove_segment_and_transform_to_food(
             commands, positions, food_map, solids_map, config, segment_id,
         );
     }
+    commands.entity(head_id).remove::<Snake>();
+    commands.entity(head_id).despawn();
 }
 
 pub fn reproduce(
@@ -1128,30 +1156,24 @@ pub fn split(
     for (head_id, mut snake) in &mut snakes {
         let snake_length = snake.segments.len();
         if snake_length >= config.size_to_split {
-            debug!("Snake splits: {:#?}, {:#?}", snake.metabolism, snake.energy);
-            let new_snake_segments = snake.segments.split_off(snake_length / 2);
-            let new_head_id = new_snake_segments.first().unwrap();
-            let new_head_position = positions.get(*new_head_id).unwrap();
-            // new_snake_segments.reverse();
-            let mut new_head;
-            if let Some(neural_network) = snake.brain.get_neural_network() {
-                debug!("Snake {:?} is splitting with neural network", head_id);
-                let mut new_neural_network = neural_network.clone();
-                let mut rng = rand::thread_rng();
+            let mut rng = rand::thread_rng();
+            let new_neural_network = if let Some(neural_network) = snake.brain.get_neural_network()
+            {
+                let mut nn = neural_network.clone();
                 let mut mutations = snake.mutations;
                 if rng.gen_bool(config.mutation.connection_flip_chance) {
-                    new_neural_network.flip_random_connection();
+                    nn.flip_random_connection();
                     mutations += 1;
                 }
                 if rng.gen_bool(config.mutation.weight_perturbation_chance) {
-                    new_neural_network.mutate_perturb_random_connection_weight(
+                    nn.mutate_perturb_random_connection_weight(
                         config.mutation.weight_perturbation_range,
                         config.mutation.perturb_disabled_connections,
                     );
                     mutations += 1;
                 }
                 if rng.gen_bool(config.mutation.weight_reset_chance) {
-                    new_neural_network.mutate_reset_random_connection_weight(
+                    nn.mutate_reset_random_connection_weight(
                         config.mutation.weight_reset_range,
                         config.mutation.perturb_reset_connections,
                     );
@@ -1159,47 +1181,52 @@ pub fn split(
                 }
                 let mut dna = snake.dna.clone();
                 if rng.gen_bool(config.mutation.dna_mutation_chance) {
-                    dna.mutate();
+                    dna.mutate(&mut rng);
                     mutations += 1;
                 }
-                debug!("New neural network: {:?}", new_neural_network);
-                new_head = create_head(
-                    (new_head_position.x, new_head_position.y),
-                    Box::new(RandomNeuralBrain::from_neural_network(
-                        new_neural_network.clone(),
-                    )),
-                    snake.generation + 1,
-                    mutations,
-                    dna,
-                );
-                new_head.0.segments = new_snake_segments;
-                new_head.0.energy.energy = snake.energy.energy / 2.0;
-                snake.energy.energy /= 2.0;
-                new_head.0.energy.plant_in_stomach = snake.energy.plant_in_stomach / 2.0;
-                snake.energy.plant_in_stomach /= 2.0;
-                new_head.0.energy.meat_in_stomach = snake.energy.meat_in_stomach / 2.0;
-                snake.energy.meat_in_stomach /= 2.0;
-                recalculate_snake_params(&mut snake, &segments, &config, None);
-                recalculate_snake_params(&mut new_head.0, &segments, &config, None);
-                debug!(
-                    "Old snake after split: {:#?}, {:#?}",
-                    snake.metabolism, snake.energy
-                );
-                debug!(
-                    "New snake after split: {:#?}, {:#?}",
-                    new_head.0.metabolism, new_head.0.energy
-                );
-                let new_head_id = new_head.0.segments[0];
-                if rng.gen_bool(0.5) {
-                    new_head.0.direction = turn_left(&snake.direction);
-                } else {
-                    new_head.0.direction = turn_right(&snake.direction);
-                }
-                commands.entity(new_head_id).insert(new_head);
-                commands.entity(new_head_id).remove::<SegmentType>();
+                (nn, mutations, dna)
             } else {
                 panic!("Snake without neural network");
+            };
+            let (new_neural_network, mutations, dna) = new_neural_network;
+            debug!("Snake splits: {:#?}, {:#?}", snake.metabolism, snake.energy);
+            let new_snake_segments = snake.segments.split_off(snake_length / 2);
+            let new_head_id = *new_snake_segments.first().unwrap();
+            let new_head_position = positions.get(new_head_id).unwrap();
+            // new_snake_segments.reverse();
+            let (mut new_snake, new_age, new_justborn) = create_head(
+                (new_head_position.x, new_head_position.y),
+                Box::new(RandomNeuralBrain::from_neural_network(new_neural_network)),
+                snake.generation + 1,
+                mutations,
+                dna,
+            );
+            new_snake.segments = new_snake_segments;
+            new_snake.energy.energy = snake.energy.energy / 2.0;
+            snake.energy.energy /= 2.0;
+            new_snake.energy.plant_in_stomach = snake.energy.plant_in_stomach / 2.0;
+            snake.energy.plant_in_stomach /= 2.0;
+            new_snake.energy.meat_in_stomach = snake.energy.meat_in_stomach / 2.0;
+            snake.energy.meat_in_stomach /= 2.0;
+            recalculate_snake_params(&mut snake, &segments, &config, None);
+            recalculate_snake_params(&mut new_snake, &segments, &config, None);
+            debug!(
+                "Old snake after split: {:#?}, {:#?}",
+                snake.metabolism, snake.energy
+            );
+            debug!(
+                "New snake after split: {:#?}, {:#?}",
+                new_snake.metabolism, new_snake.energy
+            );
+            if rng.gen_bool(0.5) {
+                new_snake.direction = turn_left(&snake.direction);
+            } else {
+                new_snake.direction = turn_right(&snake.direction);
             }
+            commands
+                .entity(new_head_id)
+                .insert((new_snake, new_age, new_justborn));
+            commands.entity(new_head_id).remove::<SegmentType>();
         }
     }
 }
@@ -1404,14 +1431,14 @@ pub fn assign_missing_segments(mut snakes: Query<(Entity, &mut Snake), Added<Sna
 }
 
 pub fn assign_solid_positions(
-    mut solids: Query<(&Position, &Solid)>,
+    solids: Query<(&Position, &Solid)>,
     mut solids_map: ResMut<SolidsMap>,
     _segment_map: Res<SegmentMap>,
     _config: Res<SimulationConfig>,
 ) {
     puffin::profile_function!();
     solids_map.map.clear();
-    for (position, _) in &mut solids {
+    for (position, _) in &solids {
         solids_map.map.set(position, true);
     }
 }
@@ -1577,4 +1604,734 @@ fn create_head(
         },
         JustBorn,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dna::{Dna, Gene, MutationType, SegmentType};
+    use crate::neural::{Activation, InnovationTracker, NeuralNetwork};
+    use crate::simulation::{MutationConfig, SimulationConfig};
+
+    fn setup_world() -> World {
+        let mut world = World::new();
+        let config = SimulationConfig {
+            rows: 5,
+            columns: 5,
+            starting_snakes: 0,
+            starting_food: 0,
+            food_per_step: 0,
+            plant_matter_per_segment: 10.0,
+            wait_cost: 0.0,
+            move_cost: 1.0,
+            new_segment_cost: 50.0,
+            size_to_split: 3,
+            species_threshold: 0.3,
+            mutation: MutationConfig::default(),
+            add_walls: false,
+            scent_diffusion_rate: 0.01,
+            scent_dispersion_per_step: 0.01,
+            create_scents: false,
+            snake_max_age: 10000,
+            meat_energy_content: 20.0,
+            plant_energy_content: 10.0,
+        };
+        world.insert_resource(config);
+        let solids_map = SolidsMap {
+            map: Map2d::new(5, 5, false),
+        };
+        world.insert_resource(solids_map);
+        let food_map = FoodMap {
+            map: Map2d::new(5, 5, Food::default()),
+        };
+        world.insert_resource(food_map);
+        world.insert_resource(Species::default());
+        world.insert_resource(SegmentMap {
+            map: Map3d::new(5, 5),
+        });
+        world.insert_resource(ScentMap {
+            map: Map2d::new(5, 5, 0.0f32),
+        });
+        world
+    }
+
+    #[test]
+    fn test_movement_forward() {
+        let mut world = setup_world();
+        let snake = Snake {
+            direction: Direction::East,
+            decision: Decision::MoveForward,
+            brain: Box::new(RandomBrain {}),
+            new_position: (0, 0),
+            last_position: (0, 0),
+            segments: vec![],
+            generation: 0,
+            mutations: 0,
+            species: None,
+            dna: Dna::random(1),
+            metabolism: Metabolism::default(),
+            energy: Energy {
+                move_potential: 1.0,
+                energy: 100.0,
+                ..Default::default()
+            },
+        };
+        let initial_energy = snake.energy.energy;
+        let head = world
+            .spawn((
+                Position { x: 0, y: 0 },
+                snake,
+                Age {
+                    age: 0,
+                    efficiency_factor: 1.0,
+                },
+            ))
+            .id();
+
+        // Run assign_missing_segments to initialize segments for single-segment snake
+        let mut schedule_assign = Schedule::default();
+        schedule_assign.add_systems(assign_missing_segments);
+        schedule_assign.run(&mut world);
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(movement);
+        schedule.run(&mut world);
+
+        let snake_after = world.entity(head).get::<Snake>().unwrap();
+        assert_eq!(snake_after.new_position, (1, 0));
+        assert_eq!(snake_after.energy.energy, initial_energy - 1.0); // segment_move_cost = 1.0 / eff = 1.0
+        assert_eq!(snake_after.energy.move_potential, 0.0);
+
+        let mut schedule_update = Schedule::default();
+        schedule_update.add_systems(update_positions);
+        schedule_update.run(&mut world);
+
+        let position_after = world.entity(head).get::<Position>().unwrap();
+        assert_eq!(position_after.x, 1);
+        assert_eq!(position_after.y, 0);
+        assert!(world.entity(head).get::<DiedFromCollision>().is_none());
+    }
+
+    #[test]
+    fn test_movement_wait() {
+        let mut world = setup_world();
+        let snake = Snake {
+            direction: Direction::East,
+            decision: Decision::Wait,
+            brain: Box::new(RandomBrain {}),
+            new_position: (0, 0),
+            last_position: (0, 0),
+            segments: vec![],
+            generation: 0,
+            mutations: 0,
+            species: None,
+            dna: Dna::random(1),
+            metabolism: Metabolism::default(),
+            energy: Energy {
+                move_potential: 1.0,
+                energy: 100.0,
+                ..Default::default()
+            },
+        };
+        let initial_energy = snake.energy.energy;
+        let head = world
+            .spawn((
+                Position { x: 0, y: 0 },
+                snake,
+                Age {
+                    age: 0,
+                    efficiency_factor: 1.0,
+                },
+            ))
+            .id();
+
+        // Run assign_missing_segments to initialize segments for single-segment snake
+        let mut schedule_assign = Schedule::default();
+        schedule_assign.add_systems(assign_missing_segments);
+        schedule_assign.run(&mut world);
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(movement);
+        schedule.run(&mut world);
+
+        let snake_after = world.entity(head).get::<Snake>().unwrap();
+        assert_eq!(snake_after.new_position, (0, 0)); // no change
+        assert_eq!(snake_after.energy.energy, initial_energy); // no move cost, basic=0
+        assert_eq!(snake_after.energy.move_potential, 0.0);
+
+        let mut schedule_update = Schedule::default();
+        schedule_update.add_systems(update_positions);
+        schedule_update.run(&mut world);
+
+        let position_after = world.entity(head).get::<Position>().unwrap();
+        assert_eq!(position_after.x, 0);
+        assert_eq!(position_after.y, 0);
+    }
+
+    #[test]
+    fn test_movement_left() {
+        let mut world = setup_world();
+        let snake = Snake {
+            direction: Direction::East,
+            decision: Decision::MoveLeft,
+            brain: Box::new(RandomBrain {}),
+            new_position: (0, 0),
+            last_position: (0, 0),
+            segments: vec![],
+            generation: 0,
+            mutations: 0,
+            species: None,
+            dna: Dna::random(1),
+            metabolism: Metabolism::default(),
+            energy: Energy {
+                move_potential: 1.0,
+                energy: 100.0,
+                ..Default::default()
+            },
+        };
+        let initial_energy = snake.energy.energy;
+        let head = world
+            .spawn((
+                Position { x: 0, y: 0 },
+                snake,
+                Age {
+                    age: 0,
+                    efficiency_factor: 1.0,
+                },
+            ))
+            .id();
+
+        // Run assign_missing_segments to initialize segments for single-segment snake
+        let mut schedule_assign = Schedule::default();
+        schedule_assign.add_systems(assign_missing_segments);
+        schedule_assign.run(&mut world);
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(movement);
+        schedule.run(&mut world);
+
+        let snake_after = world.entity(head).get::<Snake>().unwrap();
+        assert_eq!(snake_after.direction, Direction::NorthEast); // turn left from East
+                                                                 // NorthEast from (0,0): y%2==0, x+=1, y-=1 -> (1, -1 %5=4)
+        assert_eq!(snake_after.new_position, (1, 4));
+        assert_eq!(snake_after.energy.energy, initial_energy - 1.0);
+
+        let mut schedule_update = Schedule::default();
+        schedule_update.add_systems(update_positions);
+        schedule_update.run(&mut world);
+
+        let position_after = world.entity(head).get::<Position>().unwrap();
+        assert_eq!(position_after.x, 1);
+        assert_eq!(position_after.y, 4);
+    }
+
+    #[test]
+    fn test_movement_right() {
+        let mut world = setup_world();
+        let snake = Snake {
+            direction: Direction::East,
+            decision: Decision::MoveRight,
+            brain: Box::new(RandomBrain {}),
+            new_position: (0, 0),
+            last_position: (0, 0),
+            segments: vec![],
+            generation: 0,
+            mutations: 0,
+            species: None,
+            dna: Dna::random(1),
+            metabolism: Metabolism::default(),
+            energy: Energy {
+                move_potential: 1.0,
+                energy: 100.0,
+                ..Default::default()
+            },
+        };
+        let initial_energy = snake.energy.energy;
+        let head = world
+            .spawn((
+                Position { x: 0, y: 0 },
+                snake,
+                Age {
+                    age: 0,
+                    efficiency_factor: 1.0,
+                },
+            ))
+            .id();
+
+        // Run assign_missing_segments to initialize segments for single-segment snake
+        let mut schedule_assign = Schedule::default();
+        schedule_assign.add_systems(assign_missing_segments);
+        schedule_assign.run(&mut world);
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(movement);
+        schedule.run(&mut world);
+
+        let snake_after = world.entity(head).get::<Snake>().unwrap();
+        assert_eq!(snake_after.direction, Direction::SouthEast); // turn right from East
+                                                                 // SouthEast from (0,0): y%2==0, x+=1, y+=1 -> (1,1)
+        assert_eq!(snake_after.new_position, (1, 1));
+        assert_eq!(snake_after.energy.energy, initial_energy - 1.0);
+
+        let mut schedule_update = Schedule::default();
+        schedule_update.add_systems(update_positions);
+        schedule_update.run(&mut world);
+
+        let position_after = world.entity(head).get::<Position>().unwrap();
+        assert_eq!(position_after.x, 1);
+        assert_eq!(position_after.y, 1);
+    }
+
+    #[test]
+    fn test_movement_collision_solid() {
+        let mut world = setup_world();
+        // Spawn solid at (1,0)
+        let _solid = world.spawn((Position { x: 1, y: 0 }, Solid)).id();
+        // Run assign_solid_positions to update map
+        let mut schedule_solid = Schedule::default();
+        schedule_solid.add_systems(assign_solid_positions);
+        schedule_solid.run(&mut world);
+
+        let mut innovation_tracker = InnovationTracker::new();
+        let brain = Box::new(RandomNeuralBrain::new(&mut innovation_tracker));
+        let snake = Snake {
+            direction: Direction::East,
+            decision: Decision::MoveForward,
+            brain,
+            new_position: (0, 0),
+            last_position: (0, 0),
+            segments: vec![],
+            generation: 0,
+            mutations: 0,
+            species: None,
+            dna: Dna::random(1),
+            metabolism: Metabolism::default(),
+            energy: Energy {
+                move_potential: 1.0,
+                energy: 100.0,
+                ..Default::default()
+            },
+        };
+        let _initial_energy = snake.energy.energy;
+        let head = world
+            .spawn((
+                Position { x: 0, y: 0 },
+                snake,
+                Age {
+                    age: 0,
+                    efficiency_factor: 1.0,
+                },
+            ))
+            .id();
+
+        // Run assign_missing_segments to initialize segments for single-segment snake
+        let mut schedule_assign = Schedule::default();
+        schedule_assign.add_systems(assign_missing_segments);
+        schedule_assign.run(&mut world);
+
+        let mut schedule_move = Schedule::default();
+        schedule_move.add_systems(movement);
+        schedule_move.run(&mut world);
+
+        let snake_after_move = world.entity(head).get::<Snake>().unwrap();
+        assert_eq!(snake_after_move.new_position, (1, 0));
+
+        let mut schedule_update = Schedule::default();
+        schedule_update.add_systems(update_positions);
+        schedule_update.run(&mut world);
+
+        // Should insert DiedFromCollision
+        assert!(world.entity(head).get::<DiedFromCollision>().is_some());
+
+        // Run die_from_collisions
+        let mut schedule_die = Schedule::default();
+        schedule_die.add_systems(die_from_collisions);
+        schedule_die.run(&mut world);
+
+        // Snake despawned
+        assert!(world.get_entity(head).is_none());
+    }
+
+    #[test]
+    fn test_movement_wrap_around() {
+        let mut world = setup_world();
+        let snake = Snake {
+            direction: Direction::East,
+            decision: Decision::MoveForward,
+            brain: Box::new(RandomBrain {}),
+            new_position: (4, 0),
+            last_position: (4, 0),
+            segments: vec![],
+            generation: 0,
+            mutations: 0,
+            species: None,
+            dna: Dna::random(1),
+            metabolism: Metabolism::default(),
+            energy: Energy {
+                move_potential: 1.0,
+                energy: 100.0,
+                ..Default::default()
+            },
+        };
+        let head = world
+            .spawn((
+                Position { x: 4, y: 0 },
+                snake,
+                Age {
+                    age: 0,
+                    efficiency_factor: 1.0,
+                },
+            ))
+            .id();
+
+        // Run assign_missing_segments to initialize segments for single-segment snake
+        let mut schedule_assign = Schedule::default();
+        schedule_assign.add_systems(assign_missing_segments);
+        schedule_assign.run(&mut world);
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(movement);
+        schedule.run(&mut world);
+
+        let snake_after = world.entity(head).get::<Snake>().unwrap();
+        // East from (4,0): x=5 %5=0, y=0
+        assert_eq!(snake_after.new_position, (0, 0));
+
+        let mut schedule_update = Schedule::default();
+        schedule_update.add_systems(update_positions);
+        schedule_update.run(&mut world);
+
+        let position_after = world.entity(head).get::<Position>().unwrap();
+        assert_eq!(position_after.x, 0);
+        assert_eq!(position_after.y, 0);
+    }
+
+    fn calculate_total_energy(world: &mut World) -> f32 {
+        let config = world.resource::<SimulationConfig>().clone();
+        let mut total = 0.0f32;
+        let mut snake_q = world.query::<&Snake>();
+        for snake in snake_q.iter(&world) {
+            total += snake.energy.energy;
+        }
+        let food_map = world.resource::<FoodMap>();
+        for x in 0..config.columns as usize {
+            for y in 0..config.rows as usize {
+                let pos = Position {
+                    x: x as i32,
+                    y: y as i32,
+                };
+                let food = food_map.map.get(&pos);
+                total += food.plant * config.plant_energy_content
+                    + food.meat * config.meat_energy_content;
+            }
+        }
+        total
+    }
+
+    #[test]
+    fn test_energy_conservation_invariant() {
+        let mut world = setup_world();
+        let mut config = *world.resource::<SimulationConfig>();
+        config.mutation.chaos_input_enabled = false;
+        world.insert_resource(config);
+
+        // Create simple deterministic neural network for Wait decision
+        let _innovation_tracker = InnovationTracker::new();
+        let mut nn = NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
+        // Connect bias (input 0) to Wait output (21) with positive weight for high sigmoid
+        // Since get_innovation_number is private, hardcode
+        nn.add_connection(
+            0, 21, 2.0, true, 0, // hardcoded
+        );
+        let brain = Box::new(RandomNeuralBrain::from_neural_network(nn));
+
+        // DNA for solar segment
+        let solar_gene = Gene {
+            segment_type: SegmentType::solar(),
+            id: 0,
+            jump: 0,
+        };
+        let dna = Dna {
+            genes: vec![solar_gene],
+            current_gene: 0,
+        };
+
+        // Spawn head
+        let head_pos = Position { x: 0, y: 0 };
+        let (snake, age, justborn) = create_head((0, 0), brain, 0, 0, dna);
+        let mut snake = snake;
+        snake.energy.energy = 100.0;
+        snake.energy.move_potential = 1.0; // Allow one move, but will wait
+        let head = world.spawn((head_pos.clone(), snake, age, justborn)).id();
+
+        // Add a solar segment for passive gain
+        let tail_pos = Position { x: 0, y: 0 };
+        let segment_type = SegmentType::solar();
+        let tail = world.spawn((tail_pos, segment_type.clone())).id();
+
+        // Set segments and manually set metabolism for solar (since recalculate needs system context)
+        let mut entity_ref = world.entity_mut(head);
+        let mut snake = entity_ref.get_mut::<Snake>().unwrap();
+        snake.segments = vec![tail];
+        // Manual metabolism for head + solar segment
+        snake.metabolism.segment_move_cost = 1.0 + 1.0; // head + solar move
+        snake.metabolism.segment_basic_cost = 0.0 + (-0.1); // head 0, solar -0.1 production
+        snake.metabolism.mobility = (1.0 + 0.2) / 2.0; // average
+        snake.metabolism.segment_energy_production = -0.1; // solar
+                                                           // Add NN cost
+        if let Some(network) = snake.brain.get_neural_network() {
+            snake.metabolism.segment_basic_cost += network.run_cost();
+        }
+
+        // Place plant food at head position for eating
+        let mut food_map = world.resource_mut::<FoodMap>();
+        food_map.map.set(
+            &head_pos,
+            Food {
+                plant: 10.0,
+                meat: 0.0,
+            },
+        );
+
+        // Initial total energy
+        let initial_total = calculate_total_energy(&mut world);
+
+        // Run assign_missing_segments to initialize segments for single-segment snake
+        let mut schedule_assign = Schedule::default();
+        schedule_assign.add_systems(assign_missing_segments);
+        schedule_assign.run(&mut world);
+
+        // Run think (sets decision to Wait due to NN)
+        let mut schedule_think = Schedule::default();
+        schedule_think.add_systems(think);
+        schedule_think.run(&mut world);
+
+        // Run movement (Wait: no move cost, but basic cost and production)
+        let mut schedule_movement = Schedule::default();
+        schedule_movement.add_systems(movement);
+        schedule_movement.run(&mut world);
+
+        // No update_positions change since Wait
+
+        // Run eat_food (eats plant to stomach)
+        let mut schedule_eat = Schedule::default();
+        schedule_eat.add_systems(eat_food);
+        schedule_eat.run(&mut world);
+
+        // Run process_food (converts stomach to energy)
+        let mut schedule_process = Schedule::default();
+        schedule_process.add_systems(process_food);
+        schedule_process.run(&mut world);
+
+        // Run increase_age (minimal change for young snake)
+        let mut schedule_age = Schedule::default();
+        schedule_age.add_systems(increase_age);
+        schedule_age.run(&mut world);
+
+        // Run starve (should not trigger)
+        let mut schedule_starve = Schedule::default();
+        schedule_starve.add_systems(starve);
+        schedule_starve.run(&mut world);
+
+        // Post-step total energy
+        let post_total = calculate_total_energy(&mut world);
+
+        // With solar gain and food conversion, total should be non-negative and balance (slight loss from costs)
+        assert!(post_total >= 0.0);
+        // Allow some tolerance for floating point and small costs/gains
+        assert!((initial_total - post_total).abs() < 50.0);
+
+        // Test starvation: separate setup
+        let mut starve_world = setup_world();
+        let mut starve_config = *starve_world.resource::<SimulationConfig>();
+        starve_config.mutation.chaos_input_enabled = false;
+        starve_world.insert_resource(starve_config);
+
+        let starve_nn =
+            NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
+        let starve_brain = Box::new(RandomNeuralBrain::from_neural_network(starve_nn));
+        let starve_dna = Dna {
+            genes: vec![Gene {
+                segment_type: SegmentType::solar(),
+                id: 0,
+                jump: 0,
+            }],
+            current_gene: 0,
+        };
+
+        let starve_head_pos = Position { x: 0, y: 0 };
+        let (mut starve_snake, starve_age, starve_justborn) =
+            create_head((0, 0), starve_brain, 0, 0, starve_dna);
+        starve_snake.energy.energy = -1.0; // Low energy to trigger starvation
+        starve_snake.energy.move_potential = 0.0;
+        let starve_head = starve_world
+            .spawn((
+                starve_head_pos.clone(),
+                starve_snake,
+                starve_age,
+                starve_justborn,
+            ))
+            .id();
+
+        // Add segment
+        let starve_tail_pos = Position { x: 0, y: 0 };
+        let starve_segment_type = SegmentType::solar();
+        let starve_tail = starve_world
+            .spawn((starve_tail_pos, starve_segment_type))
+            .id();
+
+        let mut starve_entity_ref = starve_world.entity_mut(starve_head);
+        let mut starve_snake = starve_entity_ref.get_mut::<Snake>().unwrap();
+        starve_snake.segments = vec![starve_tail];
+        // Manual metabolism
+        starve_snake.metabolism.segment_move_cost = 1.0 + 1.0;
+        starve_snake.metabolism.segment_basic_cost = 0.0 + (-0.1);
+        starve_snake.metabolism.mobility = (1.0 + 0.2) / 2.0;
+        starve_snake.metabolism.segment_energy_production = -0.1;
+        if let Some(network) = starve_snake.brain.get_neural_network() {
+            starve_snake.metabolism.segment_basic_cost += network.run_cost();
+        }
+
+        // let starve_initial = calculate_total_energy(&starve_world);
+
+        // Run assign_missing_segments to initialize segments for single-segment snake
+        let mut starve_schedule_assign = Schedule::default();
+        starve_schedule_assign.add_systems(assign_missing_segments);
+        starve_schedule_assign.run(&mut starve_world);
+
+        // Run starve
+        let mut starve_schedule = Schedule::default();
+        starve_schedule.add_systems(starve);
+        starve_schedule.run(&mut starve_world);
+
+        let starve_post = calculate_total_energy(&mut starve_world);
+
+        // Snake despawned, segment converted to food (meat = new_segment_cost = 50.0 * meat_energy_content = 1000.0)
+        assert!(starve_world.get_entity(starve_head).is_none());
+        let food_map = starve_world.resource::<FoodMap>();
+        let converted_food = food_map.map.get(&Position { x: 0, y: 0 });
+        assert!(converted_food.meat > 0.0);
+        assert!(starve_post >= 0.0);
+
+        // Test mutation effect on metabolism/costs
+        let mut mutation_world = setup_world();
+        let mut mutation_config = *mutation_world.resource::<SimulationConfig>();
+        mutation_config.mutation.chaos_input_enabled = false;
+        mutation_world.insert_resource(mutation_config);
+
+        // Normal DNA: solar (low cost)
+        let normal_dna = Dna {
+            genes: vec![Gene {
+                segment_type: SegmentType::solar(),
+                id: 0,
+                jump: 0,
+            }],
+            current_gene: 0,
+        };
+
+        // Mutated DNA: to stomach (higher always cost 1.0)
+        let mut mutated_dna = normal_dna.clone();
+        let mut rng = rand::thread_rng();
+        mutated_dna.mutate_specific(MutationType::ChangeSegmentType, &mut rng);
+        // Force to stomach for determinism
+        if let Some(gene) = mutated_dna.genes.first_mut() {
+            gene.segment_type = SegmentType::stomach();
+        }
+
+        // Create normal snake
+        let mut normal_brain_nn =
+            NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
+        normal_brain_nn.add_connection(0, 21, 2.0, true, 0); // hardcoded
+        let normal_brain = Box::new(RandomNeuralBrain::from_neural_network(normal_brain_nn));
+        let (mut normal_snake, normal_age, normal_justborn) =
+            create_head((0, 0), normal_brain, 0, 0, normal_dna);
+        normal_snake.energy.energy = 100.0;
+        normal_snake.energy.move_potential = 1.0;
+        let normal_head = mutation_world
+            .spawn((
+                Position { x: 0, y: 0 },
+                normal_snake,
+                normal_age,
+                normal_justborn,
+            ))
+            .id();
+
+        let normal_tail = mutation_world
+            .spawn((Position { x: 0, y: 0 }, SegmentType::solar()))
+            .id();
+        let mut normal_entity = mutation_world.entity_mut(normal_head);
+        let mut normal_snake = normal_entity.get_mut::<Snake>().unwrap();
+        normal_snake.segments = vec![normal_tail];
+        // Manual metabolism for normal (solar)
+        normal_snake.metabolism.segment_move_cost = 1.0 + 1.0;
+        normal_snake.metabolism.segment_basic_cost = 0.0 + (-0.1);
+        normal_snake.metabolism.segment_basic_cost +=
+            normal_snake.brain.get_neural_network().unwrap().run_cost();
+        let normal_basic_cost = normal_snake.metabolism.segment_basic_cost;
+
+        // Create mutated snake
+        let mut mutated_brain_nn =
+            NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
+        mutated_brain_nn.add_connection(0, 21, 2.0, true, 0); // hardcoded
+        let mutated_brain = Box::new(RandomNeuralBrain::from_neural_network(mutated_brain_nn));
+        let (mut mutated_snake, mutated_age, mutated_justborn) =
+            create_head((0, 0), mutated_brain, 0, 0, mutated_dna);
+        mutated_snake.energy.energy = 100.0;
+        mutated_snake.energy.move_potential = 1.0;
+        let mutated_head = mutation_world
+            .spawn((
+                Position { x: 1, y: 0 }, // Different pos to avoid overlap
+                mutated_snake,
+                mutated_age,
+                mutated_justborn,
+            ))
+            .id();
+
+        let mutated_tail = mutation_world
+            .spawn((Position { x: 1, y: 0 }, SegmentType::stomach()))
+            .id();
+        let mut mutated_entity = mutation_world.entity_mut(mutated_head);
+        let mut mutated_snake = mutated_entity.get_mut::<Snake>().unwrap();
+        mutated_snake.segments = vec![mutated_tail];
+        // Manual metabolism for mutated (stomach)
+        mutated_snake.metabolism.segment_move_cost = 1.0 + 1.0;
+        mutated_snake.metabolism.segment_basic_cost = 0.0 + 1.0; // stomach always cost 1.0
+        mutated_snake.metabolism.segment_basic_cost +=
+            mutated_snake.brain.get_neural_network().unwrap().run_cost();
+        let mutated_basic_cost = mutated_snake.metabolism.segment_basic_cost;
+
+        // Run movement for both (Wait, same eff=1)
+        let mut mutation_think = Schedule::default();
+        mutation_think.add_systems(think);
+        mutation_think.run(&mut mutation_world);
+
+        let mut mutation_movement = Schedule::default();
+        mutation_movement.add_systems(movement);
+        mutation_movement.run(&mut mutation_world);
+
+        let normal_after = mutation_world
+            .entity(normal_head)
+            .get::<Snake>()
+            .unwrap()
+            .energy
+            .energy;
+        let mutated_after = mutation_world
+            .entity(mutated_head)
+            .get::<Snake>()
+            .unwrap()
+            .energy
+            .energy;
+
+        let normal_delta = 100.0 - normal_after;
+        let mutated_delta = 100.0 - mutated_after;
+
+        // Mutated (stomach) has higher basic_cost, so larger delta (more cost)
+        assert!(
+            mutated_delta > normal_delta,
+            "mutated_delta: {}, normal_delta: {}",
+            mutated_delta,
+            normal_delta
+        );
+        assert!(mutated_basic_cost > normal_basic_cost);
+    }
 }

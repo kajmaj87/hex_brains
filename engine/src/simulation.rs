@@ -26,7 +26,7 @@ pub struct Simulation {
     core_schedule: Schedule,
     secondary_schedule: Schedule,
     gui_schedule: Schedule,
-    world: World,
+    pub world: World,
     pub name: String,
     engine_events: Sender<EngineEvent>,
     // only the main simulation may receive commands
@@ -166,6 +166,32 @@ pub struct SimulationConfig {
     pub plant_energy_content: f32,
 }
 
+impl Default for SimulationConfig {
+    fn default() -> Self {
+        SimulationConfig {
+            rows: 10,
+            columns: 10,
+            starting_snakes: 0,
+            starting_food: 0,
+            food_per_step: 1,
+            plant_matter_per_segment: 10.0,
+            wait_cost: 0.0,
+            move_cost: 1.0,
+            new_segment_cost: 50.0,
+            size_to_split: 2,
+            species_threshold: 0.3,
+            mutation: MutationConfig::default(),
+            add_walls: false,
+            scent_diffusion_rate: 0.01,
+            scent_dispersion_per_step: 0.01,
+            create_scents: false,
+            snake_max_age: 10000,
+            meat_energy_content: 20.0,
+            plant_energy_content: 10.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum EngineCommand {
     RepaintRequested,
@@ -179,7 +205,7 @@ pub enum EngineCommand {
     AdvanceOneFrame,
 }
 
-#[derive(Debug, Resource)]
+#[derive(Default, Debug, Resource, Clone, Copy)]
 pub struct EngineState {
     pub repaint_needed: bool,
     pub speed_limit: Option<f32>,

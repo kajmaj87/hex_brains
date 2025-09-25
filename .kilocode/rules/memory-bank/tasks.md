@@ -1,0 +1,2 @@
+## After completing any code changes
+- whenever you finish a task that involves code changes you **must** run cargo test and cargo build before reporting to user. If the commands fail you **must** fix immediately and then rerun both commands to verify.
