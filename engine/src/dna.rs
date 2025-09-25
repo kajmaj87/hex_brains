@@ -1,5 +1,5 @@
 use bevy_ecs::prelude::Component;
-use tinyrand::{Rand, RandRange, Seeded};
+use tinyrand::{Rand, RandRange};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Segment {
@@ -154,7 +154,7 @@ impl Dna {
                     for i in 0..self.genes.len() {
                         if self.genes[i].jump > index {
                             self.genes[i].jump -= 1;
-                        } 
+                        }
                     }
                     for i in index..self.genes.len() {
                         self.genes[i].id -= 1;

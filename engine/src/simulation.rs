@@ -6,7 +6,7 @@ use crate::core::{
 use crate::core::{
     assign_missing_segments, assign_species, calculate_stats, create_food, create_snake, eat_food,
     grow, increase_age, movement, split, starve, think, update_positions, FoodMap, Position,
-    RandomBrain, RandomNeuralBrain, Species,
+    RandomNeuralBrain, Species,
 };
 use crate::core::{
     assign_segment_positions, despawn_food, incease_move_potential, process_food, BrainType, Food,
@@ -15,14 +15,14 @@ use crate::core::{
 use crate::dna::{Dna, SegmentType};
 use crate::neural::InnovationTracker;
 use bevy_ecs::prelude::{IntoSystemConfigs, Res, ResMut, Resource, Schedule, World};
-use tinyrand::{RandRange, SplitMix, Wyrand};
+use tinyrand::{RandRange, Wyrand};
 
 #[derive(Resource)]
 pub struct RngResource(pub Wyrand);
+use parking_lot::Mutex;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
-use parking_lot::Mutex;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
 pub struct Simulation {
     first_schedule: Schedule,
@@ -389,10 +389,11 @@ impl Simulation {
     pub fn run(&mut self) -> EngineEvent {
         let start_time = Instant::now();
         while !self.is_done() {
-            if let Some(commands) = match &self.engine_commands {
-                Some(arc_mutex) => Some(arc_mutex.lock()),
-                None => None,
-            } {
+            if let Some(commands) = self
+                .engine_commands
+                .as_ref()
+                .map(|arc_mutex| arc_mutex.lock())
+            {
                 commands.try_iter().for_each(|command| {
                     let mut engine_state = self.world.get_resource_mut::<EngineState>().unwrap();
                     match command {
@@ -422,18 +423,24 @@ impl Simulation {
                             let config = *self.world.get_resource::<SimulationConfig>().unwrap();
                             let mut snake_data = vec![];
                             for _ in 0..amount {
-                                let mut rng_temp = self.world.get_resource_mut::<RngResource>().unwrap();
+                                let mut rng_temp =
+                                    self.world.get_resource_mut::<RngResource>().unwrap();
                                 let x = rng_temp.0.next_range(0..config.columns) as i32;
                                 let y = rng_temp.0.next_range(0..config.rows) as i32;
                                 let dna = Dna::random(&mut rng_temp.0, 8);
                                 snake_data.push((x, y, dna));
                             }
                             let mut entities_to_spawn = vec![];
-                            let mut innovation_tracker = self.world.remove_resource::<InnovationTracker>().unwrap();
-                            let mut rng_resource = self.world.remove_resource::<RngResource>().unwrap();
+                            let mut innovation_tracker =
+                                self.world.remove_resource::<InnovationTracker>().unwrap();
+                            let mut rng_resource =
+                                self.world.remove_resource::<RngResource>().unwrap();
                             {
                                 for (x, y, dna) in snake_data {
-                                    let brain = BrainType::Neural(RandomNeuralBrain::new(&mut innovation_tracker, &mut rng_resource.0));
+                                    let brain = BrainType::Neural(RandomNeuralBrain::new(
+                                        &mut innovation_tracker,
+                                        &mut rng_resource.0,
+                                    ));
                                     let (a, b, mut c, d, e) = create_snake(
                                         100.0,
                                         (x, y),
@@ -441,7 +448,8 @@ impl Simulation {
                                         dna,
                                         &mut rng_resource.0,
                                     );
-                                    c.metabolism.segment_basic_cost = c.brain.get_neural_network().unwrap().run_cost();
+                                    c.metabolism.segment_basic_cost =
+                                        c.brain.get_neural_network().unwrap().run_cost();
                                     entities_to_spawn.push((a, b, c, d, e));
                                 }
                             }

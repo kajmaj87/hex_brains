@@ -2,15 +2,15 @@ use bevy_ecs::prelude::*;
 use hex_brains_engine::core::ScentMap as SimScentMap;
 use hex_brains_engine::core::{
     assign_missing_segments, assign_segment_positions, assign_species, create_snake, grow, split,
-    Age, BrainType, Energy, Food, FoodMap as SimFoodMap, Map2d, Map3d, Position, RandomNeuralBrain,
-    SegmentMap, Snake, SolidsMap, Species,
+    BrainType, Food, FoodMap as SimFoodMap, Map2d, Map3d, Position, RandomNeuralBrain, SegmentMap,
+    Snake, SolidsMap, Species,
 };
 use hex_brains_engine::dna::{Dna, Gene, MutationType, SegmentType};
 use hex_brains_engine::neural::{InnovationTracker, NeuralNetwork};
 use hex_brains_engine::simulation::{
     EngineEvent, EngineState, MutationConfig, Simulation, SimulationConfig, Stats,
 };
-use tinyrand::{Seeded, Rand};
+use tinyrand::Seeded;
 #[test]
 fn test_agent_reproduction_and_splitting_size_one() {
     let mut world = World::new();
@@ -52,7 +52,7 @@ fn test_agent_reproduction_and_splitting_size_one() {
     // Create and spawn initial snake with sufficient energy
     let mut rng = tinyrand::Wyrand::seed(42);
     let initial_dna = Dna::random(&mut rng, 5);
-    let brain = BrainType::Neural(RandomNeuralBrain::new(&mut *innovation_tracker, &mut rng));
+    let brain = BrainType::Neural(RandomNeuralBrain::new(&mut innovation_tracker, &mut rng));
     let (pos, meat, snake, age, justborn) = create_snake(
         200.0,  // High energy to test halving
         (5, 5), // Central position
@@ -316,7 +316,7 @@ fn test_grow_panic_index_out_of_bounds() {
 
     let mut rng = tinyrand::Wyrand::seed(42);
     let brain = BrainType::Neural(RandomNeuralBrain::new(
-        &mut world.resource_mut::<InnovationTracker>().as_mut(),
+        world.resource_mut::<InnovationTracker>().as_mut(),
         &mut rng,
     ));
     let (pos, meat, mut snake, age, justborn) = create_snake(0.0, (0, 0), brain, dna, &mut rng);

@@ -17,11 +17,11 @@ use hex_brains_engine::simulation::{
     Simulation, SimulationConfig, Stats,
 };
 use hex_brains_engine::simulation_manager::simulate_batch;
+use parking_lot::Mutex;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
-use parking_lot::Mutex;
 use std::thread;
 use std::time::Instant;
 use tracing::Level;
@@ -178,13 +178,10 @@ fn draw_simulation(
             }
         }))
         .collect();
-    let _ = engine_events
-        .events
-        .lock()
-        .send(EngineEvent::DrawData {
-            hexes: all_hexes,
-            stats: stats.clone(),
-        });
+    let _ = engine_events.events.lock().send(EngineEvent::DrawData {
+        hexes: all_hexes,
+        stats: stats.clone(),
+    });
 }
 
 fn draw_neural_network(
@@ -592,24 +589,24 @@ impl MyEguiApp {
 }
 
 impl eframe::App for MyEguiApp {
-fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-    puffin::profile_scope!("gui::update");
-    if puffin::are_scopes_on() {
-        puffin_egui::profiler_window(ctx);
-        puffin::GlobalProfiler::lock().new_frame();
-    }
-    if !self.simulation_running {
-        start_simulation(
-            &self.engine_events_sender,
-            Arc::clone(&self.engine_commands_receiver),
-            ctx.clone(),
-            self.config,
-        );
-        self.simulation_running = true;
-        self.engine_commands_sender
-            .send(EngineCommand::CreateSnakes(10))
-            .unwrap();
-    }
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        puffin::profile_scope!("gui::update");
+        if puffin::are_scopes_on() {
+            puffin_egui::profiler_window(ctx);
+            puffin::GlobalProfiler::lock().new_frame();
+        }
+        if !self.simulation_running {
+            start_simulation(
+                &self.engine_events_sender,
+                Arc::clone(&self.engine_commands_receiver),
+                ctx.clone(),
+                self.config,
+            );
+            self.simulation_running = true;
+            self.engine_commands_sender
+                .send(EngineCommand::CreateSnakes(10))
+                .unwrap();
+        }
         self.engine_events_receiver
             .try_iter()
             .for_each(|result| match result {

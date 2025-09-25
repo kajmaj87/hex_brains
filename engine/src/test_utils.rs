@@ -29,7 +29,10 @@ impl<T> MockRng<T> {
     {
         let val = self.gen();
         if val < range.start || val >= range.end {
-            panic!("MockRng value {:?} not in range {:?}..{:?}", val, range.start, range.end);
+            panic!(
+                "MockRng value {:?} not in range {:?}..{:?}",
+                val, range.start, range.end
+            );
         }
         val
     }
@@ -39,11 +42,6 @@ impl<T> MockRng<T> {
 use tinyrand::{Rand, RandRange};
 #[cfg(test)]
 use tinyrand_alloc::mock::Mock;
-
-
-
-
-
 
 #[cfg(test)]
 mod tests {
@@ -79,7 +77,6 @@ mod tests {
         let val = rng.mock_gen_range(0..3);
         assert_eq!(val, 2);
     }
-
 
     // Experiments with tinyrand_alloc::mock::Mock
     #[test]
@@ -118,10 +115,10 @@ mod tests {
 
     #[test]
     fn test_random_brain_decisions_deterministic() {
-        use crate::core::{RandomBrain};
+        use crate::core::RandomBrain;
         let brain = RandomBrain;
         let inputs = vec![1.0; 18]; // Dummy inputs
-        // Multiple calls should give same sequence
+                                    // Multiple calls should give same sequence
         let mut rng1 = tinyrand::SplitMix::default();
         let decision1 = brain.decide(inputs.clone(), &mut rng1);
         let mut rng2 = tinyrand::SplitMix::default();

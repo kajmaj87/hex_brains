@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::Resource;
-use tinyrand::{Rand, RandRange};
 use std::collections::HashMap;
+use tinyrand::{Rand, RandRange};
 use tracing::debug;
 
 // Define a trait that all sensor inputs will implement.
@@ -137,7 +137,8 @@ impl NeuralNetwork {
         for (i, _) in input_activations.iter().enumerate() {
             for (j, _) in output_activations.iter().enumerate() {
                 let weight = ((rng.next_u32() as f64) / (u32::MAX as f64) - 0.5) as f32;
-                let active = (rng.next_u32() as f64) / (u32::MAX as f64) < connection_active_probability as f64;
+                let active = (rng.next_u32() as f64) / (u32::MAX as f64)
+                    < connection_active_probability as f64;
                 network.add_connection(
                     i,
                     j + input_activations.len(),
@@ -201,7 +202,9 @@ impl NeuralNetwork {
                 .position(|c| active_connections.get(index).unwrap() == &c)
                 .unwrap();
         }
-        self.connections[index].weight += ((rng.next_u32() as f32) / (u32::MAX as f32)) * (mutation_strength * 2.0) - mutation_strength;
+        self.connections[index].weight += ((rng.next_u32() as f32) / (u32::MAX as f32))
+            * (mutation_strength * 2.0)
+            - mutation_strength;
         debug!(
             "Mutating connection {} to value {}",
             index, self.connections[index].weight
@@ -226,7 +229,9 @@ impl NeuralNetwork {
                 .position(|c| active_connections.get(index).unwrap() == &c)
                 .unwrap();
         }
-        self.connections[index].weight = ((rng.next_u32() as f32) / (u32::MAX as f32)) * (mutation_strength * 2.0) - mutation_strength;
+        self.connections[index].weight = ((rng.next_u32() as f32) / (u32::MAX as f32))
+            * (mutation_strength * 2.0)
+            - mutation_strength;
         debug!(
             "Mutating connection {} to value {}",
             index, self.connections[index].weight

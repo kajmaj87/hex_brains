@@ -2,10 +2,10 @@ use crate::dna::{Dna, SegmentType};
 use crate::neural::{ConnectionGene, InnovationTracker, NeuralNetwork, SensorInput};
 use crate::simulation::{SimulationConfig, Stats};
 use bevy_ecs::prelude::*;
-use tinyrand::{Rand, RandRange};
 use std::clone::Clone;
 use std::collections::VecDeque;
 use std::fmt::Debug;
+use tinyrand::{Rand, RandRange};
 use tracing::{debug, warn};
 
 #[derive(Component, Clone, Default, Debug)]
@@ -199,7 +199,6 @@ pub struct Age {
     pub efficiency_factor: f32,
 }
 
-
 impl RandomNeuralBrain {
     pub fn new(innovation_tracker: &mut InnovationTracker, rng: &mut impl Rand) -> Self {
         let neural_network = NeuralNetwork::random_brain(18, 0.1, innovation_tracker, rng);
@@ -249,7 +248,6 @@ impl RandomNeuralBrain {
         Some(&self.neural_network)
     }
 }
-
 
 pub struct Map2d<T> {
     pub map: Vec<T>,
@@ -723,28 +721,34 @@ pub fn think(
         let meat_food_level = head.energy.meat_in_stomach / head.metabolism.max_meat_in_stomach;
         let energy_level = head.energy.energy / head.metabolism.max_energy;
         let age_level = age.efficiency_factor;
-        head.decision = head.brain.decide(vec![
-            bias,
-            chaos as f32,
-            scent_front,
-            scent_left,
-            scent_right,
-            plant_vision_front,
-            plant_vision_left,
-            plant_vision_right,
-            meat_vision_front,
-            meat_vision_left,
-            meat_vision_right,
-            solid_vision_front,
-            solid_vision_left,
-            solid_vision_right,
-            plant_food_level,
-            meat_food_level,
-            energy_level,
-            age_level,
-        ], &mut rng.0);
+        head.decision = head.brain.decide(
+            vec![
+                bias,
+                chaos as f32,
+                scent_front,
+                scent_left,
+                scent_right,
+                plant_vision_front,
+                plant_vision_left,
+                plant_vision_right,
+                meat_vision_front,
+                meat_vision_left,
+                meat_vision_right,
+                solid_vision_front,
+                solid_vision_left,
+                solid_vision_right,
+                plant_food_level,
+                meat_food_level,
+                energy_level,
+                age_level,
+            ],
+            &mut rng.0,
+        );
         debug!("Snake decision: {:?}", head.decision);
-        debug!("Is neural brain: {}", head.brain.get_neural_network().is_some());
+        debug!(
+            "Is neural brain: {}",
+            head.brain.get_neural_network().is_some()
+        );
     });
 }
 
@@ -1184,18 +1188,23 @@ pub fn split(
             {
                 let mut nn = neural_network.clone();
                 let mut mutations = snake.mutations;
-                if (rng.next_u32() as f64) / (u32::MAX as f64) < config.mutation.connection_flip_chance {
+                if (rng.next_u32() as f64) / (u32::MAX as f64)
+                    < config.mutation.connection_flip_chance
+                {
                     nn.flip_random_connection();
                     mutations += 1;
                 }
-                if (rng.next_u32() as f64) / (u32::MAX as f64) < config.mutation.weight_perturbation_chance {
+                if (rng.next_u32() as f64) / (u32::MAX as f64)
+                    < config.mutation.weight_perturbation_chance
+                {
                     nn.mutate_perturb_random_connection_weight(
                         config.mutation.weight_perturbation_range,
                         config.mutation.perturb_disabled_connections,
                     );
                     mutations += 1;
                 }
-                if (rng.next_u32() as f64) / (u32::MAX as f64) < config.mutation.weight_reset_chance {
+                if (rng.next_u32() as f64) / (u32::MAX as f64) < config.mutation.weight_reset_chance
+                {
                     nn.mutate_reset_random_connection_weight(
                         config.mutation.weight_reset_range,
                         config.mutation.perturb_reset_connections,
@@ -1203,7 +1212,8 @@ pub fn split(
                     mutations += 1;
                 }
                 let mut dna = snake.dna.clone();
-                if (rng.next_u32() as f64) / (u32::MAX as f64) < config.mutation.dna_mutation_chance {
+                if (rng.next_u32() as f64) / (u32::MAX as f64) < config.mutation.dna_mutation_chance
+                {
                     dna.mutate(rng);
                     mutations += 1;
                 }
@@ -2091,7 +2101,14 @@ mod tests {
 
         // Spawn head
         let head_pos = Position { x: 0, y: 0 };
-        let (snake, age, justborn) = create_head((0, 0), brain, 0, 0, dna, &mut world.resource_mut::<crate::simulation::RngResource>().0);
+        let (snake, age, justborn) = create_head(
+            (0, 0),
+            brain,
+            0,
+            0,
+            dna,
+            &mut world.resource_mut::<crate::simulation::RngResource>().0,
+        );
         let mut snake = snake;
         snake.energy.energy = 100.0;
         snake.energy.move_potential = 1.0; // Allow one move, but will wait
@@ -2193,8 +2210,16 @@ mod tests {
         };
 
         let starve_head_pos = Position { x: 0, y: 0 };
-        let (mut starve_snake, starve_age, starve_justborn) =
-            create_head((0, 0), starve_brain, 0, 0, starve_dna, &mut starve_world.resource_mut::<crate::simulation::RngResource>().0);
+        let (mut starve_snake, starve_age, starve_justborn) = create_head(
+            (0, 0),
+            starve_brain,
+            0,
+            0,
+            starve_dna,
+            &mut starve_world
+                .resource_mut::<crate::simulation::RngResource>()
+                .0,
+        );
         starve_snake.energy.energy = -1.0; // Low energy to trigger starvation
         starve_snake.energy.move_potential = 0.0;
         let starve_head = starve_world
@@ -2275,9 +2300,18 @@ mod tests {
         let mut normal_brain_nn =
             NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
         normal_brain_nn.add_connection(0, 21, 2.0, true, 0); // hardcoded
-        let normal_brain = BrainType::Neural(RandomNeuralBrain::from_neural_network(normal_brain_nn));
-        let (mut normal_snake, normal_age, normal_justborn) =
-            create_head((0, 0), normal_brain, 0, 0, normal_dna, &mut mutation_world.resource_mut::<crate::simulation::RngResource>().0);
+        let normal_brain =
+            BrainType::Neural(RandomNeuralBrain::from_neural_network(normal_brain_nn));
+        let (mut normal_snake, normal_age, normal_justborn) = create_head(
+            (0, 0),
+            normal_brain,
+            0,
+            0,
+            normal_dna,
+            &mut mutation_world
+                .resource_mut::<crate::simulation::RngResource>()
+                .0,
+        );
         normal_snake.energy.energy = 100.0;
         normal_snake.energy.move_potential = 1.0;
         let normal_head = mutation_world
@@ -2306,9 +2340,18 @@ mod tests {
         let mut mutated_brain_nn =
             NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
         mutated_brain_nn.add_connection(0, 21, 2.0, true, 0); // hardcoded
-        let mutated_brain = BrainType::Neural(RandomNeuralBrain::from_neural_network(mutated_brain_nn));
-        let (mut mutated_snake, mutated_age, mutated_justborn) =
-            create_head((0, 0), mutated_brain, 0, 0, mutated_dna, &mut mutation_world.resource_mut::<crate::simulation::RngResource>().0);
+        let mutated_brain =
+            BrainType::Neural(RandomNeuralBrain::from_neural_network(mutated_brain_nn));
+        let (mut mutated_snake, mutated_age, mutated_justborn) = create_head(
+            (0, 0),
+            mutated_brain,
+            0,
+            0,
+            mutated_dna,
+            &mut mutation_world
+                .resource_mut::<crate::simulation::RngResource>()
+                .0,
+        );
         mutated_snake.energy.energy = 100.0;
         mutated_snake.energy.move_potential = 1.0;
         let mutated_head = mutation_world
