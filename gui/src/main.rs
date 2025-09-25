@@ -94,7 +94,7 @@ fn start_simulation(
     simulation.insert_resource(config);
     simulation.insert_resource(EngineState {
         repaint_needed: false,
-        speed_limit: Some(0.1),
+        speed_limit: Some(200.0),
         running: true,
         frames_left: 0.0,
         frames: 0,
@@ -592,12 +592,24 @@ impl MyEguiApp {
 }
 
 impl eframe::App for MyEguiApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        puffin::profile_scope!("gui::update");
-        if puffin::are_scopes_on() {
-            puffin_egui::profiler_window(ctx);
-            puffin::GlobalProfiler::lock().new_frame();
-        }
+fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    puffin::profile_scope!("gui::update");
+    if puffin::are_scopes_on() {
+        puffin_egui::profiler_window(ctx);
+        puffin::GlobalProfiler::lock().new_frame();
+    }
+    if !self.simulation_running {
+        start_simulation(
+            &self.engine_events_sender,
+            Arc::clone(&self.engine_commands_receiver),
+            ctx.clone(),
+            self.config,
+        );
+        self.simulation_running = true;
+        self.engine_commands_sender
+            .send(EngineCommand::CreateSnakes(10))
+            .unwrap();
+    }
         self.engine_events_receiver
             .try_iter()
             .for_each(|result| match result {

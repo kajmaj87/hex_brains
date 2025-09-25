@@ -1,5 +1,5 @@
 use bevy_ecs::prelude::Component;
-use tinyrand::{Rand, RandRange};
+use tinyrand::{Rand, RandRange, Seeded};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Segment {
@@ -311,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_mutate_change_segment_type() {
-        let mut rng = Wyrand::default();
+        let mut rng = Wyrand::seed(1);
         let mut dna = create_test_dna();
         let initial_genes = dna.genes.clone();
 
