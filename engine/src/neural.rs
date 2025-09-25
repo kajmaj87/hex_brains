@@ -125,7 +125,7 @@ impl NeuralNetwork {
         total_inputs: usize,
         connection_active_probability: f32,
         innovation_tracker: &mut InnovationTracker,
-        rng: &mut tinyrand::SplitMix,
+        rng: &mut impl Rand,
     ) -> NeuralNetwork {
         // Define input activations: one for bias (using ReLU to keep it at 1) and one for the actual input.
         let input_activations = vec![Activation::Relu; total_inputs];
@@ -177,7 +177,7 @@ impl NeuralNetwork {
     }
 
     pub fn flip_random_connection(&mut self) {
-        let mut rng = tinyrand::SplitMix::default();
+        let mut rng = tinyrand::Wyrand::default();
         let index = rng.next_range(0..self.connections.len());
         debug!("Flipping connection {}", index);
         self.connections[index].enabled = !self.connections[index].enabled;
@@ -188,7 +188,7 @@ impl NeuralNetwork {
         mutation_strength: f32,
         perturb_disabled_connections: bool,
     ) {
-        let mut rng = tinyrand::SplitMix::default();
+        let mut rng = tinyrand::Wyrand::default();
         let mut index;
         let active_connections = self.get_active_connections();
         if perturb_disabled_connections || active_connections.is_empty() {
@@ -213,7 +213,7 @@ impl NeuralNetwork {
         mutation_strength: f32,
         perturb_disabled_connections: bool,
     ) {
-        let mut rng = tinyrand::SplitMix::default();
+        let mut rng = tinyrand::Wyrand::default();
         let mut index;
         let active_connections = self.get_active_connections();
         if perturb_disabled_connections || active_connections.is_empty() {

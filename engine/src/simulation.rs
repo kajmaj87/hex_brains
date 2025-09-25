@@ -9,16 +9,16 @@ use crate::core::{
     RandomBrain, RandomNeuralBrain, Species,
 };
 use crate::core::{
-    assign_segment_positions, despawn_food, incease_move_potential, process_food, Brain, Food,
+    assign_segment_positions, despawn_food, incease_move_potential, process_food, BrainType, Food,
     Map2d, Map3d, ScentMap, SegmentMap,
 };
 use crate::dna::{Dna, SegmentType};
 use crate::neural::InnovationTracker;
 use bevy_ecs::prelude::{IntoSystemConfigs, Res, ResMut, Resource, Schedule, World};
-use tinyrand::{RandRange, SplitMix};
+use tinyrand::{RandRange, SplitMix, Wyrand};
 
 #[derive(Resource)]
-pub struct RngResource(pub SplitMix);
+pub struct RngResource(pub Wyrand);
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -311,7 +311,7 @@ impl Simulation {
         });
         world.insert_resource(innovation_tracker);
         world.insert_resource(Species::default());
-        let rng = RngResource(SplitMix::default());
+        let rng = RngResource(Wyrand::default());
         world.insert_resource(rng);
         let mut first_schedule = Schedule::default();
         let mut core_schedule = Schedule::default();
@@ -433,7 +433,7 @@ impl Simulation {
                             let mut rng_resource = self.world.remove_resource::<RngResource>().unwrap();
                             {
                                 for (x, y, dna) in snake_data {
-                                    let brain = Box::new(RandomNeuralBrain::new(&mut innovation_tracker, &mut rng_resource.0));
+                                    let brain = BrainType::Neural(RandomNeuralBrain::new(&mut innovation_tracker, &mut rng_resource.0));
                                     let (a, b, mut c, d, e) = create_snake(
                                         100.0,
                                         (x, y),

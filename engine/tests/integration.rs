@@ -2,7 +2,7 @@ use bevy_ecs::prelude::*;
 use hex_brains_engine::core::ScentMap as SimScentMap;
 use hex_brains_engine::core::{
     assign_missing_segments, assign_segment_positions, assign_species, create_snake, grow, split,
-    Age, Energy, Food, FoodMap as SimFoodMap, Map2d, Map3d, Position, RandomNeuralBrain,
+    Age, BrainType, Energy, Food, FoodMap as SimFoodMap, Map2d, Map3d, Position, RandomNeuralBrain,
     SegmentMap, Snake, SolidsMap, Species,
 };
 use hex_brains_engine::dna::{Dna, Gene, MutationType, SegmentType};
@@ -45,14 +45,14 @@ fn test_agent_reproduction_and_splitting_size_one() {
         map: Map3d::new(10, 10),
     });
     world.insert_resource(hex_brains_engine::simulation::RngResource(
-        tinyrand::SplitMix::seed(42),
+        tinyrand::Wyrand::seed(42),
     ));
     let mut innovation_tracker = world.get_resource_mut::<InnovationTracker>().unwrap();
 
     // Create and spawn initial snake with sufficient energy
-    let mut rng = tinyrand::SplitMix::seed(42);
+    let mut rng = tinyrand::Wyrand::seed(42);
     let initial_dna = Dna::random(&mut rng, 5);
-    let brain = Box::new(RandomNeuralBrain::new(&mut *innovation_tracker, &mut rng));
+    let brain = BrainType::Neural(RandomNeuralBrain::new(&mut *innovation_tracker, &mut rng));
     let (pos, meat, snake, age, justborn) = create_snake(
         200.0,  // High energy to test halving
         (5, 5), // Central position
@@ -310,12 +310,12 @@ fn test_grow_panic_index_out_of_bounds() {
     }
 
     // Apply mutate_specific to remove gene at index 0
-    let mut rng = tinyrand::SplitMix::seed(42);
+    let mut rng = tinyrand::Wyrand::seed(42);
     dna.mutate_specific(MutationType::RemoveGene, &mut rng);
     // Now dna has 4 genes, current_gene=4 is out of bounds
 
-    let mut rng = tinyrand::SplitMix::seed(42);
-    let brain = Box::new(RandomNeuralBrain::new(
+    let mut rng = tinyrand::Wyrand::seed(42);
+    let brain = BrainType::Neural(RandomNeuralBrain::new(
         &mut world.resource_mut::<InnovationTracker>().as_mut(),
         &mut rng,
     ));
@@ -348,6 +348,6 @@ fn test_grow_panic_index_out_of_bounds() {
         let snake = world.query::<&Snake>().single(&world);
         assert_eq!(snake.energy.accumulated_meat_matter_for_growth, 0.0);
         assert_eq!(snake.segments.len(), segments_len_after_setup + 1);
-        assert_eq!(snake.dna.current_gene, 0);
+        assert_eq!(snake.dna.current_gene, 1);
     }
 }

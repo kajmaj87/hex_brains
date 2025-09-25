@@ -13,6 +13,7 @@ The Memory Bank for Hex Brains has been initialized with core documentation file
 - Fixed condition in grow system to prevent index out of bounds when current_gene equals genes length.
 - Updated integration test to use proper mocking for RNG to avoid hangs.
 - Fixed bug in DNA mutation current_gene adjustment to prevent underflow when removing genes at index 0 with current_gene 0.
+- Refactored RNG usage to pass by Rand interface, using Wyrand as the concrete implementation. Replaced Brain trait with BrainType enum for better type safety and to avoid dyn compatibility issues.
 
 ## Next Steps
 - Verify memory bank contents with user for accuracy and completeness.

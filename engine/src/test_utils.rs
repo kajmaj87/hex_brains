@@ -118,7 +118,7 @@ mod tests {
 
     #[test]
     fn test_random_brain_decisions_deterministic() {
-        use crate::core::{RandomBrain, Brain};
+        use crate::core::{RandomBrain};
         let brain = RandomBrain;
         let inputs = vec![1.0; 18]; // Dummy inputs
         // Multiple calls should give same sequence

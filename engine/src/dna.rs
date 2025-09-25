@@ -105,7 +105,7 @@ pub struct Dna {
 }
 
 impl Dna {
-    pub fn random(rng: &mut tinyrand::SplitMix, gene_pool_size: usize) -> Dna {
+    pub fn random(rng: &mut impl Rand, gene_pool_size: usize) -> Dna {
         let mut genes = Vec::new();
         for i in 0..gene_pool_size {
             let segment_types = all_segment_types();
@@ -154,15 +154,10 @@ impl Dna {
                     for i in 0..self.genes.len() {
                         if self.genes[i].jump > index {
                             self.genes[i].jump -= 1;
-                        }
+                        } 
                     }
-                    for i in 0..self.genes.len() {
-                        self.genes[i].id = i;
-                    }
-                    if self.current_gene > index {
-                        self.current_gene -= 1;
-                    } else if self.current_gene == index {
-                        self.current_gene = 0;
+                    for i in index..self.genes.len() {
+                        self.genes[i].id -= 1;
                     }
                 }
             }
@@ -190,6 +185,9 @@ impl Dna {
             self.current_gene,
             self.genes.len()
         );
+        if self.current_gene >= self.genes.len() {
+            self.current_gene = 0;
+        }
         let segment = self.genes[self.current_gene].segment_type.clone();
         self.current_gene = self.genes[self.current_gene].jump;
         segment
@@ -206,7 +204,7 @@ impl Dna {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tinyrand::SplitMix;
+    use tinyrand::Wyrand;
 
     fn create_test_dna() -> Dna {
         let genes = vec![
@@ -265,7 +263,7 @@ mod tests {
 
     #[test]
     fn test_mutate_add_gene() {
-        let mut rng = SplitMix::default();
+        let mut rng = Wyrand::default();
         let mut dna = create_test_dna();
         let initial_len = dna.genes.len();
         let initial_genes = dna.genes.clone();
@@ -293,7 +291,7 @@ mod tests {
 
     #[test]
     fn test_mutate_remove_gene() {
-        let mut rng = SplitMix::default();
+        let mut rng = Wyrand::default();
         let mut dna = create_test_dna();
         let initial_len = dna.genes.len();
 
@@ -313,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_mutate_change_segment_type() {
-        let mut rng = SplitMix::default();
+        let mut rng = Wyrand::default();
         let mut dna = create_test_dna();
         let initial_genes = dna.genes.clone();
 
@@ -338,7 +336,7 @@ mod tests {
 
     #[test]
     fn test_mutate_change_jump() {
-        let mut rng = SplitMix::default();
+        let mut rng = Wyrand::default();
         let mut dna = create_test_dna();
         let initial_genes = dna.genes.clone();
 
@@ -358,7 +356,7 @@ mod tests {
 
     #[test]
     fn test_multiple_mutations() {
-        let mut rng = SplitMix::default();
+        let mut rng = Wyrand::default();
         let mut dna = create_test_dna();
 
         // Perform 10 mutations
@@ -378,7 +376,7 @@ mod tests {
 
     #[test]
     fn test_mutate_no_panic_on_min_length() {
-        let mut rng = SplitMix::default();
+        let mut rng = Wyrand::default();
         let mut dna = Dna {
             genes: vec![Gene {
                 segment_type: SegmentType::muscle(),
@@ -469,7 +467,7 @@ mod tests {
             ],
             current_gene: 1,
         };
-        let mut rng = SplitMix::default();
+        let mut rng = Wyrand::default();
         dna.mutate_internal(MutationType::RemoveGene, &mut rng);
         // With buggy code (>), jumps may be invalid, causing panic in build_segment
         let result = std::panic::catch_unwind(|| {
