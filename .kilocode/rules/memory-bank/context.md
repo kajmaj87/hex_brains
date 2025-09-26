@@ -27,6 +27,7 @@ The Memory Bank for Hex Brains has been initialized with core documentation file
 - Modified config update logic in gui/src/main.rs to prevent sending UpdateSimulationConfig for grid size (columns/rows) and add_walls settings during runtime. These settings now only apply on restart via ResetWorld to prevent panics when changing them during simulation. Other settings continue to update immediately.
 - Added PartialEq derives to SimulationConfig and MutationConfig in engine/src/simulation.rs to enable comparison for config changes.
 - Modified restart button logic in gui/src/main.rs to send UpdateSimulationConfig with the current config before sending ResetWorld, ensuring settings apply on restart by updating the engine's config first.
+- Modified species implementation to use permanent leader_network without dynamic leader reassignment, removed specie.leader field, and updated assign_species and remove_snake_from_species accordingly.
 
 ## Next Steps
 - Verify memory bank contents with user for accuracy and completeness.

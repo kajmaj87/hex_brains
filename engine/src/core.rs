@@ -77,7 +77,6 @@ impl BrainType {
 #[derive(Debug, Clone)]
 pub struct Specie {
     pub id: u32,
-    pub leader: Entity,
     pub leader_network: NeuralNetwork,
     pub members: VecDeque<Entity>,
 }
@@ -1006,17 +1005,10 @@ fn remove_snake_from_species(
 ) {
     if let Some(specie_id) = snake.species {
         if let Some(specie) = species.species.iter_mut().find(|s| s.id == specie_id) {
-            if specie.leader == head_id {
-                specie.members.retain(|s| *s != head_id);
-                if let Some(new_leader) = specie.members.pop_front() {
-                    specie.leader = new_leader;
-                    specie.leader_network = snake.brain.get_neural_network().unwrap().clone();
-                } else {
-                    let specie_id = specie.id;
-                    species.species.retain(|s| s.id != specie_id);
-                }
-            } else {
-                specie.members.retain(|s| *s != head_id);
+            specie.members.retain(|s| *s != head_id);
+            if specie.members.is_empty() {
+                let specie_id = specie.id;
+                species.species.retain(|s| s.id != specie_id);
             }
         } else {
             warn!("Snake {:?} died and was not found in any specie", head_id);
@@ -1390,13 +1382,10 @@ pub fn assign_species(
 ) {
     puffin::profile_function!();
     for baby_id in &new_borns {
-        // let mut baby_snake = None;
-        for specie in species.species.iter_mut() {
-            if let Ok([(snake_id, mut snake), (_leader_id, leader_snake)]) =
-                snakes.get_many_mut([baby_id, specie.leader])
-            {
+        if let Ok((snake_id, mut snake)) = snakes.get_mut(baby_id) {
+            for specie in species.species.iter_mut() {
                 let compatibility = calculate_gene_difference(
-                    leader_snake.brain.get_neural_network().unwrap(),
+                    &specie.leader_network,
                     snake.brain.get_neural_network().unwrap(),
                 );
                 if compatibility < config.species_threshold {
@@ -1404,26 +1393,19 @@ pub fn assign_species(
                     specie.members.push_back(snake_id);
                     break;
                 }
-            } else if baby_id != specie.leader {
-                panic!(
-                    "Unable to find leader {:?} for baby {:?} for specie {:?}",
-                    specie.leader, baby_id, specie.id
-                );
             }
-        }
-        let (_, mut baby_snake) = snakes.get_mut(baby_id).unwrap();
-        if baby_snake.species.is_none() {
-            let baby_neural_network = baby_snake.brain.get_neural_network().unwrap().clone();
-            let mut new_specie = Specie {
-                id: species.last_id + 1,
-                leader: baby_id,
-                members: VecDeque::new(),
-                leader_network: baby_neural_network,
-            };
-            new_specie.members.push_back(baby_id);
-            species.species.push(new_specie);
-            species.last_id += 1;
-            baby_snake.species = Some(species.last_id);
+            if snake.species.is_none() {
+                let baby_neural_network = snake.brain.get_neural_network().unwrap().clone();
+                let mut new_specie = Specie {
+                    id: species.last_id + 1,
+                    members: VecDeque::new(),
+                    leader_network: baby_neural_network,
+                };
+                new_specie.members.push_back(baby_id);
+                species.species.push(new_specie);
+                species.last_id += 1;
+                snake.species = Some(species.last_id);
+            }
         }
     }
 }
