@@ -581,6 +581,116 @@ pub fn position_at_direction(
     y = (y + rows) % rows;
     Position { x, y }
 }
+fn collect_scent_inputs(
+    scent_map: &ScentMap,
+    config: &SimulationConfig,
+    position: Position,
+    direction: &Direction,
+) -> [f32; 3] {
+    let direction_left = turn_left(direction);
+    let direction_right = turn_right(direction);
+    let scent_front = scent(
+        &position_at_direction(direction, position.clone(), *config),
+        scent_map,
+        *config,
+    );
+    let scent_left = scent(
+        &position_at_direction(&direction_left, position.clone(), *config),
+        scent_map,
+        *config,
+    );
+    let scent_right = scent(
+        &position_at_direction(&direction_right, position.clone(), *config),
+        scent_map,
+        *config,
+    );
+    [scent_front, scent_left, scent_right]
+}
+
+fn collect_vision_inputs(
+    food_map: &FoodMap,
+    solids_map: &SolidsMap,
+    config: &SimulationConfig,
+    position: Position,
+    direction: &Direction,
+) -> [f32; 9] {
+    let direction_left = turn_left(direction);
+    let direction_right = turn_right(direction);
+    let plant_vision_front = see_plants(
+        direction,
+        position.clone(),
+        config.mutation.plant_vision_front_range,
+        food_map,
+        *config,
+    );
+    let plant_vision_left = see_plants(
+        &direction_left,
+        position.clone(),
+        config.mutation.plant_vision_left_range,
+        food_map,
+        *config,
+    );
+    let plant_vision_right = see_plants(
+        &direction_right,
+        position.clone(),
+        config.mutation.plant_vision_right_range,
+        food_map,
+        *config,
+    );
+    let meat_vision_front = see_meat(
+        direction,
+        position.clone(),
+        config.mutation.meat_vision_front_range,
+        food_map,
+        *config,
+    );
+    let meat_vision_left = see_meat(
+        &direction_left,
+        position.clone(),
+        config.mutation.meat_vision_left_range,
+        food_map,
+        *config,
+    );
+    let meat_vision_right = see_meat(
+        &direction_right,
+        position.clone(),
+        config.mutation.meat_vision_right_range,
+        food_map,
+        *config,
+    );
+    let solid_vision_front = see_obstacles(
+        direction,
+        position.clone(),
+        config.mutation.obstacle_vision_front_range,
+        solids_map,
+        *config,
+    );
+    let solid_vision_left = see_obstacles(
+        &direction_left,
+        position.clone(),
+        config.mutation.obstacle_vision_left_range,
+        solids_map,
+        *config,
+    );
+    let solid_vision_right = see_obstacles(
+        &direction_right,
+        position.clone(),
+        config.mutation.obstacle_vision_right_range,
+        solids_map,
+        *config,
+    );
+    [
+        plant_vision_front,
+        plant_vision_left,
+        plant_vision_right,
+        meat_vision_front,
+        meat_vision_left,
+        meat_vision_right,
+        solid_vision_front,
+        solid_vision_left,
+        solid_vision_right,
+    ]
+}
 
 pub fn think(
     mut heads: Query<(&Position, &mut Snake, &Age)>,
@@ -606,85 +716,14 @@ pub fn think(
         } else {
             0.0
         };
-        let direction_left = turn_left(&head.direction);
-        let direction_right = turn_right(&head.direction);
-        let scent_front = scent(
-            &position_at_direction(&head.direction, position.clone(), *config),
-            &scent_map,
-            *config,
-        );
-        let scent_left = scent(
-            &position_at_direction(&direction_left, position.clone(), *config),
-            &scent_map,
-            *config,
-        );
-        let scent_right = scent(
-            &position_at_direction(&direction_right, position.clone(), *config),
-            &scent_map,
-            *config,
-        );
-        let plant_vision_front = see_plants(
-            &head.direction,
-            position.clone(),
-            config.mutation.plant_vision_front_range,
+        let scent_inputs =
+            collect_scent_inputs(&scent_map, &config, position.clone(), &head.direction);
+        let vision_inputs = collect_vision_inputs(
             &food_map,
-            *config,
-        );
-        let plant_vision_left = see_plants(
-            &direction_left,
-            position.clone(),
-            config.mutation.plant_vision_left_range,
-            &food_map,
-            *config,
-        );
-        let plant_vision_right = see_plants(
-            &direction_right,
-            position.clone(),
-            config.mutation.plant_vision_right_range,
-            &food_map,
-            *config,
-        );
-        let meat_vision_front = see_meat(
-            &head.direction,
-            position.clone(),
-            config.mutation.meat_vision_front_range,
-            &food_map,
-            *config,
-        );
-        let meat_vision_left = see_meat(
-            &direction_left,
-            position.clone(),
-            config.mutation.meat_vision_left_range,
-            &food_map,
-            *config,
-        );
-        let meat_vision_right = see_meat(
-            &direction_right,
-            position.clone(),
-            config.mutation.meat_vision_right_range,
-            &food_map,
-            *config,
-        );
-        let solid_vision_front = see_obstacles(
-            &head.direction,
-            position.clone(),
-            config.mutation.obstacle_vision_front_range,
             &solids_map,
-            *config,
-        );
-        let solid_vision_left = see_obstacles(
-            &direction_left,
+            &config,
             position.clone(),
-            config.mutation.obstacle_vision_left_range,
-            &solids_map,
-            *config,
-        );
-        let solid_vision_right = see_obstacles(
-            &direction_right,
-            position.clone(),
-            config.mutation.obstacle_vision_right_range,
-            &solids_map,
-            *config,
+            &head.direction,
         );
         let plant_food_level = head.energy.plant_in_stomach / head.metabolism.max_plants_in_stomach;
         let meat_food_level = head.energy.meat_in_stomach / head.metabolism.max_meat_in_stomach;
@@ -693,18 +732,18 @@ pub fn think(
         let sensory_inputs = vec![
             bias,
             chaos as f32,
-            scent_front,
-            scent_left,
-            scent_right,
-            plant_vision_front,
-            plant_vision_left,
-            plant_vision_right,
-            meat_vision_front,
-            meat_vision_left,
-            meat_vision_right,
-            solid_vision_front,
-            solid_vision_left,
-            solid_vision_right,
+            scent_inputs[0],
+            scent_inputs[1],
+            scent_inputs[2],
+            vision_inputs[0],
+            vision_inputs[1],
+            vision_inputs[2],
+            vision_inputs[3],
+            vision_inputs[4],
+            vision_inputs[5],
+            vision_inputs[6],
+            vision_inputs[7],
+            vision_inputs[8],
             plant_food_level,
             meat_food_level,
             energy_level,
