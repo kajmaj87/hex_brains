@@ -4,7 +4,8 @@
 
  1. [x] Extract sensory helper functions from `think` in `engine/src/core.rs`.
      - Completed: Created `collect_scent_inputs` returning [f32; 3] for left/front/right scents, and `collect_vision_inputs` returning [f32; 9] for plant/meat/solid visions. Used &Direction in helper signatures to handle non-Copy Direction enum.
- 2. [ ] Break `simulation::run` method into smaller methods in `engine/src/simulation.rs`.
+ 2. [x] Break `simulation::run` method into smaller methods in `engine/src/simulation.rs`.
+     - Completed: Extracted `handle_commands`, `simulation_loop`, and `send_events` methods. `handle_commands` processes incoming commands per simulation step, `simulation_loop` performs stepping and collects FrameDrawn events, `send_events` sends all collected events including SimulationFinished. Logic preserved with improved separation of concerns.
  3. [ ] Extract mutation application functions from `split` in `engine/src/core.rs`.
  4. [ ] Extract shared helper for available segment types in `engine/src/dna.rs`.
  5. [ ] Extract shared helper for random connection index in `engine/src/neural.rs`.

@@ -411,186 +411,192 @@ impl Simulation {
 
     pub fn run(&mut self) -> EngineEvent {
         let start_time = Instant::now();
+        let mut all_events = vec![];
         while !self.is_done() {
-            if let Some(commands) = self
-                .engine_commands
-                .as_ref()
-                .map(|arc_mutex| arc_mutex.lock())
-            {
-                commands.try_iter().for_each(|command| {
-                    match command {
-                        EngineCommand::RepaintRequested => {
-                            let mut engine_state =
-                                self.world.get_resource_mut::<EngineState>().unwrap();
-                            engine_state.repaint_needed = true;
-                        }
-                        EngineCommand::IncreaseSpeed => {
-                            let mut engine_state =
-                                self.world.get_resource_mut::<EngineState>().unwrap();
-                            engine_state.speed_limit = engine_state
-                                .speed_limit
-                                .map(|limit| limit.max(0.01) * 2.0)
-                                .or(Some(0.02));
-                        }
-                        EngineCommand::DecreaseSpeed => {
-                            let mut engine_state =
-                                self.world.get_resource_mut::<EngineState>().unwrap();
-                            engine_state.speed_limit = engine_state
-                                .speed_limit
-                                .map(|limit| limit.max(0.04) / 2.0)
-                                .or(Some(0.02));
-                        }
-                        EngineCommand::IgnoreSpeedLimit => {
-                            let mut engine_state =
-                                self.world.get_resource_mut::<EngineState>().unwrap();
-                            engine_state.ignore_speed_limit = !engine_state.ignore_speed_limit;
-                        }
-                        EngineCommand::FlipRunningState => {
-                            let mut engine_state =
-                                self.world.get_resource_mut::<EngineState>().unwrap();
-                            engine_state.running = !engine_state.running;
-                        }
-                        EngineCommand::CreateSnakes(amount) => {
-                            // let config = self.world.get_resource::<SimulationConfig>().unwrap();
-                            let config = *self.world.get_resource::<SimulationConfig>().unwrap();
-                            let mut snake_data = vec![];
-                            for _ in 0..amount {
-                                let mut rng_temp =
-                                    self.world.get_resource_mut::<RngResource>().unwrap();
-                                let x = rng_temp.rng.next_range(0..config.columns) as i32;
-                                let y = rng_temp.rng.next_range(0..config.rows) as i32;
-                                let dna = Dna::random(&mut rng_temp.rng, 8, &config.mutation);
-                                snake_data.push((x, y, dna));
-                            }
-                            let mut entities_to_spawn = vec![];
-                            let mut innovation_tracker =
-                                self.world.remove_resource::<InnovationTracker>().unwrap();
-                            let mut rng_resource =
-                                self.world.remove_resource::<RngResource>().unwrap();
-                            {
-                                for (x, y, dna) in snake_data {
-                                    let brain = BrainType::Neural(RandomNeuralBrain::new(
-                                        &mut innovation_tracker,
-                                        &mut rng_resource.rng,
-                                    ));
-                                    let (a, b, mut c, d, e) = create_snake(
-                                        100.0,
-                                        (x, y),
-                                        brain,
-                                        dna,
-                                        &mut rng_resource.rng,
-                                    );
-                                    c.metabolism.segment_basic_cost =
-                                        c.brain.get_neural_network().unwrap().run_cost();
-                                    entities_to_spawn.push((a, b, c, d, e));
-                                }
-                            }
-                            self.world.insert_resource(innovation_tracker);
-                            self.world.insert_resource(rng_resource);
-                            for (a, b, c, d, e) in entities_to_spawn {
-                                self.world.spawn((a, b, c, d, e));
-                            }
-                        }
-                        EngineCommand::StopSimulation => {
-                            let mut engine_state =
-                                self.world.get_resource_mut::<EngineState>().unwrap();
-                            engine_state.finished = true;
-                        }
-                        EngineCommand::UpdateSimulationConfig(new_config) => {
-                            self.world.remove_resource::<SimulationConfig>();
-                            self.world.insert_resource(new_config);
-                        }
-                        EngineCommand::AdvanceOneFrame => {
-                            let mut engine_state =
-                                self.world.get_resource_mut::<EngineState>().unwrap();
-                            engine_state.ignore_speed_limit = false;
-                            engine_state.speed_limit = Some(0.0);
-                            engine_state.frames_left += 1.0;
-                        }
-                        EngineCommand::ResetWorld => {
-                            // Despawn all entities
-                            let entities: Vec<bevy_ecs::entity::Entity> = self
-                                .world
-                                .query::<bevy_ecs::entity::Entity>()
-                                .iter(&self.world)
-                                .collect();
-                            for entity in entities {
-                                self.world.despawn(entity);
-                            }
-                            // Get config
-                            let config = *self.world.get_resource::<SimulationConfig>().unwrap();
-                            // Recreate solids
-                            let mut solids = SolidsMap {
-                                map: Map2d::new(config.columns, config.rows, false),
-                            };
-                            if config.add_walls {
-                                for x in 0..config.columns {
-                                    let middle = config.rows / 2;
-                                    if x != middle && x != middle + 1 && x != middle - 1 {
-                                        for &y_offset in &[
-                                            config.rows / 4,
-                                            2 * config.rows / 4,
-                                            3 * config.rows / 4,
-                                        ] {
-                                            let position = Position {
-                                                x: x as i32,
-                                                y: y_offset as i32,
-                                            };
-                                            solids.map.set(&position, true);
-                                            self.world.spawn((Solid, position));
-                                        }
-                                    }
-                                }
-                            }
-                            self.world.insert_resource(solids);
-                            // Reset other resources
-                            *self.world.get_resource_mut::<Stats>().unwrap() = Stats::default();
-                            self.world.insert_resource(FoodMap {
-                                map: Map2d::new(config.columns, config.rows, Food::default()),
-                            });
-                            self.world.insert_resource(ScentMap {
-                                map: Map2d::new(config.columns, config.rows, 0.0),
-                            });
-                            self.world.insert_resource(SegmentMap {
-                                map: Map3d::new(config.columns, config.rows),
-                            });
-                            self.world.insert_resource(Species::default());
-                            let mut engine_state =
-                                self.world.get_resource_mut::<EngineState>().unwrap();
-                            engine_state.frames = 0;
-                            engine_state.updates_done = 0;
-                        }
-                    }
-                });
-            }
-            self.step();
-            let mut engine_state = self.world.get_resource_mut::<EngineState>().unwrap();
-            if engine_state.repaint_needed && engine_state.running {
-                let increment = engine_state.speed_limit.unwrap_or(0.00);
-                engine_state.frames_left += increment;
-                if let Some(limit) = engine_state.speed_limit {
-                    engine_state.frames_left = engine_state.frames_left.min(limit);
-                }
-                self.engine_events
-                    .send(EngineEvent::FrameDrawn {
-                        updates_left: engine_state.frames_left,
-                        updates_done: engine_state.updates_done,
-                    })
-                    .unwrap();
-                engine_state.updates_done = 0;
-            }
-            engine_state.repaint_needed = false;
+            self.handle_commands();
+            let events = self.simulation_loop();
+            all_events.extend(events);
         }
         let duration = start_time.elapsed().as_millis();
-
         let engine_state = self.world.get_resource::<EngineState>().unwrap();
         let result = EngineEvent::SimulationFinished {
             steps: engine_state.frames,
             name: self.name.clone(),
             duration,
         };
-        let _ = self.engine_events.send(result.clone());
+        all_events.push(result.clone());
+        self.send_events(all_events);
         result
+    }
+    fn handle_commands(&mut self) {
+        if let Some(commands) = self
+            .engine_commands
+            .as_ref()
+            .map(|arc_mutex| arc_mutex.lock())
+        {
+            commands.try_iter().for_each(|command| {
+                match command {
+                    EngineCommand::RepaintRequested => {
+                        let mut engine_state =
+                            self.world.get_resource_mut::<EngineState>().unwrap();
+                        engine_state.repaint_needed = true;
+                    }
+                    EngineCommand::IncreaseSpeed => {
+                        let mut engine_state =
+                            self.world.get_resource_mut::<EngineState>().unwrap();
+                        engine_state.speed_limit = engine_state
+                            .speed_limit
+                            .map(|limit| limit.max(0.01) * 2.0)
+                            .or(Some(0.02));
+                    }
+                    EngineCommand::DecreaseSpeed => {
+                        let mut engine_state =
+                            self.world.get_resource_mut::<EngineState>().unwrap();
+                        engine_state.speed_limit = engine_state
+                            .speed_limit
+                            .map(|limit| limit.max(0.04) / 2.0)
+                            .or(Some(0.02));
+                    }
+                    EngineCommand::IgnoreSpeedLimit => {
+                        let mut engine_state =
+                            self.world.get_resource_mut::<EngineState>().unwrap();
+                        engine_state.ignore_speed_limit = !engine_state.ignore_speed_limit;
+                    }
+                    EngineCommand::FlipRunningState => {
+                        let mut engine_state =
+                            self.world.get_resource_mut::<EngineState>().unwrap();
+                        engine_state.running = !engine_state.running;
+                    }
+                    EngineCommand::CreateSnakes(amount) => {
+                        let config = *self.world.get_resource::<SimulationConfig>().unwrap();
+                        let mut snake_data = vec![];
+                        for _ in 0..amount {
+                            let mut rng_temp =
+                                self.world.get_resource_mut::<RngResource>().unwrap();
+                            let x = rng_temp.rng.next_range(0..config.columns) as i32;
+                            let y = rng_temp.rng.next_range(0..config.rows) as i32;
+                            let dna = Dna::random(&mut rng_temp.rng, 8, &config.mutation);
+                            snake_data.push((x, y, dna));
+                        }
+                        let mut entities_to_spawn = vec![];
+                        let mut innovation_tracker =
+                            self.world.remove_resource::<InnovationTracker>().unwrap();
+                        let mut rng_resource = self.world.remove_resource::<RngResource>().unwrap();
+                        {
+                            for (x, y, dna) in snake_data {
+                                let brain = BrainType::Neural(RandomNeuralBrain::new(
+                                    &mut innovation_tracker,
+                                    &mut rng_resource.rng,
+                                ));
+                                let (a, b, mut c, d, e) =
+                                    create_snake(100.0, (x, y), brain, dna, &mut rng_resource.rng);
+                                c.metabolism.segment_basic_cost =
+                                    c.brain.get_neural_network().unwrap().run_cost();
+                                entities_to_spawn.push((a, b, c, d, e));
+                            }
+                        }
+                        self.world.insert_resource(innovation_tracker);
+                        self.world.insert_resource(rng_resource);
+                        for (a, b, c, d, e) in entities_to_spawn {
+                            self.world.spawn((a, b, c, d, e));
+                        }
+                    }
+                    EngineCommand::StopSimulation => {
+                        let mut engine_state =
+                            self.world.get_resource_mut::<EngineState>().unwrap();
+                        engine_state.finished = true;
+                    }
+                    EngineCommand::UpdateSimulationConfig(new_config) => {
+                        self.world.remove_resource::<SimulationConfig>();
+                        self.world.insert_resource(new_config);
+                    }
+                    EngineCommand::AdvanceOneFrame => {
+                        let mut engine_state =
+                            self.world.get_resource_mut::<EngineState>().unwrap();
+                        engine_state.ignore_speed_limit = false;
+                        engine_state.speed_limit = Some(0.0);
+                        engine_state.frames_left += 1.0;
+                    }
+                    EngineCommand::ResetWorld => {
+                        // Despawn all entities
+                        let entities: Vec<bevy_ecs::entity::Entity> = self
+                            .world
+                            .query::<bevy_ecs::entity::Entity>()
+                            .iter(&self.world)
+                            .collect();
+                        for entity in entities {
+                            self.world.despawn(entity);
+                        }
+                        // Get config
+                        let config = *self.world.get_resource::<SimulationConfig>().unwrap();
+                        // Recreate solids
+                        let mut solids = SolidsMap {
+                            map: Map2d::new(config.columns, config.rows, false),
+                        };
+                        if config.add_walls {
+                            for x in 0..config.columns {
+                                let middle = config.rows / 2;
+                                if x != middle && x != middle + 1 && x != middle - 1 {
+                                    for &y_offset in
+                                        &[config.rows / 4, 2 * config.rows / 4, 3 * config.rows / 4]
+                                    {
+                                        let position = Position {
+                                            x: x as i32,
+                                            y: y_offset as i32,
+                                        };
+                                        solids.map.set(&position, true);
+                                        self.world.spawn((Solid, position));
+                                    }
+                                }
+                            }
+                        }
+                        self.world.insert_resource(solids);
+                        // Reset other resources
+                        *self.world.get_resource_mut::<Stats>().unwrap() = Stats::default();
+                        self.world.insert_resource(FoodMap {
+                            map: Map2d::new(config.columns, config.rows, Food::default()),
+                        });
+                        self.world.insert_resource(ScentMap {
+                            map: Map2d::new(config.columns, config.rows, 0.0),
+                        });
+                        self.world.insert_resource(SegmentMap {
+                            map: Map3d::new(config.columns, config.rows),
+                        });
+                        self.world.insert_resource(Species::default());
+                        let mut engine_state =
+                            self.world.get_resource_mut::<EngineState>().unwrap();
+                        engine_state.frames = 0;
+                        engine_state.updates_done = 0;
+                    }
+                }
+            });
+        }
+    }
+
+    fn simulation_loop(&mut self) -> Vec<EngineEvent> {
+        self.step();
+        let mut events = vec![];
+        let mut engine_state = self.world.get_resource_mut::<EngineState>().unwrap();
+        if engine_state.repaint_needed && engine_state.running {
+            let increment = engine_state.speed_limit.unwrap_or(0.00);
+            engine_state.frames_left += increment;
+            if let Some(limit) = engine_state.speed_limit {
+                engine_state.frames_left = engine_state.frames_left.min(limit);
+            }
+            events.push(EngineEvent::FrameDrawn {
+                updates_left: engine_state.frames_left,
+                updates_done: engine_state.updates_done,
+            });
+            engine_state.updates_done = 0;
+        }
+        engine_state.repaint_needed = false;
+        events
+    }
+
+    fn send_events(&self, events: Vec<EngineEvent>) {
+        for event in events {
+            let _ = self.engine_events.send(event);
+        }
     }
 
     pub fn add_system<M>(&mut self, system: impl IntoSystemConfigs<M>) {
