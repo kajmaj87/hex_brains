@@ -1075,15 +1075,20 @@ impl eframe::App for MyEguiApp {
                     ui.label("Smoothing window");
                     ui.add(egui::DragValue::new(&mut self.smoothing_window).speed(10.0));
                 });
+                let current_frame = self
+                    .stats_history
+                    .back()
+                    .map(|(f, _)| *f as f64)
+                    .unwrap_or(0.0);
                 let raw_snakes: Vec<(f64, f64)> = self
                     .stats_history
                     .iter()
-                    .map(|(f, s)| (*f as f64, s.total_snakes as f64))
+                    .map(|(f, s)| (*f as f64 - current_frame, s.total_snakes as f64))
                     .collect();
                 let raw_food: Vec<(f64, f64)> = self
                     .stats_history
                     .iter()
-                    .map(|(f, s)| (*f as f64, s.total_food as f64 / 100.0))
+                    .map(|(f, s)| (*f as f64 - current_frame, s.total_food as f64 / 100.0))
                     .collect();
                 let snakes: PlotPoints = raw_snakes
                     .iter()
