@@ -1,3 +1,4 @@
 /target
 .idea
 .kilocode/mcp.json
+config.toml

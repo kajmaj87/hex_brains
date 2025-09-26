@@ -18,6 +18,7 @@ use hex_brains_engine::simulation::{
 };
 use parking_lot::Mutex;
 use std::collections::hash_map::DefaultHasher;
+use std::fs;
 use std::hash::{Hash, Hasher};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
@@ -52,37 +53,41 @@ fn main() {
     );
 }
 
-fn create_simulation_config(columns: usize, rows: usize, add_walls: bool) -> SimulationConfig {
-    SimulationConfig {
-        rows,
-        columns,
-        add_walls,
-        create_scents: false,
-        scent_diffusion_rate: 0.25,
-        scent_dispersion_per_step: 150.0,
-        starting_snakes: 10,
-        starting_food: 100,
-        food_per_step: 2,
-        plant_matter_per_segment: 100.0,
-        wait_cost: 1.0,
-        move_cost: 10.0,
-        new_segment_cost: 100.0,
-        size_to_split: 10,
-        species_threshold: 0.2,
-        mutation: MutationConfig::default(),
-        snake_max_age: 2_000,
-        meat_energy_content: 5.0,
-        plant_energy_content: 1.0,
-    }
+fn only_star_fields_differ(a: &SimulationConfig, b: &SimulationConfig) -> bool {
+    (a.rows != b.rows || a.columns != b.columns || a.add_walls != b.add_walls)
+        && a.food_per_step == b.food_per_step
+        && a.plant_matter_per_segment == b.plant_matter_per_segment
+        && a.wait_cost == b.wait_cost
+        && a.move_cost == b.move_cost
+        && a.new_segment_cost == b.new_segment_cost
+        && a.size_to_split == b.size_to_split
+        && a.snake_max_age == b.snake_max_age
+        && a.species_threshold == b.species_threshold
+        && a.create_scents == b.create_scents
+        && a.scent_diffusion_rate == b.scent_diffusion_rate
+        && a.scent_dispersion_per_step == b.scent_dispersion_per_step
+        && a.starting_snakes == b.starting_snakes
+        && a.starting_food == b.starting_food
+        && a.meat_energy_content == b.meat_energy_content
+        && a.plant_energy_content == b.plant_energy_content
+        && a.mutation == b.mutation
 }
 
 fn start_simulation(
     engine_events_sender: &Sender<EngineEvent>,
     engine_commands_receiver: Arc<Mutex<Receiver<EngineCommand>>>,
     context: egui::Context,
-    config: Config,
+    simulation_config: SimulationConfig,
 ) {
-    let simulation_config = create_simulation_config(config.columns, config.rows, config.add_walls);
+    let config = Config {
+        rows: simulation_config.rows,
+        columns: simulation_config.columns,
+        bg_color: Stroke::new(1.0, Color32::LIGHT_GREEN),
+        scent_color: Stroke::new(1.0, Color32::from_rgba_unmultiplied(0xAD, 0xD8, 0xE6, 50)),
+        tail_color: Stroke::new(1.0, Color32::LIGHT_RED),
+        food_color: Stroke::new(1.0, Color32::YELLOW),
+        add_walls: simulation_config.add_walls,
+    };
     let mut simulation = Simulation::new(
         "Main".to_string(),
         engine_events_sender.clone(),
@@ -508,7 +513,8 @@ struct MyEguiApp {
     show_species: bool,
     show_info: bool,
     simulation_config: SimulationConfig,
-    simulation_running: bool,
+    previous_simulation_config: SimulationConfig,
+    started: bool,
     paused: bool,
     show_networks: bool,
     selected_network: u32,
@@ -516,6 +522,51 @@ struct MyEguiApp {
 }
 
 impl MyEguiApp {
+    fn load_config() -> SimulationConfig {
+        let default_config = SimulationConfig {
+            rows: 100,
+            columns: 100,
+            create_scents: false,
+            scent_diffusion_rate: 0.2,
+            scent_dispersion_per_step: 30.0,
+            starting_snakes: 0,
+            starting_food: 0,
+            food_per_step: 2,
+            plant_matter_per_segment: 100.0,
+            wait_cost: 1.0,
+            move_cost: 10.0,
+            new_segment_cost: 100.0,
+            size_to_split: 12,
+            species_threshold: 0.2,
+            add_walls: false,
+            mutation: MutationConfig::default(),
+            snake_max_age: 2_000,
+            meat_energy_content: 5.0,
+            plant_energy_content: 1.0,
+        };
+        if let Ok(contents) = fs::read_to_string("config.toml") {
+            match toml::from_str(&contents) {
+                Ok(loaded) => {
+                    tracing::info!("Config loaded successfully from config.toml");
+                    loaded
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to parse config.toml: {}, using defaults", e);
+                    default_config
+                }
+            }
+        } else {
+            tracing::info!("config.toml not found, using defaults");
+            default_config
+        }
+    }
+
+    fn save_config(&self) {
+        if let Ok(toml_str) = toml::to_string(&self.simulation_config) {
+            let _ = fs::write("config.toml", toml_str);
+        }
+    }
+
     fn new(
         cc: &eframe::CreationContext<'_>,
         engine_commands_sender: Sender<EngineCommand>,
@@ -543,6 +594,16 @@ impl MyEguiApp {
             .unwrap()
             .insert(0, "firacode_nerd".to_owned());
         cc.egui_ctx.set_fonts(font_definitions.clone());
+        let simulation_config = Self::load_config();
+        let config = Config {
+            rows: simulation_config.rows,
+            columns: simulation_config.columns,
+            bg_color: Stroke::new(1.0, Color32::LIGHT_GREEN),
+            scent_color: Stroke::new(1.0, Color32::from_rgba_unmultiplied(0xAD, 0xD8, 0xE6, 50)),
+            tail_color: Stroke::new(1.0, Color32::LIGHT_RED),
+            food_color: Stroke::new(1.0, Color32::YELLOW),
+            add_walls: simulation_config.add_walls,
+        };
         Self {
             text: String::new(),
             total_frames: 0,
@@ -556,39 +617,9 @@ impl MyEguiApp {
             engine_events_sender,
             engine_events_receiver,
             engine_commands_receiver: Arc::new(Mutex::new(engine_commands_receiver)),
-            config: Config {
-                rows: 100,
-                columns: 100,
-                bg_color: Stroke::new(1.0, Color32::LIGHT_GREEN),
-                scent_color: Stroke::new(
-                    1.0,
-                    Color32::from_rgba_unmultiplied(0xAD, 0xD8, 0xE6, 50),
-                ),
-                tail_color: Stroke::new(1.0, Color32::LIGHT_RED),
-                food_color: Stroke::new(1.0, Color32::YELLOW),
-                add_walls: false,
-            },
-            simulation_config: SimulationConfig {
-                rows: 100,
-                columns: 100,
-                create_scents: false,
-                scent_diffusion_rate: 0.2,
-                scent_dispersion_per_step: 30.0,
-                starting_snakes: 0,
-                starting_food: 0,
-                food_per_step: 2,
-                plant_matter_per_segment: 100.0,
-                wait_cost: 1.0,
-                move_cost: 10.0,
-                new_segment_cost: 100.0,
-                size_to_split: 12,
-                species_threshold: 0.2,
-                add_walls: false,
-                mutation: MutationConfig::default(),
-                snake_max_age: 2_000,
-                meat_energy_content: 5.0,
-                plant_energy_content: 1.0,
-            },
+            config,
+            simulation_config,
+            previous_simulation_config: simulation_config,
             can_draw_frame: true,
             stats: Stats::default(),
             hexes: vec![],
@@ -597,7 +628,7 @@ impl MyEguiApp {
             show_species: false,
             show_networks: false,
             show_info: false,
-            simulation_running: false,
+            started: false,
             paused: false,
             selected_network: 0,
             fonts: Fonts::new(1.0, 2 * 1024, font_definitions),
@@ -612,14 +643,14 @@ impl eframe::App for MyEguiApp {
             puffin_egui::profiler_window(ctx);
             puffin::GlobalProfiler::lock().new_frame();
         }
-        if !self.simulation_running {
+        if !self.started {
             start_simulation(
                 &self.engine_events_sender,
                 Arc::clone(&self.engine_commands_receiver),
                 ctx.clone(),
-                self.config,
+                self.simulation_config,
             );
-            self.simulation_running = true;
+            self.started = true;
             self.engine_commands_sender
                 .send(EngineCommand::CreateSnakes(10))
                 .unwrap();
@@ -663,25 +694,20 @@ impl eframe::App for MyEguiApp {
             .open(&mut self.show_simulation_settings)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label("Size")
+                    ui.label("Size*")
                         .on_hover_text("Grid size in hexes (width and height)");
-                    ui.add_enabled(
-                        !self.simulation_running,
-                        egui::DragValue::new(&mut self.config.columns).speed(1.0),
-                    )
-                    .on_hover_text("Adjust grid dimensions (disabled during simulation)");
+                    ui.add(egui::DragValue::new(&mut self.config.columns).speed(1.0))
+                        .on_hover_text("Adjust grid dimensions");
                     self.config.rows = self.config.columns;
                     self.simulation_config.rows = self.config.rows;
                     self.simulation_config.columns = self.config.columns;
                 });
                 ui.horizontal(|ui| {
-                    ui.add_enabled(
-                        !self.simulation_running,
-                        egui::Checkbox::new(&mut self.config.add_walls, "Add walls"),
-                    )
-                    .on_hover_text(
-                        "Add walls around the grid perimeter (disabled during simulation)",
-                    );
+                    ui.add(egui::Checkbox::new(
+                        &mut self.config.add_walls,
+                        "Add walls*",
+                    ))
+                    .on_hover_text("Add walls around the grid perimeter");
                 });
                 ui.horizontal(|ui| {
                     ui.label("Food per step")
@@ -771,6 +797,7 @@ impl eframe::App for MyEguiApp {
                     )
                     .on_hover_text("Set scent dispersion amount");
                 });
+                ui.label("Settings marked with * will only take effect after a restart.");
             });
         egui::Window::new("Mutation Settings")
             .open(&mut self.show_mutation_settings)
@@ -1110,11 +1137,19 @@ impl eframe::App for MyEguiApp {
                         .on_hover_text(format!("Total energy: {}", self.stats.total_energy));
                 });
             });
-        self.engine_commands_sender
-            .send(EngineCommand::UpdateSimulationConfig(
-                self.simulation_config,
-            ))
-            .unwrap();
+        if self.simulation_config != self.previous_simulation_config {
+            self.save_config();
+            if !only_star_fields_differ(&self.simulation_config, &self.previous_simulation_config)
+                || self.paused
+            {
+                self.engine_commands_sender
+                    .send(EngineCommand::UpdateSimulationConfig(
+                        self.simulation_config,
+                    ))
+                    .unwrap();
+            }
+            self.previous_simulation_config = self.simulation_config;
+        }
         egui::CentralPanel::default().show(ctx, |ui| {
             // Primary Toolbar
             ui.horizontal_wrapped(|ui| {
@@ -1148,9 +1183,16 @@ impl eframe::App for MyEguiApp {
                     .clicked()
                 {
                     self.engine_commands_sender
-                        .send(EngineCommand::StopSimulation)
+                        .send(EngineCommand::UpdateSimulationConfig(
+                            self.simulation_config,
+                        ))
                         .unwrap();
-                    self.simulation_running = false;
+                    self.engine_commands_sender
+                        .send(EngineCommand::ResetWorld)
+                        .unwrap();
+                    self.engine_commands_sender
+                        .send(EngineCommand::CreateSnakes(10))
+                        .unwrap();
                     self.paused = false;
                 }
                 if ui

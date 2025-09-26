@@ -24,6 +24,9 @@ The Memory Bank for Hex Brains has been initialized with core documentation file
 - Implemented responsive design and accessibility for UI: changed primary toolbar and menu bar to use horizontal_wrapped for wrapping on narrow windows (e.g., 800px width), improved button contrast ratios by using darker green and red for play/pause button, ensured tab navigation support via egui defaults.
 - Added FiraCodeNerd font to egui GUI for improved typography, embedded in the binary.
 - Redesigned primary toolbar: removed simulation menu button, added restart icon (🔄) that stops simulation, reordered buttons to: view, help, restart, environment, mutations, species, neural networks, snake, pause/run, minus, plus, simulation speed.
+- Modified config update logic in gui/src/main.rs to prevent sending UpdateSimulationConfig for grid size (columns/rows) and add_walls settings during runtime. These settings now only apply on restart via ResetWorld to prevent panics when changing them during simulation. Other settings continue to update immediately.
+- Added PartialEq derives to SimulationConfig and MutationConfig in engine/src/simulation.rs to enable comparison for config changes.
+- Modified restart button logic in gui/src/main.rs to send UpdateSimulationConfig with the current config before sending ResetWorld, ensuring settings apply on restart by updating the engine's config first.
 
 ## Next Steps
 - Verify memory bank contents with user for accuracy and completeness.

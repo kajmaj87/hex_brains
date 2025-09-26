@@ -2,7 +2,6 @@ pub mod core;
 pub mod dna;
 pub mod neural;
 pub mod simulation;
-pub mod simulation_manager;
 pub mod test_utils;
 
 pub fn add(left: usize, right: usize) -> usize {
