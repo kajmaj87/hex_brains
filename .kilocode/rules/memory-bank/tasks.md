@@ -1,2 +1,3 @@
 ## After completing any code changes
-- whenever you finish a task that involves code changes you **must** run cargo test and cargo build before reporting to user. If the commands fail you **must** fix immediately and then rerun both commands to verify.
+- Whenever you finish a task that involves code changes you **must** run `./verify.sh` before reporting to user. If the script fails you **must** fix the issues immediately and rerun `./verify.sh` until it passes completely.
+- Optionally, you can run `./verify.sh` during the job to check progress and catch issues early.
