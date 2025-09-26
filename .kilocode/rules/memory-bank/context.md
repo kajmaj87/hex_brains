@@ -21,6 +21,7 @@ The Memory Bank for Hex Brains has been initialized with core documentation file
 - Updated Bevy ECS dependency from 0.14.0 to 0.15.0 in both engine and GUI crates. Fixed test assertions for `World::get_entity()` returning `Result` instead of `Option`. No other code changes required as the project uses only ECS features unaffected by the migration.
 - Fixed Windows cross-compilation issue by adding winapi dependency with "winuser" and "windef" features to gui/Cargo.toml to enable necessary Windows API modules for eframe.
 - Fixed clippy warnings by moving Seeded import to test scope in dna.rs and prefixing unused sensory_input parameter with underscore in RandomBrain::decide.
+- Implemented responsive design and accessibility for UI: changed primary toolbar and menu bar to use horizontal_wrapped for wrapping on narrow windows (e.g., 800px width), improved button contrast ratios by using darker green and red for play/pause button, ensured tab navigation support via egui defaults.
 
 ## Next Steps
 - Verify memory bank contents with user for accuracy and completeness.

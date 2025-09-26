@@ -16,7 +16,6 @@ use hex_brains_engine::simulation::{
     EngineCommand, EngineEvent, EngineEvents, EngineState, Hex, HexType, MutationConfig,
     Simulation, SimulationConfig, Stats,
 };
-use hex_brains_engine::simulation_manager::simulate_batch;
 use parking_lot::Mutex;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -646,11 +645,13 @@ impl eframe::App for MyEguiApp {
             .open(&mut self.show_simulation_settings)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label("Size");
+                    ui.label("Size")
+                        .on_hover_text("Grid size in hexes (width and height)");
                     ui.add_enabled(
                         !self.simulation_running,
                         egui::DragValue::new(&mut self.config.columns).speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Adjust grid dimensions (disabled during simulation)");
                     self.config.rows = self.config.columns;
                     self.simulation_config.rows = self.config.rows;
                     self.simulation_config.columns = self.config.columns;
@@ -659,239 +660,304 @@ impl eframe::App for MyEguiApp {
                     ui.add_enabled(
                         !self.simulation_running,
                         egui::Checkbox::new(&mut self.config.add_walls, "Add walls"),
+                    )
+                    .on_hover_text(
+                        "Add walls around the grid perimeter (disabled during simulation)",
                     );
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Food per step");
+                    ui.label("Food per step")
+                        .on_hover_text("Number of food items added each simulation step");
                     ui.add(
                         egui::DragValue::new(&mut self.simulation_config.food_per_step).speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Adjust food spawn rate");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Energy per segment");
+                    ui.label("Energy per segment")
+                        .on_hover_text("Energy content of plant food per snake segment");
                     ui.add(
                         egui::DragValue::new(&mut self.simulation_config.plant_matter_per_segment)
                             .speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Set plant energy density");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Wait cost");
-                    ui.add(egui::DragValue::new(&mut self.simulation_config.wait_cost).speed(1.0));
+                    ui.label("Wait cost")
+                        .on_hover_text("Energy cost for waiting action");
+                    ui.add(egui::DragValue::new(&mut self.simulation_config.wait_cost).speed(1.0))
+                        .on_hover_text("Adjust wait energy cost");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Move cost");
-                    ui.add(egui::DragValue::new(&mut self.simulation_config.move_cost).speed(1.0));
+                    ui.label("Move cost")
+                        .on_hover_text("Energy cost for moving action");
+                    ui.add(egui::DragValue::new(&mut self.simulation_config.move_cost).speed(1.0))
+                        .on_hover_text("Adjust move energy cost");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("New segment energy cost");
+                    ui.label("New segment energy cost")
+                        .on_hover_text("Energy cost to grow a new segment");
                     ui.add(
                         egui::DragValue::new(&mut self.simulation_config.new_segment_cost)
                             .speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Set growth energy cost");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Size to split");
+                    ui.label("Size to split")
+                        .on_hover_text("Minimum segments required to split/reproduce");
                     ui.add(
                         egui::DragValue::new(&mut self.simulation_config.size_to_split).speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Adjust reproduction threshold");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Aging starts at");
+                    ui.label("Aging starts at")
+                        .on_hover_text("Age when snakes start losing energy");
                     ui.add(
                         egui::DragValue::new(&mut self.simulation_config.snake_max_age).speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Set aging threshold");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Species coloring threshold");
+                    ui.label("Species coloring threshold")
+                        .on_hover_text("Genetic distance for species clustering");
                     ui.add(
                         egui::DragValue::new(&mut self.simulation_config.species_threshold)
                             .speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Adjust species similarity threshold");
                 });
                 ui.add(egui::Checkbox::new(
                     &mut self.simulation_config.create_scents,
                     "Create smell (low performance, memory leaks)",
-                ));
+                ))
+                .on_hover_text(
+                    "Enable scent diffusion (experimental, may cause performance issues)",
+                );
                 ui.horizontal(|ui| {
-                    ui.label("Smell diffusion rate");
+                    ui.label("Smell diffusion rate")
+                        .on_hover_text("Rate at which scents spread");
                     ui.add(
                         egui::DragValue::new(&mut self.simulation_config.scent_diffusion_rate)
                             .speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Adjust scent diffusion speed");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Smell dispersion rate per step");
+                    ui.label("Smell dispersion rate per step")
+                        .on_hover_text("Scent dispersion per simulation step");
                     ui.add(
                         egui::DragValue::new(&mut self.simulation_config.scent_dispersion_per_step)
                             .speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Set scent dispersion amount");
                 });
             });
         egui::Window::new("Mutation Settings")
             .open(&mut self.show_mutation_settings)
             .show(ctx, |ui| {
-                ui.label("Senses:");
+                ui.label("Senses:")
+                    .on_hover_text("Configure sensory capabilities that can mutate");
                 ui.horizontal(|ui| {
                     ui.checkbox(
                         &mut self.simulation_config.mutation.chaos_input_enabled,
                         "Chaos gene",
-                    );
+                    )
+                    .on_hover_text("Allow random input to neural networks");
                 });
                 ui.horizontal(|ui| {
                     ui.checkbox(
                         &mut self.simulation_config.mutation.scent_sensing_enabled,
                         "Food smelling",
-                    );
+                    )
+                    .on_hover_text("Enable scent-based food detection");
                 });
                 ui.horizontal(|ui| {
                     ui.checkbox(
                         &mut self.simulation_config.mutation.plant_vision_enabled,
                         "Plant vision",
-                    );
+                    )
+                    .on_hover_text("Allow vision of plant food");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Front range");
+                    ui.label("Front range")
+                        .on_hover_text("Vision range directly ahead");
                     ui.add(
                         egui::DragValue::new(
                             &mut self.simulation_config.mutation.plant_vision_front_range,
                         )
                         .speed(1.0),
-                    );
-                    ui.label("Left range");
+                    )
+                    .on_hover_text("Set front vision distance for plants");
+                    ui.label("Left range")
+                        .on_hover_text("Vision range to the left");
                     ui.add(
                         egui::DragValue::new(
                             &mut self.simulation_config.mutation.plant_vision_left_range,
                         )
                         .speed(1.0),
-                    );
-                    ui.label("Right range");
+                    )
+                    .on_hover_text("Set left vision distance for plants");
+                    ui.label("Right range")
+                        .on_hover_text("Vision range to the right");
                     ui.add(
                         egui::DragValue::new(
                             &mut self.simulation_config.mutation.plant_vision_right_range,
                         )
                         .speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Set right vision distance for plants");
                 });
                 ui.horizontal(|ui| {
                     ui.checkbox(
                         &mut self.simulation_config.mutation.meat_vision_enabled,
                         "Meat vision",
-                    );
+                    )
+                    .on_hover_text("Allow vision of meat food");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Front range");
+                    ui.label("Front range")
+                        .on_hover_text("Vision range directly ahead");
                     ui.add(
                         egui::DragValue::new(
                             &mut self.simulation_config.mutation.meat_vision_front_range,
                         )
                         .speed(1.0),
-                    );
-                    ui.label("Left range");
+                    )
+                    .on_hover_text("Set front vision distance for meat");
+                    ui.label("Left range")
+                        .on_hover_text("Vision range to the left");
                     ui.add(
                         egui::DragValue::new(
                             &mut self.simulation_config.mutation.meat_vision_left_range,
                         )
                         .speed(1.0),
-                    );
-                    ui.label("Right range");
+                    )
+                    .on_hover_text("Set left vision distance for meat");
+                    ui.label("Right range")
+                        .on_hover_text("Vision range to the right");
                     ui.add(
                         egui::DragValue::new(
                             &mut self.simulation_config.mutation.meat_vision_right_range,
                         )
                         .speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Set right vision distance for meat");
                 });
                 ui.horizontal(|ui| {
                     ui.checkbox(
                         &mut self.simulation_config.mutation.obstacle_vision_enabled,
                         "Obstacle vision",
-                    );
+                    )
+                    .on_hover_text("Allow vision of obstacles/walls");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Front range");
+                    ui.label("Front range")
+                        .on_hover_text("Vision range directly ahead");
                     ui.add(
                         egui::DragValue::new(
                             &mut self.simulation_config.mutation.obstacle_vision_front_range,
                         )
                         .speed(1.0),
-                    );
-                    ui.label("Left range");
+                    )
+                    .on_hover_text("Set front vision distance for obstacles");
+                    ui.label("Left range")
+                        .on_hover_text("Vision range to the left");
                     ui.add(
                         egui::DragValue::new(
                             &mut self.simulation_config.mutation.obstacle_vision_left_range,
                         )
                         .speed(1.0),
-                    );
-                    ui.label("Right range");
+                    )
+                    .on_hover_text("Set left vision distance for obstacles");
+                    ui.label("Right range")
+                        .on_hover_text("Vision range to the right");
                     ui.add(
                         egui::DragValue::new(
                             &mut self.simulation_config.mutation.obstacle_vision_right_range,
                         )
                         .speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Set right vision distance for obstacles");
                 });
-                ui.label("Mutation settings:");
+                ui.label("Mutation settings:")
+                    .on_hover_text("Configure neural network mutation parameters");
                 ui.horizontal(|ui| {
-                    ui.label("Weights perturbation chance");
+                    ui.label("Weights perturbation chance")
+                        .on_hover_text("Probability of randomly adjusting connection weights");
                     ui.add(
                         egui::DragValue::new(
                             &mut self.simulation_config.mutation.weight_perturbation_chance,
                         )
                         .speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Set perturbation probability");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Weights perturbation range");
+                    ui.label("Weights perturbation range")
+                        .on_hover_text("Maximum adjustment amount for weights");
                     ui.add(
                         egui::DragValue::new(
                             &mut self.simulation_config.mutation.weight_perturbation_range,
                         )
                         .speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Set perturbation magnitude");
                 });
                 ui.add(egui::Checkbox::new(
                     &mut self.simulation_config.mutation.perturb_disabled_connections,
                     "Perturb disabled connections",
-                ));
+                ))
+                .on_hover_text("Allow mutation of disabled neural connections");
                 ui.horizontal(|ui| {
-                    ui.label("Weights reset chance");
+                    ui.label("Weights reset chance")
+                        .on_hover_text("Probability of resetting weights to new random values");
                     ui.add(
                         egui::DragValue::new(
                             &mut self.simulation_config.mutation.weight_reset_chance,
                         )
                         .speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Set reset probability");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Weights reset range");
+                    ui.label("Weights reset range")
+                        .on_hover_text("Range for new random weights");
                     ui.add(
                         egui::DragValue::new(
                             &mut self.simulation_config.mutation.weight_reset_range,
                         )
                         .speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Set reset range");
                 });
                 ui.add(egui::Checkbox::new(
                     &mut self.simulation_config.mutation.perturb_disabled_connections,
                     "Perturb reset connections",
-                ));
+                ))
+                .on_hover_text("Allow perturbation of newly reset connections");
                 ui.horizontal(|ui| {
-                    ui.label("Connection flip chance");
+                    ui.label("Connection flip chance")
+                        .on_hover_text("Probability of enabling/disabling connections");
                     ui.add(
                         egui::DragValue::new(
                             &mut self.simulation_config.mutation.connection_flip_chance,
                         )
                         .speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Set flip probability");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Dna mutation chance");
+                    ui.label("Dna mutation chance")
+                        .on_hover_text("Probability of mutating snake DNA segments");
                     ui.add(
                         egui::DragValue::new(
                             &mut self.simulation_config.mutation.dna_mutation_chance,
                         )
                         .speed(1.0),
-                    );
+                    )
+                    .on_hover_text("Set DNA mutation probability");
                 });
             });
         egui::Window::new("Species")
@@ -900,7 +966,7 @@ impl eframe::App for MyEguiApp {
         egui::Window::new("Networks").open(&mut self.show_networks).show(ctx, |ui| {
             let specie_ids = &self.stats.species.species.iter().map(|specie| specie.id).collect::<Vec<u32>>();
             if specie_ids.is_empty() {
-                ui.label("No networks yet");
+                ui.label("No networks yet").on_hover_text("No species have formed yet - start a simulation to see neural networks");
                 return;
             }
             let selected_specie_in_list = specie_ids.contains(&self.selected_network);
@@ -914,48 +980,117 @@ impl eframe::App for MyEguiApp {
                         for specie_id in specie_ids {
                             ui.selectable_value(&mut self.selected_network, *specie_id, format!("{specie_id:?}"));
                         }
-                    });
-                if ui.button("Next").clicked() {
+                    }).response.on_hover_text("Select species to view its neural network");
+                if ui.button("Next").on_hover_text("View next species").clicked() {
                     self.selected_network = specie_ids[(specie_ids.iter().position(|id| *id == self.selected_network).unwrap() + 1) % specie_ids.len()];
                 }
-                if ui.button("Previous").clicked() {
+                if ui.button("Previous").on_hover_text("View previous species").clicked() {
                     self.selected_network = specie_ids[(specie_ids.iter().position(|id| *id == self.selected_network).unwrap() + specie_ids.len() - 1) % specie_ids.len()];
                 }
             });
             ui.collapsing("Information", |ui| {
-                ui.label("Green connections mean that the weight is positive, red connections mean that the weight is negative. The thicker the connection, the higher the weight.");
-                ui.label("Positive weight means the snake wants to do the given action if it encounters this sensory input.");
-                ui.label("Bias is a constant value of 1.0, chaos is a random number from range 0.0 .. 1.0 generated each tick");
-                ui.label("Network cost is the energy it takes each turn to 'think'");
+                ui.label("Green connections mean that the weight is positive, red connections mean that the weight is negative. The thicker the connection, the higher the weight.").on_hover_text("Connection visualization guide");
+                ui.label("Positive weight means the snake wants to do the given action if it encounters this sensory input.").on_hover_text("Weight interpretation");
+                ui.label("Bias is a constant value of 1.0, chaos is a random number from range 0.0 .. 1.0 generated each tick").on_hover_text("Special input explanations");
+                ui.label("Network cost is the energy it takes each turn to 'think'").on_hover_text("Neural network energy cost");
 
                 ui.horizontal(|ui| {
                     ui.label(
                         r#"Input Nodes:
-                    "#);
+                    "#).on_hover_text("List of neural network inputs");
                     ui.label(
                         r#"Output Nodes
                     Move Forward
                     Move Left
                     Move Right
-                    Wait"#);
+                    Wait"#).on_hover_text("List of neural network outputs");
                 });
-            });
+            }).header_response.on_hover_text("Show/hide neural network information");
             if let Some(selected_specie) = self.stats.species.species.iter().find(|specie| specie.id == self.selected_network) {
-                ui.label(format!("Network run cost: {}", selected_specie.leader_network.run_cost()));
+                ui.label(format!("Network run cost: {}", selected_specie.leader_network.run_cost())).on_hover_text("Energy cost per neural network evaluation");
                 draw_neural_network(ui, &self.fonts, selected_specie.id, &selected_specie.leader_network.get_nodes(), &selected_specie.leader_network.get_active_connections());
             }
         });
         egui::Window::new("Info")
             .open(&mut self.show_info)
             .show(ctx, |ui| {
-                ui.label("Press 's' to add one snake");
-                ui.label("Press 'a' to stop simulation and advance one frame (useful for debug)");
-                ui.label("Press '+' to increase speed");
-                ui.label("Press '-' to decrease speed");
-                ui.label("Press 'tab' to ignore speed limit");
-                ui.label("Press 'p' to pause/resume");
-                ui.label("All enabled settings take effect immediately");
-                ui.label("To change disabled settings, stop the simulation first");
+                ui.label("Press 's' to add one snake")
+                    .on_hover_text("Keyboard shortcut to spawn a single snake");
+                ui.label("Press 'a' to stop simulation and advance one frame (useful for debug)")
+                    .on_hover_text("Debug shortcut: pause and step one frame");
+                ui.label("Press '+' to increase speed")
+                    .on_hover_text("Speed up simulation playback");
+                ui.label("Press '-' to decrease speed")
+                    .on_hover_text("Slow down simulation playback");
+                ui.label("Press 'tab' to ignore speed limit")
+                    .on_hover_text("Run simulation as fast as possible");
+                ui.label("Press 'p' to pause/resume")
+                    .on_hover_text("Toggle simulation pause state");
+                ui.label("All enabled settings take effect immediately")
+                    .on_hover_text("Changes apply without restarting");
+                ui.label("To change disabled settings, stop the simulation first")
+                    .on_hover_text("Some settings require simulation restart");
+                ui.horizontal(|ui| {
+                    ui.label(format!("Tot: {}", self.total_frames))
+                        .on_hover_text(format!("Total frames: {}", self.total_frames));
+                    ui.label(format!("FPS: {:.1}", self.frames_per_second))
+                        .on_hover_text(format!("Frames per second: {:.1}", self.frames_per_second));
+                    ui.label(format!("UPS: {}", self.updates_per_second))
+                        .on_hover_text(format!("Updates per second: {}", self.updates_per_second));
+                    ui.label(format!(
+                        "Spd: x{:.1}",
+                        self.updates_per_second as f32 / self.frames_per_second as f32
+                    ))
+                    .on_hover_text(format!(
+                        "Speed: x{:.1}",
+                        self.updates_per_second as f32 / self.frames_per_second as f32
+                    ));
+                    ui.label(format!("Old: {}", self.stats.oldest_snake))
+                        .on_hover_text(format!("Oldest snake: {}", self.stats.oldest_snake));
+                    ui.label(format!("Gen: {}", self.stats.max_generation))
+                        .on_hover_text(format!("Max generation: {}", self.stats.max_generation));
+                    ui.label(format!("Mut: {}", self.stats.max_mutations))
+                        .on_hover_text(format!("Max mutations: {}", self.stats.max_mutations));
+                    ui.label(format!(
+                        "Snk: {}/{}",
+                        self.stats.total_snakes, self.stats.total_segments
+                    ))
+                    .on_hover_text(format!(
+                        "Snakes/segments: {}/{}",
+                        self.stats.total_snakes, self.stats.total_segments
+                    ));
+                    ui.label(format!("Food: {}", self.stats.total_food))
+                        .on_hover_text(format!("Food: {}", self.stats.total_food));
+                    ui.label(format!("Spc: {}", self.stats.species.species.len()))
+                        .on_hover_text(format!("Species: {}", self.stats.species.species.len()));
+                    ui.label(format!("Snt: {}", self.stats.total_scents))
+                        .on_hover_text(format!("Scents: {}", self.stats.total_scents));
+                    ui.label(format!("Ent: {}", self.stats.total_entities))
+                        .on_hover_text(format!("Entities: {}", self.stats.total_entities));
+                    ui.label(format!(
+                        "P/M: {}/{}",
+                        self.stats.total_plants, self.stats.total_meat
+                    ))
+                    .on_hover_text(format!(
+                        "Plants/Meat: {}/{}",
+                        self.stats.total_plants, self.stats.total_meat
+                    ));
+                    ui.label(format!(
+                        "Stm: P/M {}/{}",
+                        self.stats.total_plants_in_stomachs, self.stats.total_meat_in_stomachs
+                    ))
+                    .on_hover_text(format!(
+                        "Stomachs: P/M {}/{}",
+                        self.stats.total_plants_in_stomachs, self.stats.total_meat_in_stomachs
+                    ));
+                    ui.label(format!("SnkE: {}", self.stats.total_snake_energy))
+                        .on_hover_text(format!(
+                            "Total snake energy: {}",
+                            self.stats.total_snake_energy
+                        ));
+                    ui.label(format!("TotE: {}", self.stats.total_energy))
+                        .on_hover_text(format!("Total energy: {}", self.stats.total_energy));
+                });
             });
         self.engine_commands_sender
             .send(EngineCommand::UpdateSimulationConfig(
@@ -963,127 +1098,143 @@ impl eframe::App for MyEguiApp {
             ))
             .unwrap();
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                if ui.button("Start profiling").clicked() {
-                    puffin::set_scopes_on(true); // tell puffin to collect data
-                }
-                if ui.button("Simulate Batch").clicked() {
-                    let simulations = (0..64)
-                        .map(|i| {
-                            let mut result = Simulation::new(
-                                format!("Simulation {i}"),
-                                self.engine_events_sender.clone(),
-                                None,
-                                create_simulation_config(
-                                    self.config.columns,
-                                    self.config.rows,
-                                    false,
-                                ),
-                            );
-                            result.insert_resource(EngineState {
-                                repaint_needed: false,
-                                speed_limit: None,
-                                running: true,
-                                frames_left: 0.0,
-                                frames: 0,
-                                updates_done: 0,
-                                finished: false,
-                                ignore_speed_limit: false,
-                            });
-                            result
-                        })
-                        .collect();
-                    thread::spawn(move || {
-                        simulate_batch(simulations);
+            // Primary Toolbar
+            ui.horizontal_wrapped(|ui| {
+                // Play/Pause button
+                let play_pause_icon = if self.simulation_running {
+                    "⏸"
+                } else {
+                    "▶"
+                };
+                let play_button =
+                    egui::Button::new(play_pause_icon).fill(if !self.simulation_running {
+                        Color32::from_rgb(0, 128, 0) // Dark green for better contrast
+                    } else {
+                        Color32::from_rgb(128, 0, 0) // Dark red for better contrast
                     });
-                }
                 if ui
-                    .button("Create Snakes")
-                    .on_hover_text("Click to add 10 snakes. Press 's' to add one snake")
+                    .add(play_button)
+                    .on_hover_text(if self.simulation_running {
+                        "Pause simulation"
+                    } else {
+                        "Play simulation"
+                    })
                     .clicked()
                 {
+                    self.engine_commands_sender
+                        .send(EngineCommand::FlipRunningState)
+                        .unwrap();
+                    self.simulation_running = !self.simulation_running;
+                }
+                ui.label(format!(
+                    "x{:.1}",
+                    self.updates_per_second as f32 / self.frames_per_second as f32
+                ));
+                // Add snakes
+                if ui.button("🐍").on_hover_text("Add 10 snakes").clicked() {
                     self.engine_commands_sender
                         .send(EngineCommand::CreateSnakes(10))
                         .unwrap();
                 }
-                ui.label(format!(
-                    "Total : {} ({:.1}ms/frame)",
-                    self.total_frames,
-                    (Instant::now().duration_since(self.last_frame)).as_millis()
-                ));
-                ui.label(format!("FPS : {:.1}", self.frames_per_second));
-                ui.label(format!("UPS : {}", self.updates_per_second));
-                ui.label(format!(
-                    "Speed : x{:.1}",
-                    self.updates_per_second as f32 / self.frames_per_second as f32
-                ));
-                ui.label(format!("Oldest snake : {}", self.stats.oldest_snake));
-                ui.label(format!("Max generation : {}", self.stats.max_generation));
-                ui.label(format!("Max mutations : {}", self.stats.max_mutations));
-                ui.label(format!(
-                    "Snakes/segments : {}/{}",
-                    self.stats.total_snakes, self.stats.total_segments
-                ));
-                ui.label(format!("Food : {}", self.stats.total_food));
-                ui.label(format!("Species : {}", self.stats.species.species.len()));
-                ui.label(format!("Scents : {}", self.stats.total_scents));
-                ui.label(format!("Entities : {}", self.stats.total_entities));
-                ui.label(format!(
-                    "Plants/Meat : {}/{}",
-                    self.stats.total_plants, self.stats.total_meat
-                ));
-                ui.label(format!(
-                    "Stomachs: P/M: {}/{}",
-                    self.stats.total_plants_in_stomachs, self.stats.total_meat_in_stomachs
-                ));
-                ui.label(format!(
-                    "Total snake energy : {}",
-                    self.stats.total_snake_energy
-                ));
-                ui.label(format!("Total energy : {}", self.stats.total_energy));
-            });
-            ui.horizontal(|ui| {
-                egui::stroke_ui(ui, &mut self.config.bg_color, "Background Color");
-                egui::stroke_ui(ui, &mut self.config.scent_color, "Scent Color");
-                egui::stroke_ui(ui, &mut self.config.tail_color, "Tail Color");
-                egui::stroke_ui(ui, &mut self.config.food_color, "Food Color");
-            });
-            ui.horizontal(|ui| {
-                if ui
-                    .add_enabled(
+                ui.menu_button("Simulation", |ui| {
+                    let start_response = ui.add_enabled(
                         !self.simulation_running,
                         egui::Button::new("Start simulation"),
-                    )
+                    );
+                    if start_response
+                        .on_hover_text("Begin a new simulation run")
+                        .clicked()
+                    {
+                        start_simulation(
+                            &self.engine_events_sender,
+                            Arc::clone(&self.engine_commands_receiver),
+                            ctx.clone(),
+                            self.config,
+                        );
+                        self.simulation_running = true;
+                    }
+                    if ui
+                        .button("Stop simulation")
+                        .on_hover_text("Halt the current simulation")
+                        .clicked()
+                    {
+                        self.engine_commands_sender
+                            .send(EngineCommand::StopSimulation)
+                            .unwrap();
+                        self.simulation_running = false;
+                    }
+                })
+                .response
+                .on_hover_text("Control simulation lifecycle");
+                if ui
+                    .button("🌍")
+                    .on_hover_text("Toggle environment settings window")
                     .clicked()
                 {
-                    start_simulation(
-                        &self.engine_events_sender,
-                        Arc::clone(&self.engine_commands_receiver),
-                        ctx.clone(),
-                        self.config,
-                    );
-                    self.simulation_running = true;
-                }
-                if ui.button("Stop simulation").clicked() {
-                    self.engine_commands_sender
-                        .send(EngineCommand::StopSimulation)
-                        .unwrap();
-                    self.simulation_running = false;
-                }
-                if ui.button("Environment").clicked() {
                     self.show_simulation_settings = !self.show_simulation_settings;
                 }
-                if ui.button("Mutations").clicked() {
+                if ui
+                    .button("🧬")
+                    .on_hover_text("Toggle mutation settings window")
+                    .clicked()
+                {
                     self.show_mutation_settings = !self.show_mutation_settings;
                 }
-                if ui.button("Species").clicked() {
+                if ui
+                    .button("🐾")
+                    .on_hover_text("Toggle species window")
+                    .clicked()
+                {
                     self.show_species = !self.show_species;
                 }
-                if ui.button("Networks").clicked() {
+                if ui
+                    .button("🧠")
+                    .on_hover_text("Toggle neural networks window")
+                    .clicked()
+                {
                     self.show_networks = !self.show_networks;
                 }
-                if ui.button("Info").clicked() {
-                    self.show_info = !self.show_info;
+                ui.menu_button("View", |ui| {
+                    ui.menu_button("Display Settings", |ui| {
+                        ui.horizontal(|ui| {
+                            egui::stroke_ui(ui, &mut self.config.bg_color, "Background Color");
+                            egui::stroke_ui(ui, &mut self.config.scent_color, "Scent Color");
+                            egui::stroke_ui(ui, &mut self.config.tail_color, "Tail Color");
+                            egui::stroke_ui(ui, &mut self.config.food_color, "Food Color");
+                        });
+                    });
+                })
+                .response
+                .on_hover_text("Configure display settings");
+                ui.menu_button("Help", |ui| {
+                    let checked = self.show_info;
+                    if ui
+                        .selectable_label(checked, if checked { "✓ Info" } else { "Info" })
+                        .on_hover_text("Toggle help and keyboard shortcuts window")
+                        .clicked()
+                    {
+                        self.show_info = !self.show_info;
+                    }
+                })
+                .response
+                .on_hover_text("Get help and information");
+                if ui
+                    .small_button("+")
+                    .on_hover_text("Increase speed")
+                    .clicked()
+                {
+                    self.engine_commands_sender
+                        .send(EngineCommand::IncreaseSpeed)
+                        .unwrap();
+                }
+                if ui
+                    .small_button("-")
+                    .on_hover_text("Decrease speed")
+                    .clicked()
+                {
+                    self.engine_commands_sender
+                        .send(EngineCommand::DecreaseSpeed)
+                        .unwrap();
                 }
             });
             draw_hexes(ui, &self.hexes, &self.config);
