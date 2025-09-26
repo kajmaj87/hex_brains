@@ -637,8 +637,16 @@ pub fn think(
     puffin::profile_function!();
     let bias = 1.0;
     heads.iter_mut().for_each(|(position, mut head, age)| {
+        debug!(
+            "Senses config: scent={}, plant={}, meat={}, obstacle={}, chaos={}",
+            config.mutation.scent_sensing_enabled,
+            config.mutation.plant_vision_enabled,
+            config.mutation.meat_vision_enabled,
+            config.mutation.obstacle_vision_enabled,
+            config.mutation.chaos_input_enabled
+        );
         let chaos = if config.mutation.chaos_input_enabled {
-            (rng.0.next_u32() as f64) / (u32::MAX as f64)
+            (rng.rng.next_u32() as f64) / (u32::MAX as f64)
         } else {
             0.0
         };
@@ -726,29 +734,28 @@ pub fn think(
         let meat_food_level = head.energy.meat_in_stomach / head.metabolism.max_meat_in_stomach;
         let energy_level = head.energy.energy / head.metabolism.max_energy;
         let age_level = age.efficiency_factor;
-        head.decision = head.brain.decide(
-            vec![
-                bias,
-                chaos as f32,
-                scent_front,
-                scent_left,
-                scent_right,
-                plant_vision_front,
-                plant_vision_left,
-                plant_vision_right,
-                meat_vision_front,
-                meat_vision_left,
-                meat_vision_right,
-                solid_vision_front,
-                solid_vision_left,
-                solid_vision_right,
-                plant_food_level,
-                meat_food_level,
-                energy_level,
-                age_level,
-            ],
-            &mut rng.0,
-        );
+        let sensory_inputs = vec![
+            bias,
+            chaos as f32,
+            scent_front,
+            scent_left,
+            scent_right,
+            plant_vision_front,
+            plant_vision_left,
+            plant_vision_right,
+            meat_vision_front,
+            meat_vision_left,
+            meat_vision_right,
+            solid_vision_front,
+            solid_vision_left,
+            solid_vision_right,
+            plant_food_level,
+            meat_food_level,
+            energy_level,
+            age_level,
+        ];
+        debug!("Computed sensory inputs: {:?}", sensory_inputs);
+        head.decision = head.brain.decide(sensory_inputs, &mut rng.rng);
         debug!("Snake decision: {:?}", head.decision);
         debug!(
             "Is neural brain: {}",
@@ -886,7 +893,7 @@ pub fn diffuse_scents(
         Direction::West,
         Direction::NorthWest,
     ];
-    let rng = &mut rng.0;
+    let rng = &mut rng.rng;
     for (_, position) in &scents {
         let random_direction = &directions[rng.next_range(0..directions.len())];
         let new_position = position_at_direction(random_direction, position.clone(), *config);
@@ -944,7 +951,7 @@ pub fn create_food(
     mut rng: ResMut<crate::simulation::RngResource>,
 ) {
     puffin::profile_function!();
-    let rng = &mut rng.0;
+    let rng = &mut rng.rng;
     let rows = config.rows as i32;
     let columns = config.columns as i32;
     for _ in 0..config.food_per_step {
@@ -1189,7 +1196,7 @@ pub fn split(
     mut rng: ResMut<crate::simulation::RngResource>,
 ) {
     puffin::profile_function!();
-    let rng = &mut rng.0;
+    let rng = &mut rng.rng;
     for (_head_id, mut snake) in &mut snakes {
         let snake_length = snake.segments.len();
         if snake_length >= config.size_to_split {
@@ -1200,7 +1207,7 @@ pub fn split(
                 if (rng.next_u32() as f64) / (u32::MAX as f64)
                     < config.mutation.connection_flip_chance
                 {
-                    nn.flip_random_connection();
+                    nn.flip_random_connection(rng);
                     mutations += 1;
                 }
                 if (rng.next_u32() as f64) / (u32::MAX as f64)
@@ -1209,6 +1216,7 @@ pub fn split(
                     nn.mutate_perturb_random_connection_weight(
                         config.mutation.weight_perturbation_range,
                         config.mutation.perturb_disabled_connections,
+                        rng,
                     );
                     mutations += 1;
                 }
@@ -1216,7 +1224,8 @@ pub fn split(
                 {
                     nn.mutate_reset_random_connection_weight(
                         config.mutation.weight_reset_range,
-                        config.mutation.perturb_reset_connections,
+                        config.mutation.perturb_disabled_connections,
+                        rng,
                     );
                     mutations += 1;
                 }
@@ -1699,14 +1708,16 @@ mod tests {
         world.insert_resource(ScentMap {
             map: Map2d::new(5, 5, 0.0f32),
         });
-        world.insert_resource(crate::simulation::RngResource(tinyrand::Wyrand::default()));
+        world.insert_resource(crate::simulation::RngResource {
+            rng: tinyrand::Wyrand::default(),
+        });
         world
     }
 
     #[test]
     fn test_movement_forward() {
         let mut world = setup_world();
-        let mut rng = tinyrand::SplitMix::default();
+        let mut rng_resource = world.resource_mut::<crate::simulation::RngResource>();
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::MoveForward,
@@ -1717,7 +1728,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(&mut rng, 1, &MutationConfig::default()),
+            dna: Dna::random(&mut rng_resource.rng, 1, &MutationConfig::default()),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -1764,7 +1775,7 @@ mod tests {
     #[test]
     fn test_movement_wait() {
         let mut world = setup_world();
-        let mut rng = tinyrand::SplitMix::default();
+        let mut rng_resource = world.resource_mut::<crate::simulation::RngResource>();
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::Wait,
@@ -1775,7 +1786,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(&mut rng, 1, &MutationConfig::default()),
+            dna: Dna::random(&mut rng_resource.rng, 1, &MutationConfig::default()),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -1821,7 +1832,7 @@ mod tests {
     #[test]
     fn test_movement_left() {
         let mut world = setup_world();
-        let mut rng = tinyrand::SplitMix::default();
+        let mut rng_resource = world.resource_mut::<crate::simulation::RngResource>();
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::MoveLeft,
@@ -1832,7 +1843,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(&mut rng, 1, &MutationConfig::default()),
+            dna: Dna::random(&mut rng_resource.rng, 1, &MutationConfig::default()),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -1879,7 +1890,7 @@ mod tests {
     #[test]
     fn test_movement_right() {
         let mut world = setup_world();
-        let mut rng = tinyrand::SplitMix::default();
+        let mut rng_resource = world.resource_mut::<crate::simulation::RngResource>();
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::MoveRight,
@@ -1890,7 +1901,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(&mut rng, 1, &MutationConfig::default()),
+            dna: Dna::random(&mut rng_resource.rng, 1, &MutationConfig::default()),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -1945,8 +1956,11 @@ mod tests {
         schedule_solid.run(&mut world);
 
         let mut innovation_tracker = InnovationTracker::new();
-        let mut rng = tinyrand::Wyrand::default();
-        let brain = BrainType::Neural(RandomNeuralBrain::new(&mut innovation_tracker, &mut rng));
+        let mut rng_resource = world.resource_mut::<crate::simulation::RngResource>();
+        let brain = BrainType::Neural(RandomNeuralBrain::new(
+            &mut innovation_tracker,
+            &mut rng_resource.rng,
+        ));
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::MoveForward,
@@ -1957,7 +1971,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(&mut rng, 1, &MutationConfig::default()),
+            dna: Dna::random(&mut rng_resource.rng, 1, &MutationConfig::default()),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -2008,7 +2022,7 @@ mod tests {
     #[test]
     fn test_movement_wrap_around() {
         let mut world = setup_world();
-        let mut rng = tinyrand::SplitMix::default();
+        let mut rng_resource = world.resource_mut::<crate::simulation::RngResource>();
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::MoveForward,
@@ -2019,7 +2033,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(&mut rng, 1, &MutationConfig::default()),
+            dna: Dna::random(&mut rng_resource.rng, 1, &MutationConfig::default()),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -2118,7 +2132,7 @@ mod tests {
             0,
             0,
             dna,
-            &mut world.resource_mut::<crate::simulation::RngResource>().0,
+            &mut world.resource_mut::<crate::simulation::RngResource>().rng,
         );
         let mut snake = snake;
         snake.energy.energy = 100.0;
@@ -2229,7 +2243,7 @@ mod tests {
             starve_dna,
             &mut starve_world
                 .resource_mut::<crate::simulation::RngResource>()
-                .0,
+                .rng,
         );
         starve_snake.energy.energy = -1.0; // Low energy to trigger starvation
         starve_snake.energy.move_potential = 0.0;
@@ -2322,7 +2336,7 @@ mod tests {
             normal_dna,
             &mut mutation_world
                 .resource_mut::<crate::simulation::RngResource>()
-                .0,
+                .rng,
         );
         normal_snake.energy.energy = 100.0;
         normal_snake.energy.move_potential = 1.0;
@@ -2362,7 +2376,7 @@ mod tests {
             mutated_dna,
             &mut mutation_world
                 .resource_mut::<crate::simulation::RngResource>()
-                .0,
+                .rng,
         );
         mutated_snake.energy.energy = 100.0;
         mutated_snake.energy.move_potential = 1.0;

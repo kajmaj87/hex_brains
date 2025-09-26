@@ -44,9 +44,9 @@ fn test_agent_reproduction_and_splitting_size_one() {
     world.insert_resource(SegmentMap {
         map: Map3d::new(10, 10),
     });
-    world.insert_resource(hex_brains_engine::simulation::RngResource(
-        tinyrand::Wyrand::seed(42),
-    ));
+    world.insert_resource(hex_brains_engine::simulation::RngResource {
+        rng: tinyrand::Wyrand::seed(42),
+    });
     let mut innovation_tracker = world.get_resource_mut::<InnovationTracker>().unwrap();
 
     // Create and spawn initial snake with sufficient energy
@@ -60,7 +60,7 @@ fn test_agent_reproduction_and_splitting_size_one() {
         initial_dna.clone(),
         &mut world
             .resource_mut::<hex_brains_engine::simulation::RngResource>()
-            .0,
+            .rng,
     );
     let head_id = world.spawn((pos, meat, snake, age, justborn)).id();
 

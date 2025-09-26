@@ -18,7 +18,9 @@ use bevy_ecs::prelude::{IntoSystemConfigs, Res, ResMut, Resource, Schedule, Worl
 use tinyrand::{RandRange, Wyrand};
 
 #[derive(Resource)]
-pub struct RngResource(pub Wyrand);
+pub struct RngResource {
+    pub rng: Wyrand,
+}
 use parking_lot::Mutex;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
@@ -114,7 +116,6 @@ pub struct MutationConfig {
     pub dna_mutation_chance: f64,
     pub weight_reset_chance: f64,
     pub weight_reset_range: f32,
-    pub perturb_reset_connections: bool,
     pub disable_muscle: bool,
     pub disable_solid: bool,
     pub disable_solar: bool,
@@ -141,7 +142,6 @@ impl Default for MutationConfig {
             dna_mutation_chance: 0.5,
             weight_reset_chance: 0.1,
             weight_reset_range: 1.0,
-            perturb_reset_connections: true,
             meat_vision_front_range: 5,
             meat_vision_left_range: 3,
             meat_vision_right_range: 3,
@@ -329,7 +329,9 @@ impl Simulation {
         });
         world.insert_resource(innovation_tracker);
         world.insert_resource(Species::default());
-        let rng = RngResource(Wyrand::default());
+        let rng = RngResource {
+            rng: Wyrand::default(),
+        };
         world.insert_resource(rng);
         let mut first_schedule = Schedule::default();
         let mut core_schedule = Schedule::default();
@@ -452,9 +454,9 @@ impl Simulation {
                             for _ in 0..amount {
                                 let mut rng_temp =
                                     self.world.get_resource_mut::<RngResource>().unwrap();
-                                let x = rng_temp.0.next_range(0..config.columns) as i32;
-                                let y = rng_temp.0.next_range(0..config.rows) as i32;
-                                let dna = Dna::random(&mut rng_temp.0, 8, &config.mutation);
+                                let x = rng_temp.rng.next_range(0..config.columns) as i32;
+                                let y = rng_temp.rng.next_range(0..config.rows) as i32;
+                                let dna = Dna::random(&mut rng_temp.rng, 8, &config.mutation);
                                 snake_data.push((x, y, dna));
                             }
                             let mut entities_to_spawn = vec![];
@@ -466,14 +468,14 @@ impl Simulation {
                                 for (x, y, dna) in snake_data {
                                     let brain = BrainType::Neural(RandomNeuralBrain::new(
                                         &mut innovation_tracker,
-                                        &mut rng_resource.0,
+                                        &mut rng_resource.rng,
                                     ));
                                     let (a, b, mut c, d, e) = create_snake(
                                         100.0,
                                         (x, y),
                                         brain,
                                         dna,
-                                        &mut rng_resource.0,
+                                        &mut rng_resource.rng,
                                     );
                                     c.metabolism.segment_basic_cost =
                                         c.brain.get_neural_network().unwrap().run_cost();

@@ -177,8 +177,7 @@ impl NeuralNetwork {
         self.connections.push(connection);
     }
 
-    pub fn flip_random_connection(&mut self) {
-        let mut rng = tinyrand::Wyrand::default();
+    pub fn flip_random_connection(&mut self, rng: &mut tinyrand::Wyrand) {
         let index = rng.next_range(0..self.connections.len());
         debug!("Flipping connection {}", index);
         self.connections[index].enabled = !self.connections[index].enabled;
@@ -188,8 +187,8 @@ impl NeuralNetwork {
         &mut self,
         mutation_strength: f32,
         perturb_disabled_connections: bool,
+        rng: &mut tinyrand::Wyrand,
     ) {
-        let mut rng = tinyrand::Wyrand::default();
         let mut index;
         let active_connections = self.get_active_connections();
         if perturb_disabled_connections || active_connections.is_empty() {
@@ -202,12 +201,17 @@ impl NeuralNetwork {
                 .position(|c| active_connections.get(index).unwrap() == &c)
                 .unwrap();
         }
-        self.connections[index].weight += ((rng.next_u32() as f32) / (u32::MAX as f32))
-            * (mutation_strength * 2.0)
-            - mutation_strength;
+        let rand_val = (rng.next_u32() as f32) / (u32::MAX as f32);
+        let f = 1.0 + mutation_strength * rand_val;
+        let sign = if (rng.next_u32() as f32) / (u32::MAX as f32) < 0.5 {
+            1.0
+        } else {
+            -1.0
+        };
+        self.connections[index].weight *= f.powf(sign);
         debug!(
-            "Mutating connection {} to value {}",
-            index, self.connections[index].weight
+            "Mutating connection {} with factor {} and sign {}, new value {}",
+            index, f, sign, self.connections[index].weight
         );
     }
 
@@ -215,8 +219,8 @@ impl NeuralNetwork {
         &mut self,
         mutation_strength: f32,
         perturb_disabled_connections: bool,
+        rng: &mut tinyrand::Wyrand,
     ) {
-        let mut rng = tinyrand::Wyrand::default();
         let mut index;
         let active_connections = self.get_active_connections();
         if perturb_disabled_connections || active_connections.is_empty() {
@@ -364,166 +368,4 @@ mod tests {
         let outputs = network.run(inputs);
         assert!((outputs[0] - 0.5).abs() < 1e-6);
     }
-
-    //
-    // struct FloatInput {
-    //     value: f32,
-    //     index: usize,
-    // }
-    //
-    // struct ConstantInput {
-    //     index: usize,
-    // }
-    //
-    // impl SensorInput for FloatInput {
-    //     fn as_float(&self) -> f32 {
-    //         self.value
-    //     }
-    //
-    //     fn index(&self) -> usize {
-    //         self.index
-    //     }
-    // }
-    //
-    // impl SensorInput for ConstantInput {
-    //     fn as_float(&self) -> f32 {
-    //         1.0
-    //     }
-    //
-    //     fn index(&self) -> usize {
-    //         self.index
-    //     }
-    // }
-    //
-    // #[test]
-    // fn test_random_brain_even_distribution() {
-    //     let mut innovation_tracker = InnovationTracker::new(); // Assuming you have an InnovationTracker implementation
-    //     let brain = NeuralNetwork::random_brain(&mut innovation_tracker);
-    //     let mut distribution = [0; 4]; // This will hold the count of times each output node has the highest activation
-    //
-    //     for i in 0..100 {
-    //         let input_value = i as f32 * 0.01; // Generate the input
-    //         let outputs = brain.run(vec![
-    //             FloatInput { value: input_value, index: 0 }, // Bias input
-    //             FloatInput { value: 1.0, index: 1 }, // Varying input
-    //         ]);
-    //
-    //         let (max_index, _) = outputs
-    //             .iter()
-    //             .enumerate()
-    //             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-    //             .unwrap();
-    //         distribution[max_index] += 1;
-    //     }
-    //
-    //     // Verify that each action is selected approximately 25% of the time.
-    //     // The distribution can be perfectly even because the weights are deterministic.
-    //     for &count in &distribution {
-    //         assert_eq!(count, 25, "Each output should be selected exactly 25 times for an even distribution. Found: {:?}", distribution);
-    //     }
-    // }
-    // #[test]
-    // fn test_run_network() {
-    //     let mut innovation_tracker = InnovationTracker::new();
-    //     let mut network = NeuralNetwork::new(2, 2, &mut innovation_tracker);
-    //
-    //     // Let's enable all connections and set some weights
-    //     for connection in &mut network.connections {
-    //         connection.enabled = true;
-    //         connection.weight = 1.0; // Setting all weights to 1 for simplicity
-    //     }
-    //
-    //     // Set inputs
-    //     network.inputs = vec![1.0, 2.0]; // For two inputs
-    //
-    //     // Run the network
-    //     network.run();
-    //
-    //     // Since all weights are 1 and all connections are enabled,
-    //     // each output should be the sum of the inputs.
-    //     assert_eq!(network.outputs[0], 3.0);
-    //     assert_eq!(network.outputs[1], 3.0);
-    // }
-    //
-    // #[test]
-    // fn test_fully_connected_neural_network_initialization() {
-    //     // For example, if you have 3 inputs and 2 outputs, there should be 3 * 2 = 6 connections
-    //     let input_size = 3;
-    //     let output_size = 2;
-    //     let mut innovation_tracker = InnovationTracker::new();
-    //     let nn = NeuralNetwork::new(input_size, output_size, &mut innovation_tracker);
-    //
-    //     // Assuming 'connections' is a Vec<Connection> and Connection is a struct representing a connection
-    //     let expected_connections_count = input_size * output_size;
-    //     assert_eq!(nn.connections.len(), expected_connections_count, "There should be {} connections", expected_connections_count);
-    //
-    //     // Now let's ensure that they are all initially disabled
-    //     for connection in &nn.connections {
-    //         assert!(!connection.enabled, "All connections should initially be disabled");
-    //     }
-    // }
-    //
-    // #[test]
-    // fn test_add_connection() {
-    //     let mut innovation_tracker = InnovationTracker::new();
-    //     let mut nn = NeuralNetwork::new(3, 2, &mut innovation_tracker);
-    //
-    //     // Test adding a connection with a given innovation number
-    //     let innovation_number = innovation_tracker.get_innovation_number(0, 3);
-    //     nn.add_connection(0, 3, 0.5, innovation_number);
-    //     assert_eq!(nn.connections.len(), 3 * 2 + 1);
-    //     assert_eq!(nn.connections.last().unwrap().innovation_number, innovation_number);
-    // }
-    //
-    // #[test]
-    // #[should_panic(expected = "The input node index is out of bounds")]
-    // fn test_add_connection_input_out_of_bounds() {
-    //     let mut innovation_tracker = InnovationTracker::new();
-    //     let mut network = NeuralNetwork::new(5, 4, &mut innovation_tracker); // assuming 5 input nodes and 3 output nodes
-    //     let innovation_number = 1;
-    //     // Attempt to add a connection with an invalid input node index
-    //     network.add_connection(10, 1, 0.5, innovation_number);
-    // }
-    //
-    // #[test]
-    // #[should_panic(expected = "The output node index is out of bounds")]
-    // fn test_add_connection_output_out_of_bounds() {
-    //     let mut innovation_tracker = InnovationTracker::new();
-    //     let mut network = NeuralNetwork::new(5, 4, &mut innovation_tracker); // assuming 5 input nodes and 3 output nodes
-    //     let innovation_number = 2;
-    //     // Attempt to add a connection with an invalid output node index
-    //     network.add_connection(1, 10, 0.5, innovation_number);
-    // }
-    //
-    // #[test]
-    // fn test_innovation_database_assigns_unique_numbers() {
-    //     let mut db = InnovationTracker::new();
-    //
-    //     let innovation1 = db.get_innovation_number(1, 2);
-    //     let innovation2 = db.get_innovation_number(3, 4);
-    //
-    //     assert_ne!(innovation1, innovation2, "Innovations should be unique");
-    // }
-    //
-    // #[test]
-    // fn test_innovation_database_reuses_numbers_for_same_connection() {
-    //     let mut db = InnovationTracker::new();
-    //
-    //     let first_call = db.get_innovation_number(1, 2);
-    //     let second_call = db.get_innovation_number(1, 2);
-    //
-    //     assert_eq!(first_call, second_call, "Should reuse innovation number for the same connection");
-    // }
-    //
-    // #[test]
-    // fn test_innovation_database_continues_incrementing_after_reuse() {
-    //     let mut db = InnovationTracker::new();
-    //
-    //     let _ = db.get_innovation_number(1, 2);
-    //     let _ = db.get_innovation_number(1, 2); // reuse the same to get the same number
-    //     let innovation3 = db.get_innovation_number(2, 3);
-    //
-    //     // Assuming the innovation numbers start at 0 and increment by 1
-    //     assert_eq!(innovation3, 1, "The third unique connection should have innovation number 1");
-    // }
 }

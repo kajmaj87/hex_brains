@@ -48,5 +48,6 @@ The architecture separates concerns: the engine provides headless simulation cap
 - **Neural Decision** (`NeuralNetwork::run`): Feeds 18 inputs (bias, chaos, scents x3, visions x9, levels x3) through nodes/connections with activations (sigmoid/tanh); outputs decision probabilities → argmax for action.
 - **Mutation/Reproduction** (`split`, `Dna::mutate`): On split, halve energy/DNA, mutate (add/remove/perturb connections, segment types); calculate species diff via gene distance.
 - **Sensory Processing** (`think`): Computes inputs from maps (scent levels, vision rays up to range); brain decides; costs energy based on metabolism/age efficiency.
+- **Randmoness** Never create new instances of rng! There can be only one, shared as resource.
 
 This architecture ensures modularity, performance (via ECS/parallelism), and extensibility (traits, configs) for evolutionary experiments.
