@@ -250,8 +250,8 @@ fn should_simulate_frame(engine_state: Res<EngineState>) -> bool {
     result
 }
 
-fn should_calculate_stats(engine_state: Res<EngineState>) -> bool {
-    engine_state.frames % 100 == 0
+fn should_calculate_stats(_engine_state: Res<EngineState>) -> bool {
+    true
 }
 fn should_despawn_food(engine_state: Res<EngineState>) -> bool {
     engine_state.frames % 10 == 0

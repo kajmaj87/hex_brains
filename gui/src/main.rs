@@ -8,6 +8,7 @@ use egui::{
     Align2, FontData, FontDefinitions, FontFamily, FontId, Frame, Key, Response, ScrollArea, Sense,
     Shape, Stroke, Ui,
 };
+use egui_plot::{Line, Plot, PlotPoints};
 use hex_brains_engine::core::{Food, Position, Scent, ScentMap, Snake, Solid};
 use hex_brains_engine::dna::SegmentType;
 use hex_brains_engine::neural;
@@ -18,6 +19,7 @@ use hex_brains_engine::simulation::{
 };
 use parking_lot::Mutex;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::VecDeque;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::sync::mpsc::{Receiver, Sender};
@@ -508,6 +510,9 @@ struct MyEguiApp {
     frames_per_second: u32,
     updates_per_second: u32,
     stats: Stats,
+    stats_history: VecDeque<Stats>,
+    history_limit: usize,
+    show_statistics: bool,
     show_simulation_settings: bool,
     show_mutation_settings: bool,
     show_species: bool,
@@ -622,6 +627,9 @@ impl MyEguiApp {
             previous_simulation_config: simulation_config,
             can_draw_frame: true,
             stats: Stats::default(),
+            stats_history: VecDeque::new(),
+            history_limit: 1000,
+            show_statistics: false,
             hexes: vec![],
             show_simulation_settings: false,
             show_mutation_settings: false,
@@ -680,7 +688,11 @@ impl eframe::App for MyEguiApp {
                 }
                 EngineEvent::DrawData { hexes, stats } => {
                     self.hexes = hexes;
-                    self.stats = stats;
+                    self.stats = stats.clone();
+                    self.stats_history.push_back(stats);
+                    if self.stats_history.len() > self.history_limit {
+                        self.stats_history.pop_front();
+                    }
                 }
             });
         if self.last_second.elapsed().as_millis() > 1000 {
@@ -1008,6 +1020,34 @@ impl eframe::App for MyEguiApp {
         egui::Window::new("Species")
             .open(&mut self.show_species)
             .show(ctx, |_ui| {});
+        egui::Window::new("Statistics")
+            .open(&mut self.show_statistics)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("History limit");
+                    ui.add(egui::DragValue::new(&mut self.history_limit).speed(10.0));
+                });
+                let snakes: PlotPoints = self
+                    .stats_history
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| [i as f64, s.total_snakes as f64])
+                    .collect();
+                let food: PlotPoints = self
+                    .stats_history
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| [i as f64, s.total_food as f64 / 100.0])
+                    .collect();
+                let snakes_line = Line::new(snakes).name("Snakes");
+                let food_line = Line::new(food).name("Food (100s)");
+                Plot::new("stats_plot")
+                    .view_aspect(2.0)
+                    .show(ui, |plot_ui| {
+                        plot_ui.line(snakes_line);
+                        plot_ui.line(food_line);
+                    });
+            });
         egui::Window::new("Networks").open(&mut self.show_networks).show(ctx, |ui| {
             let specie_ids = &self.stats.species.species.iter().map(|specie| specie.id).collect::<Vec<u32>>();
             if specie_ids.is_empty() {
@@ -1059,7 +1099,7 @@ impl eframe::App for MyEguiApp {
         egui::Window::new("Info")
             .open(&mut self.show_info)
             .show(ctx, |ui| {
-                ui.label("Press 's' to add one snake")
+                ui.label("Press 'o' to add one snake")
                     .on_hover_text("Keyboard shortcut to spawn a single snake");
                 ui.label("Press 'a' to stop simulation and advance one frame (useful for debug)")
                     .on_hover_text("Debug shortcut: pause and step one frame");
@@ -1069,8 +1109,6 @@ impl eframe::App for MyEguiApp {
                     .on_hover_text("Slow down simulation playback");
                 ui.label("Press 'tab' to ignore speed limit")
                     .on_hover_text("Run simulation as fast as possible");
-                ui.label("Press 'p' to pause/resume")
-                    .on_hover_text("Toggle simulation pause state");
                 ui.label("All enabled settings take effect immediately")
                     .on_hover_text("Changes apply without restarting");
                 ui.label("To change disabled settings, stop the simulation first")
@@ -1169,17 +1207,17 @@ impl eframe::App for MyEguiApp {
                     let checked = self.show_info;
                     if ui
                         .selectable_label(checked, if checked { "✓ Info" } else { "Info" })
-                        .on_hover_text("Toggle help and keyboard shortcuts window")
+                        .on_hover_text("Toggle help and keyboard shortcuts window (F1)")
                         .clicked()
                     {
                         self.show_info = !self.show_info;
                     }
                 })
                 .response
-                .on_hover_text("Get help and information");
+                .on_hover_text("Get help and information (F1)");
                 if ui
                     .button("🔄")
-                    .on_hover_text("Restart simulation")
+                    .on_hover_text("Restart simulation (Ctrl+R)")
                     .clicked()
                 {
                     self.engine_commands_sender
@@ -1197,34 +1235,41 @@ impl eframe::App for MyEguiApp {
                 }
                 if ui
                     .button("🌍")
-                    .on_hover_text("Toggle environment settings window")
+                    .on_hover_text("Toggle environment settings window (E)")
                     .clicked()
                 {
                     self.show_simulation_settings = !self.show_simulation_settings;
                 }
                 if ui
                     .button("")
-                    .on_hover_text("Toggle mutation settings window")
+                    .on_hover_text("Toggle mutation settings window (M)")
                     .clicked()
                 {
                     self.show_mutation_settings = !self.show_mutation_settings;
                 }
                 if ui
                     .button("🐾")
-                    .on_hover_text("Toggle species window")
+                    .on_hover_text("Toggle species window (P)")
                     .clicked()
                 {
                     self.show_species = !self.show_species;
                 }
                 if ui
                     .button("󰧑 ")
-                    .on_hover_text("Toggle neural networks window")
+                    .on_hover_text("Toggle neural networks window (N)")
                     .clicked()
                 {
                     self.show_networks = !self.show_networks;
                 }
+                if ui
+                    .button("📊")
+                    .on_hover_text("Toggle statistics window (T)")
+                    .clicked()
+                {
+                    self.show_statistics = !self.show_statistics;
+                }
                 // Add snakes
-                if ui.button("🐍").on_hover_text("Add 10 snakes").clicked() {
+                if ui.button("🐍").on_hover_text("Add 10 snakes (S)").clicked() {
                     self.engine_commands_sender
                         .send(EngineCommand::CreateSnakes(10))
                         .unwrap();
@@ -1239,9 +1284,9 @@ impl eframe::App for MyEguiApp {
                 if ui
                     .add(play_button)
                     .on_hover_text(if self.paused {
-                        "Play simulation"
+                        "Play simulation (Space)"
                     } else {
-                        "Pause simulation"
+                        "Pause simulation (Space)"
                     })
                     .clicked()
                 {
@@ -1252,7 +1297,7 @@ impl eframe::App for MyEguiApp {
                 }
                 if ui
                     .small_button("-")
-                    .on_hover_text("Decrease speed")
+                    .on_hover_text("Decrease speed (-)")
                     .clicked()
                 {
                     self.engine_commands_sender
@@ -1261,7 +1306,7 @@ impl eframe::App for MyEguiApp {
                 }
                 if ui
                     .small_button("+")
-                    .on_hover_text("Increase speed")
+                    .on_hover_text("Increase speed (+)")
                     .clicked()
                 {
                     self.engine_commands_sender
@@ -1296,12 +1341,7 @@ impl eframe::App for MyEguiApp {
                     .send(EngineCommand::IgnoreSpeedLimit)
                     .unwrap();
             }
-            if ctx.input(|i| i.key_pressed(Key::P)) {
-                self.engine_commands_sender
-                    .send(EngineCommand::FlipRunningState)
-                    .unwrap();
-            }
-            if ctx.input(|i| i.key_pressed(Key::S)) {
+            if ctx.input(|i| i.key_pressed(Key::O)) {
                 self.engine_commands_sender
                     .send(EngineCommand::CreateSnakes(1))
                     .unwrap();
@@ -1309,6 +1349,50 @@ impl eframe::App for MyEguiApp {
             if ctx.input(|i| i.key_pressed(Key::A)) {
                 self.engine_commands_sender
                     .send(EngineCommand::AdvanceOneFrame)
+                    .unwrap();
+            }
+            // New shortcuts for toolbar buttons
+            if ctx.input(|i| i.key_pressed(Key::F1)) {
+                self.show_info = !self.show_info;
+            }
+            if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::R)) {
+                self.engine_commands_sender
+                    .send(EngineCommand::UpdateSimulationConfig(
+                        self.simulation_config,
+                    ))
+                    .unwrap();
+                self.engine_commands_sender
+                    .send(EngineCommand::ResetWorld)
+                    .unwrap();
+                self.engine_commands_sender
+                    .send(EngineCommand::CreateSnakes(10))
+                    .unwrap();
+                self.paused = false;
+            }
+            if ctx.input(|i| i.key_pressed(Key::E)) {
+                self.show_simulation_settings = !self.show_simulation_settings;
+            }
+            if ctx.input(|i| i.key_pressed(Key::M)) {
+                self.show_mutation_settings = !self.show_mutation_settings;
+            }
+            if ctx.input(|i| i.key_pressed(Key::P)) {
+                self.show_species = !self.show_species;
+            }
+            if ctx.input(|i| i.key_pressed(Key::N)) {
+                self.show_networks = !self.show_networks;
+            }
+            if ctx.input(|i| i.key_pressed(Key::T)) {
+                self.show_statistics = !self.show_statistics;
+            }
+            if ctx.input(|i| i.key_pressed(Key::S)) {
+                self.engine_commands_sender
+                    .send(EngineCommand::CreateSnakes(10))
+                    .unwrap();
+            }
+            if ctx.input(|i| i.key_pressed(Key::Space)) {
+                self.paused = !self.paused;
+                self.engine_commands_sender
+                    .send(EngineCommand::FlipRunningState)
                     .unwrap();
             }
         });
