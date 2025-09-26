@@ -1991,7 +1991,7 @@ mod tests {
         schedule_die.run(&mut world);
 
         // Snake despawned
-        assert!(world.get_entity(head).is_none());
+        assert!(world.get_entity(head).is_err());
     }
 
     #[test]
@@ -2265,7 +2265,7 @@ mod tests {
         let starve_post = calculate_total_energy(&mut starve_world);
 
         // Snake despawned, segment converted to food (meat = new_segment_cost = 50.0 * meat_energy_content = 1000.0)
-        assert!(starve_world.get_entity(starve_head).is_none());
+        assert!(starve_world.get_entity(starve_head).is_err());
         let food_map = starve_world.resource::<FoodMap>();
         let converted_food = food_map.map.get(&Position { x: 0, y: 0 });
         assert!(converted_food.meat > 0.0);

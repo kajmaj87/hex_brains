@@ -477,7 +477,11 @@ impl Simulation {
             self.step();
             let mut engine_state = self.world.get_resource_mut::<EngineState>().unwrap();
             if engine_state.repaint_needed && engine_state.running {
-                engine_state.frames_left += engine_state.speed_limit.unwrap_or(0.00);
+                let increment = engine_state.speed_limit.unwrap_or(0.00);
+                engine_state.frames_left += increment;
+                if let Some(limit) = engine_state.speed_limit {
+                    engine_state.frames_left = engine_state.frames_left.min(limit);
+                }
                 self.engine_events
                     .send(EngineEvent::FrameDrawn {
                         updates_left: engine_state.frames_left,

@@ -15,6 +15,10 @@ The Memory Bank for Hex Brains has been initialized with core documentation file
 - Fixed bug in DNA mutation current_gene adjustment to prevent underflow when removing genes at index 0 with current_gene 0.
 - Refactored RNG usage to pass by Rand interface, using Wyrand as the concrete implementation. Replaced Brain trait with BrainType enum for better type safety and to avoid dyn compatibility issues.
 - Modified GUI to automatically start simulation on program launch with 200x speed and 10 initial snakes.
+- Modified speed limiting logic in simulation.rs to cap overflow frames at speed_limit (1 second worth) to prevent unlimited accumulation when simulation runs slower than the limit.
+- Updated Bevy ECS dependency from 0.12.0 to 0.13.0 in both engine and GUI crates. No code changes required as the project uses only ECS features unaffected by the migration.
+- Updated Bevy ECS dependency from 0.13.0 to 0.14.0 in both engine and GUI crates, renaming the "multi-threaded" feature to "multi_threaded". No code changes required as the project uses only ECS features unaffected by the migration.
+- Updated Bevy ECS dependency from 0.14.0 to 0.15.0 in both engine and GUI crates. Fixed test assertions for `World::get_entity()` returning `Result` instead of `Option`. No other code changes required as the project uses only ECS features unaffected by the migration.
 
 ## Next Steps
 - Verify memory bank contents with user for accuracy and completeness.

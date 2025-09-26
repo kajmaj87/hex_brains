@@ -2,7 +2,7 @@
 
 ## Technologies Used
 - **Rust**: Core language for the entire project, chosen for its performance, memory safety, and concurrency support. Uses the 2021 edition.
-- **Bevy ECS (0.12.0)**: Entity-Component-System framework for managing simulation entities (snakes, food, scents) and scheduling systems. Features multi-threaded execution for better performance.
+- **Bevy ECS (0.15.0)**: Entity-Component-System framework for managing simulation entities (snakes, food, scents) and scheduling systems. Features multi_threaded execution for better performance.
 - **egui and eframe (0.23.0)**: Immediate-mode GUI library for the interactive frontend. egui handles UI rendering, while eframe provides the application framework with cross-platform support.
 - **Rayon (1.8.0)**: Parallel iteration library for batch simulations, enabling efficient parallel execution of multiple independent simulations.
 - **Custom Neural Network Implementation**: NEAT-inspired neural evolution in `neural.rs`, including `NeuralNetwork`, `NodeGene`, `ConnectionGene`, and `InnovationTracker` for structural mutations.

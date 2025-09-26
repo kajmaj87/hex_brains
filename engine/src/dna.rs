@@ -1,5 +1,5 @@
 use bevy_ecs::prelude::Component;
-use tinyrand::{Rand, RandRange};
+use tinyrand::{Rand, RandRange, Seeded};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Segment {
