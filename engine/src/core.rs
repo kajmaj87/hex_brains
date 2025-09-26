@@ -1267,6 +1267,8 @@ pub fn calculate_stats(
     stats.total_energy = stats.total_snake_energy
         + stats.total_plants * config.plant_energy_content
         + stats.total_meat * config.meat_energy_content;
+    stats.total_plant_energy = stats.total_plants * config.plant_energy_content;
+    stats.total_meat_energy = stats.total_meat * config.meat_energy_content;
 }
 
 pub fn process_food(mut snake: Query<(&mut Snake, &Age)>, config: Res<SimulationConfig>) {

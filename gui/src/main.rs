@@ -1080,17 +1080,37 @@ impl eframe::App for MyEguiApp {
                     .back()
                     .map(|(f, _)| *f as f64)
                     .unwrap_or(0.0);
-                let raw_snakes: Vec<(f64, f64)> = self
+                let raw_plant_energy: Vec<(f64, f64)> = self
                     .stats_history
                     .iter()
-                    .map(|(f, s)| (*f as f64 - current_frame, s.total_snakes as f64))
+                    .map(|(f, s)| {
+                        (
+                            *f as f64 - current_frame,
+                            s.total_plant_energy as f64 / 1000.0,
+                        )
+                    })
                     .collect();
-                let raw_food: Vec<(f64, f64)> = self
+                let raw_meat_energy: Vec<(f64, f64)> = self
                     .stats_history
                     .iter()
-                    .map(|(f, s)| (*f as f64 - current_frame, s.total_food as f64 / 100.0))
+                    .map(|(f, s)| {
+                        (
+                            *f as f64 - current_frame,
+                            s.total_meat_energy as f64 / 1000.0,
+                        )
+                    })
                     .collect();
-                let snakes: PlotPoints = raw_snakes
+                let raw_snake_energy: Vec<(f64, f64)> = self
+                    .stats_history
+                    .iter()
+                    .map(|(f, s)| {
+                        (
+                            *f as f64 - current_frame,
+                            s.total_snake_energy as f64 / 1000.0,
+                        )
+                    })
+                    .collect();
+                let plant_energy: PlotPoints = raw_plant_energy
                     .iter()
                     .enumerate()
                     .map(|(i, _)| {
@@ -1099,12 +1119,12 @@ impl eframe::App for MyEguiApp {
                         } else {
                             0
                         };
-                        let sum: f64 = raw_snakes[start..=i].iter().map(|(_, y)| *y).sum();
+                        let sum: f64 = raw_plant_energy[start..=i].iter().map(|(_, y)| *y).sum();
                         let count = (i - start + 1) as f64;
-                        [raw_snakes[i].0, sum / count]
+                        [raw_plant_energy[i].0, sum / count]
                     })
                     .collect();
-                let food: PlotPoints = raw_food
+                let meat_energy: PlotPoints = raw_meat_energy
                     .iter()
                     .enumerate()
                     .map(|(i, _)| {
@@ -1113,36 +1133,55 @@ impl eframe::App for MyEguiApp {
                         } else {
                             0
                         };
-                        let sum: f64 = raw_food[start..=i].iter().map(|(_, y)| *y).sum();
+                        let sum: f64 = raw_meat_energy[start..=i].iter().map(|(_, y)| *y).sum();
                         let count = (i - start + 1) as f64;
-                        [raw_food[i].0, sum / count]
+                        [raw_meat_energy[i].0, sum / count]
                     })
                     .collect();
-                let snakes_line = Line::new(snakes).name("Snakes");
-                let food_line = Line::new(food).name("Food (100s)");
+                let snake_energy: PlotPoints = raw_snake_energy
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| {
+                        let start = if i >= self.smoothing_window {
+                            i - self.smoothing_window + 1
+                        } else {
+                            0
+                        };
+                        let sum: f64 = raw_snake_energy[start..=i].iter().map(|(_, y)| *y).sum();
+                        let count = (i - start + 1) as f64;
+                        [raw_snake_energy[i].0, sum / count]
+                    })
+                    .collect();
+                let plant_line = Line::new(plant_energy).name("Plant Energy (/1000)");
+                let meat_line = Line::new(meat_energy).name("Meat Energy (/1000)");
+                let snake_line = Line::new(snake_energy).name("Snake Energy (/1000)");
                 Plot::new("stats_plot")
                     .view_aspect(2.0)
                     .show(ui, |plot_ui| {
-                        plot_ui.line(snakes_line);
-                        plot_ui.line(food_line);
+                        plot_ui.line(plant_line);
+                        plot_ui.line(meat_line);
+                        plot_ui.line(snake_line);
                     });
                 if self.stats.species.species.is_empty() {
                     ui.label("No species yet.");
                 } else {
-                    let mut sorted_species = self.stats.species.species.clone();
-                    sorted_species.sort_by(|a, b| b.members.len().cmp(&a.members.len()));
-                    let bars: Vec<Bar> = sorted_species
+                    let mut sorted = self.stats.species.species.clone();
+                    sorted.sort_by(|a, b| b.members.len().cmp(&a.members.len()));
+                    let bars: Vec<Bar> = sorted
                         .iter()
                         .enumerate()
                         .map(|(i, specie)| {
                             Bar::new(i as f64, specie.members.len() as f64)
+                                .name(format!("{}", specie.id))
                                 .fill(u32_to_color(specie.id))
                         })
                         .collect();
-                    let species_chart = BarChart::new(bars).name("Species Population Distribution");
-                    Plot::new("species_histogram").show(ui, |plot_ui| {
-                        plot_ui.bar_chart(species_chart);
-                    });
+                    let bar_chart = BarChart::new(bars);
+                    Plot::new("species_plot")
+                        .view_aspect(2.0)
+                        .show(ui, |plot_ui| {
+                            plot_ui.bar_chart(bar_chart);
+                        });
                 }
             });
         egui::Window::new("Networks").open(&mut self.show_networks).show(ctx, |ui| {

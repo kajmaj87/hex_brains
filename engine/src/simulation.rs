@@ -74,6 +74,8 @@ pub struct Stats {
     pub total_plants: f32,
     pub total_meat: f32,
     pub total_energy: f32,
+    pub total_plant_energy: f32,
+    pub total_meat_energy: f32,
 }
 
 #[derive(Debug, Clone)]
