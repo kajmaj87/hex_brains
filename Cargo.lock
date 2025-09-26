@@ -1751,6 +1751,7 @@ dependencies = [
  "puffin_http",
  "tracing",
  "tracing-subscriber",
+ "winapi",
 ]
 
 [[package]]

@@ -19,6 +19,7 @@ The Memory Bank for Hex Brains has been initialized with core documentation file
 - Updated Bevy ECS dependency from 0.12.0 to 0.13.0 in both engine and GUI crates. No code changes required as the project uses only ECS features unaffected by the migration.
 - Updated Bevy ECS dependency from 0.13.0 to 0.14.0 in both engine and GUI crates, renaming the "multi-threaded" feature to "multi_threaded". No code changes required as the project uses only ECS features unaffected by the migration.
 - Updated Bevy ECS dependency from 0.14.0 to 0.15.0 in both engine and GUI crates. Fixed test assertions for `World::get_entity()` returning `Result` instead of `Option`. No other code changes required as the project uses only ECS features unaffected by the migration.
+- Fixed Windows cross-compilation issue by adding winapi dependency with "winuser" and "windef" features to gui/Cargo.toml to enable necessary Windows API modules for eframe.
 
 ## Next Steps
 - Verify memory bank contents with user for accuracy and completeness.
