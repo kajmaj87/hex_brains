@@ -8,7 +8,7 @@ use egui::{
     Align2, FontData, FontDefinitions, FontFamily, FontId, Frame, Key, Response, ScrollArea, Sense,
     Shape, Stroke, Ui,
 };
-use egui_plot::{Line, Plot, PlotPoints};
+use egui_plot::{Bar, BarChart, Line, Plot, PlotPoints};
 use hex_brains_engine::core::{Food, Position, Scent, ScentMap, Snake, Solid};
 use hex_brains_engine::dna::SegmentType;
 use hex_brains_engine::neural;
@@ -1047,6 +1047,24 @@ impl eframe::App for MyEguiApp {
                         plot_ui.line(snakes_line);
                         plot_ui.line(food_line);
                     });
+                if self.stats.species.species.is_empty() {
+                    ui.label("No species yet.");
+                } else {
+                    let mut sorted_species = self.stats.species.species.clone();
+                    sorted_species.sort_by(|a, b| b.members.len().cmp(&a.members.len()));
+                    let bars: Vec<Bar> = sorted_species
+                        .iter()
+                        .enumerate()
+                        .map(|(i, specie)| {
+                            Bar::new(i as f64, specie.members.len() as f64)
+                                .fill(u32_to_color(specie.id))
+                        })
+                        .collect();
+                    let species_chart = BarChart::new(bars).name("Species Population Distribution");
+                    Plot::new("species_histogram").show(ui, |plot_ui| {
+                        plot_ui.bar_chart(species_chart);
+                    });
+                }
             });
         egui::Window::new("Networks").open(&mut self.show_networks).show(ctx, |ui| {
             let specie_ids = &self.stats.species.species.iter().map(|specie| specie.id).collect::<Vec<u32>>();
