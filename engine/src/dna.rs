@@ -219,11 +219,6 @@ impl Dna {
     }
 
     pub fn build_segment(&mut self) -> SegmentType {
-        tracing::debug!(
-            "build_segment: current_gene={}, len={}",
-            self.current_gene,
-            self.genes.len()
-        );
         if self.current_gene >= self.genes.len() {
             self.current_gene = 0;
         }

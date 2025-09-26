@@ -1,7 +1,6 @@
 use bevy_ecs::prelude::Resource;
 use std::collections::HashMap;
 use tinyrand::{Rand, RandRange};
-use tracing::debug;
 
 // Define a trait that all sensor inputs will implement.
 #[derive(Debug, Clone)]
@@ -179,7 +178,6 @@ impl NeuralNetwork {
 
     pub fn flip_random_connection(&mut self, rng: &mut tinyrand::Wyrand) {
         let index = rng.next_range(0..self.connections.len());
-        debug!("Flipping connection {}", index);
         self.connections[index].enabled = !self.connections[index].enabled;
     }
 
@@ -209,10 +207,6 @@ impl NeuralNetwork {
             -1.0
         };
         self.connections[index].weight *= f.powf(sign);
-        debug!(
-            "Mutating connection {} with factor {} and sign {}, new value {}",
-            index, f, sign, self.connections[index].weight
-        );
     }
 
     pub(crate) fn mutate_reset_random_connection_weight(
@@ -236,10 +230,6 @@ impl NeuralNetwork {
         self.connections[index].weight = ((rng.next_u32() as f32) / (u32::MAX as f32))
             * (mutation_strength * 2.0)
             - mutation_strength;
-        debug!(
-            "Mutating connection {} to value {}",
-            index, self.connections[index].weight
-        );
     }
 
     pub fn get_active_connections(&self) -> Vec<&ConnectionGene> {
@@ -262,27 +252,16 @@ impl NeuralNetwork {
             .sum::<f32>()
             * 0.1;
         let think_cost = len_cost + weight_cost;
-        let total_cost = think_cost + 0.01;
-        debug!(
-            "Network run_cost: active_connections={}, len_cost={}, weight_cost={}, total={}",
-            active_connections.len(),
-            len_cost,
-            weight_cost,
-            total_cost
-        );
-        total_cost
+        think_cost + 0.01
     }
 
     pub fn run(&self, inputs: Vec<SensorInput>) -> Vec<f32> {
-        debug!("Running network with inputs: {:?}", inputs);
-        debug!("Nodes len: {}", self.nodes.len());
         let mut node_values = vec![0.0; self.nodes.len()];
 
         // Set initial values for input nodes based on SensorInput
         for input in inputs {
             let index = input.index;
             if index < self.nodes.len() && matches!(self.nodes[index].node_type, NodeType::Input) {
-                debug!("Setting input node {} to {}", index, input.value);
                 node_values[index] = input.value;
             }
         }
@@ -292,10 +271,6 @@ impl NeuralNetwork {
             if connection.enabled {
                 let input_value = node_values[connection.in_node];
                 node_values[connection.out_node] += input_value * connection.weight;
-                debug!(
-                    "Propagating value {} from node {} to node {}",
-                    input_value, connection.in_node, connection.out_node
-                )
             }
         }
 
@@ -303,10 +278,6 @@ impl NeuralNetwork {
         for (i, node) in self.nodes.iter().enumerate() {
             if matches!(node.node_type, NodeType::Hidden | NodeType::Output) {
                 node_values[i] = node.activation.apply(node_values[i]);
-                debug!(
-                    "Applying activation function to node {} with value {}",
-                    i, node_values[i]
-                );
             }
         }
 

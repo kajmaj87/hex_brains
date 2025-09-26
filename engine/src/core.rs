@@ -174,7 +174,6 @@ pub struct RandomBrain;
 impl RandomBrain {
     pub fn decide(&self, _sensory_input: Vec<f32>, rng: &mut impl Rand) -> Decision {
         let val = rng.next_range(0u32..4u32);
-        debug!("RandomBrain decision value: {}", val);
         match val as i32 {
             0 => Decision::MoveForward,
             1 => Decision::MoveLeft,
@@ -209,7 +208,6 @@ impl RandomNeuralBrain {
     }
 
     pub fn decide(&self, sensor_input: Vec<f32>, _rng: &mut impl Rand) -> Decision {
-        debug!("Neural network input: {:?}", sensor_input);
         let sensor_input = sensor_input
             .iter()
             .enumerate()
@@ -219,7 +217,6 @@ impl RandomNeuralBrain {
             })
             .collect();
         let output = self.neural_network.run(sensor_input);
-        debug!("Neural network output: {:?}", output);
         // return the index with the maximum value of the output vector
         let mut max_index = 0;
         let mut max_value = 0.0;
@@ -229,19 +226,12 @@ impl RandomNeuralBrain {
                 max_index = index;
             }
         }
-        debug!("Max index: {}", max_index);
-        let decision = match max_index {
+        match max_index {
             0 => Decision::MoveForward,
             1 => Decision::MoveLeft,
             2 => Decision::MoveRight,
             _ => Decision::Wait,
-        };
-        debug!(
-            "Network architecture: {:?}",
-            self.neural_network.get_active_connections()
-        );
-        debug!("Output: {:?}, decision: {:?}", output, decision);
-        decision
+        }
     }
 
     pub fn get_neural_network(&self) -> Option<&NeuralNetwork> {
@@ -416,10 +406,6 @@ pub fn movement(
     puffin::profile_function!();
 
     for (_, mut snake, head_position, age) in &mut snakes {
-        debug!(
-            "Energy before move: {:?}, (eff: {}, age: {})",
-            snake.energy.energy, age.efficiency_factor, age.age
-        );
         if snake.energy.move_potential >= 1.0 {
             let move_cost = snake.metabolism.segment_move_cost / age.efficiency_factor;
             match snake.decision {
@@ -451,23 +437,13 @@ pub fn movement(
             snake.energy.move_potential -= 1.0;
         }
         let basic_cost_deduction = snake.metabolism.segment_basic_cost / age.efficiency_factor;
-        debug!(
-            "Deducting basic cost: segment_basic_cost={}, efficiency_factor={}, deduction={}",
-            snake.metabolism.segment_basic_cost, age.efficiency_factor, basic_cost_deduction
-        );
         snake.energy.energy -= basic_cost_deduction;
         // snake.energy.energy -= snake.brain.get_neural_network().unwrap().run_cost();
         // very old snakes wont produce energy anymore
         if age.efficiency_factor > 0.2 {
             snake.energy.energy +=
                 snake.metabolism.segment_energy_production * age.efficiency_factor;
-        } else {
-            debug!("Snake {:#?} is too old to produce energy", snake);
         }
-        debug!(
-            "Energy after move: {:?}, (eff: {}, age: {})",
-            snake.energy.energy, age.efficiency_factor, age.age
-        );
     }
 }
 
@@ -503,24 +479,13 @@ pub fn update_positions(
             last_tail_pos
         };
 
-        debug!(
-            "Snake {:?} with {} segments is moving from {:?} to {:?} (last tail position: {:?})",
-            head_id,
-            snake.segments.len(),
-            old_head_position,
-            new_position,
-            snake.last_position
-        );
-
         if new_position == old_head_position.as_pair() {
-            debug!("Snake is not moving");
             continue;
         }
         if *solids_map.map.get(&Position {
             x: new_position.0,
             y: new_position.1,
         }) {
-            debug!("Snake has hit something, he will soon die");
             commands.entity(head_id).insert(DiedFromCollision {});
         }
         update_segment_positions(
@@ -530,10 +495,6 @@ pub fn update_positions(
                 y: new_position.1,
             },
             &snake.segments,
-        );
-        debug!(
-            "Removing snake head {:?} from position {:?}",
-            head_id, old_head_position
         );
         snake.last_position = last_position.as_pair();
     }
@@ -548,10 +509,6 @@ fn update_segment_positions(
     for segment in segments {
         let mut position = positions.get_mut(*segment).unwrap();
         let old_position = position.clone();
-        debug!(
-            "Updating segment {:?} to position {:?} to position {:?}",
-            segment, position, new_position
-        );
         position.x = new_position.x;
         position.y = new_position.y;
         new_position = old_position.clone();
@@ -754,13 +711,7 @@ pub fn think(
             energy_level,
             age_level,
         ];
-        debug!("Computed sensory inputs: {:?}", sensory_inputs);
         head.decision = head.brain.decide(sensory_inputs, &mut rng.rng);
-        debug!("Snake decision: {:?}", head.decision);
-        debug!(
-            "Is neural brain: {}",
-            head.brain.get_neural_network().is_some()
-        );
     });
 }
 
@@ -848,16 +799,8 @@ pub fn add_scents(
     puffin::profile_function!();
     if config.create_scents {
         for (meat, position) in &scent_source {
-            debug!(
-                "Adding scent at position {:?} with energy {}",
-                position, meat.amount
-            );
             let current_scent = scent_map.map.get_mut(position);
             if current_scent <= &mut 0.0 {
-                debug!(
-                    "Adding scent at position {:?} with energy {}",
-                    position, meat.amount
-                );
                 commands.spawn((
                     Scent {},
                     Position {
@@ -865,11 +808,6 @@ pub fn add_scents(
                         y: position.y,
                     },
                 ));
-            } else {
-                debug!(
-                    "Scent already there, increasing amount at position {:?} with energy {}",
-                    position, meat.amount
-                );
             }
             if *current_scent < 1000.0 {
                 *current_scent += meat.amount;
@@ -901,10 +839,6 @@ pub fn diffuse_scents(
         *scent_map.map.get_mut(position) -= diffused_scent;
         let new_scent = scent_map.map.get_mut(&new_position);
         if new_scent <= &mut 0.0 {
-            debug!(
-                "Adding scent throuhg diffusion at position {:?} with energy {}",
-                new_position, diffused_scent
-            );
             commands.spawn((
                 Scent {},
                 Position {
@@ -912,14 +846,8 @@ pub fn diffuse_scents(
                     y: new_position.y,
                 },
             ));
-        } else {
-            debug!(
-                "Scent already diffused there, increasing amount at position {:?} with energy {}",
-                new_position, diffused_scent
-            );
         }
         *new_scent += diffused_scent;
-        debug!("New scent {}", *new_scent);
     }
 }
 
@@ -934,10 +862,6 @@ pub fn disperse_scents(
         let scent = scent_map.map.get_mut(position);
         *scent -= config.scent_dispersion_per_step;
         if scent <= &mut 0.0 {
-            debug!(
-                "Removing scent at position {:?} with energy {}",
-                position, scent
-            );
             commands.entity(scent_id).despawn();
             scent_map.map.set(position, 0.0);
         }
@@ -1037,15 +961,7 @@ pub fn starve(
 ) {
     puffin::profile_function!();
     for (head_id, mut snake) in &mut snakes {
-        debug!(
-            "Snake {:?} has energy {} and plants {} and meat {} in stomach",
-            head_id,
-            snake.energy.energy,
-            snake.energy.plant_in_stomach,
-            snake.energy.meat_in_stomach
-        );
         if snake.energy.energy < 0.0 {
-            debug!("Snake {:?} starved to death", head_id);
             kill_snake(
                 &mut commands,
                 &positions,
@@ -1072,7 +988,6 @@ fn remove_segment_and_transform_to_food(
     let position = positions.get(*segment_id).unwrap();
     solids_map.map.set(position, false);
     let added_food = Food::from_meat(config.new_segment_cost);
-    debug!("Segment is becoming food now: {:?}", added_food);
     food_map.map.set(position, added_food.clone());
     commands.spawn((
         position.clone(),
@@ -1096,27 +1011,16 @@ fn remove_snake_from_species(
                 if let Some(new_leader) = specie.members.pop_front() {
                     specie.leader = new_leader;
                     specie.leader_network = snake.brain.get_neural_network().unwrap().clone();
-                    debug!("New leader for specie {:?}: {:?}", specie.id, specie.leader);
                 } else {
                     let specie_id = specie.id;
-                    debug!("Specie {:?} is extinct", specie_id);
                     species.species.retain(|s| s.id != specie_id);
                 }
             } else {
                 specie.members.retain(|s| *s != head_id);
-                debug!(
-                    "Snake {:?} died and was removed from specie {:?}",
-                    head_id, specie.id
-                );
             }
         } else {
             warn!("Snake {:?} died and was not found in any specie", head_id);
         }
-    } else {
-        debug!(
-            "Snake {:?} has no species assigned, skipping removal",
-            head_id
-        );
     }
 }
 
@@ -1132,7 +1036,6 @@ pub fn die_from_collisions(
     puffin::profile_function!();
     for (head_id, mut snake, _) in &mut snake {
         if snake.energy.energy >= 0.0 {
-            debug!("Snake {:?} collided with something solid", head_id);
             kill_snake(
                 &mut commands,
                 &positions,
@@ -1240,7 +1143,6 @@ pub fn split(
                 panic!("Snake without neural network");
             };
             let (new_neural_network, mutations, dna) = new_neural_network;
-            debug!("Snake splits: {:#?}, {:#?}", snake.metabolism, snake.energy);
             let new_snake_segments = snake.segments.split_off(snake_length / 2);
             let new_head_id = *new_snake_segments.first().unwrap();
             let new_head_position = positions.get(new_head_id).unwrap();
@@ -1262,14 +1164,6 @@ pub fn split(
             snake.energy.meat_in_stomach /= 2.0;
             recalculate_snake_params(&mut snake, &segments, &config, None);
             recalculate_snake_params(&mut new_snake, &segments, &config, None);
-            debug!(
-                "Old snake after split: {:#?}, {:#?}",
-                snake.metabolism, snake.energy
-            );
-            debug!(
-                "New snake after split: {:#?}, {:#?}",
-                new_snake.metabolism, new_snake.energy
-            );
             if (rng.next_u32() as f64) / (u32::MAX as f64) < 0.5 {
                 new_snake.direction = turn_left(&snake.direction);
             } else {
@@ -1326,7 +1220,6 @@ fn recalculate_snake_params(
         if run_cost == 0.0 {
             panic!("Neural network run cost is 0.0")
         }
-        debug!("Adding network run_cost {} to segment_basic_cost", run_cost);
         snake.metabolism.segment_basic_cost += run_cost;
     } else {
         panic!("Snake without neural network");
@@ -1341,12 +1234,7 @@ pub fn increase_age(mut agables: Query<&mut Age>, config: Res<SimulationConfig>)
     for mut age in &mut agables {
         age.age += 10;
         age.efficiency_factor = (1.0 / (age.age as f32 / config.snake_max_age as f32)).min(1.0);
-        if age.efficiency_factor < 1.0 {
-            debug!(
-                "Snake is getting old, efficiency factor is {}",
-                age.efficiency_factor
-            );
-        }
+        if age.efficiency_factor < 1.0 {}
     }
 }
 #[allow(clippy::too_many_arguments)]
@@ -1392,7 +1280,6 @@ pub fn calculate_stats(
 pub fn process_food(mut snake: Query<(&mut Snake, &Age)>, config: Res<SimulationConfig>) {
     puffin::profile_function!();
     for (mut snake, age) in &mut snake {
-        debug!("Snake energy at start: {}", snake.energy.energy);
         if snake.energy.energy < snake.metabolism.max_energy {
             let eaten_plants = snake
                 .energy
@@ -1404,20 +1291,9 @@ pub fn process_food(mut snake: Query<(&mut Snake, &Age)>, config: Res<Simulation
                 .meat_in_stomach
                 .min(snake.metabolism.meat_processing_speed);
             snake.energy.meat_in_stomach -= eaten_meat;
-            debug!(
-                "Snake ate {} plants and {} meat and now has {} plants and {} meat in stomach",
-                eaten_plants,
-                eaten_meat,
-                snake.energy.plant_in_stomach,
-                snake.energy.meat_in_stomach
-            );
             let plant_energy_gain =
                 eaten_plants * config.plant_energy_content * age.efficiency_factor;
             let meat_energy_gain = eaten_meat * config.meat_energy_content * age.efficiency_factor;
-            debug!(
-                "Snake energy gain: {} from plants and {} from meat (eff: {}, age: {})",
-                plant_energy_gain, meat_energy_gain, age.efficiency_factor, age.age
-            );
             snake.energy.energy += plant_energy_gain + meat_energy_gain;
         }
         if snake.energy.energy > 3.0 * snake.metabolism.max_energy / 4.0 {
@@ -1425,9 +1301,7 @@ pub fn process_food(mut snake: Query<(&mut Snake, &Age)>, config: Res<Simulation
                 snake.metabolism.meat_matter_for_growth_production_speed;
             snake.energy.energy -= snake.metabolism.meat_matter_for_growth_production_speed
                 * config.meat_energy_content;
-            debug!("Snake used up {} energy to produce meat matter for growth and has accumulated {} meat matter for growth", snake.metabolism.meat_matter_for_growth_production_speed * config.meat_energy_content, snake.energy.accumulated_meat_matter_for_growth);
         }
-        debug!("Snake energy at end: {}", snake.energy.energy);
     }
 }
 
@@ -1525,9 +1399,7 @@ pub fn assign_species(
                     leader_snake.brain.get_neural_network().unwrap(),
                     snake.brain.get_neural_network().unwrap(),
                 );
-                debug!("Difference: {}", compatibility);
                 if compatibility < config.species_threshold {
-                    debug!("Snake {:?} is in specie {:?}", snake_id, specie.id);
                     snake.species = Some(specie.id);
                     specie.members.push_back(snake_id);
                     break;
@@ -1552,7 +1424,6 @@ pub fn assign_species(
             species.species.push(new_specie);
             species.last_id += 1;
             baby_snake.species = Some(species.last_id);
-            debug!("Snake {:?} is a new specie: {}", baby_id, species.last_id);
         }
     }
 }
@@ -1600,10 +1471,6 @@ fn calculate_gene_difference(leader: &NeuralNetwork, new_snake: &NeuralNetwork) 
     let max_genes = leader_genes.len().max(new_snake_genes.len());
     let gene_difference = (max_genes - matching_genes_count) as f32 / max_genes as f32;
     let weight_difference = weight_difference / matching_genes_count as f32;
-    debug!(
-        "Matching genes: {}, max genes: {}, gene difference: {}, weight difference: {}",
-        matching_genes_count, max_genes, gene_difference, weight_difference
-    );
     0.6 * gene_difference + 0.4 * weight_difference
 }
 pub fn create_snake(
