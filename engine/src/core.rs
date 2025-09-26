@@ -172,7 +172,7 @@ pub struct JustBorn;
 pub struct RandomBrain;
 
 impl RandomBrain {
-    pub fn decide(&self, sensory_input: Vec<f32>, rng: &mut impl Rand) -> Decision {
+    pub fn decide(&self, _sensory_input: Vec<f32>, rng: &mut impl Rand) -> Decision {
         let val = rng.next_range(0u32..4u32);
         debug!("RandomBrain decision value: {}", val);
         match val as i32 {
