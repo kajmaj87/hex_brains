@@ -22,6 +22,8 @@ The Memory Bank for Hex Brains has been initialized with core documentation file
 - Fixed Windows cross-compilation issue by adding winapi dependency with "winuser" and "windef" features to gui/Cargo.toml to enable necessary Windows API modules for eframe.
 - Fixed clippy warnings by moving Seeded import to test scope in dna.rs and prefixing unused sensory_input parameter with underscore in RandomBrain::decide.
 - Implemented responsive design and accessibility for UI: changed primary toolbar and menu bar to use horizontal_wrapped for wrapping on narrow windows (e.g., 800px width), improved button contrast ratios by using darker green and red for play/pause button, ensured tab navigation support via egui defaults.
+- Added FiraCodeNerd font to egui GUI for improved typography, embedded in the binary.
+- Redesigned primary toolbar: removed simulation menu button, added restart icon (🔄) that stops simulation, reordered buttons to: view, help, restart, environment, mutations, species, neural networks, snake, pause/run, minus, plus, simulation speed.
 
 ## Next Steps
 - Verify memory bank contents with user for accuracy and completeness.

@@ -5,8 +5,8 @@ use eframe::{egui, emath};
 use egui::epaint::CircleShape;
 use egui::Shape::Circle;
 use egui::{
-    Align2, FontDefinitions, FontFamily, FontId, Frame, Key, Response, ScrollArea, Sense, Shape,
-    Stroke, Ui,
+    Align2, FontData, FontDefinitions, FontFamily, FontId, Frame, Key, Response, ScrollArea, Sense,
+    Shape, Stroke, Ui,
 };
 use hex_brains_engine::core::{Food, Position, Scent, ScentMap, Snake, Solid};
 use hex_brains_engine::dna::SegmentType;
@@ -516,7 +516,7 @@ struct MyEguiApp {
 
 impl MyEguiApp {
     fn new(
-        _cc: &eframe::CreationContext<'_>,
+        cc: &eframe::CreationContext<'_>,
         engine_commands_sender: Sender<EngineCommand>,
         engine_events_sender: Sender<EngineEvent>,
         engine_events_receiver: Receiver<EngineEvent>,
@@ -526,6 +526,22 @@ impl MyEguiApp {
         // Restore app state using cc.storage (requires the "persistence" feature).
         // Use the cc.gl (a glow::Context) to create graphics shaders and buffers that you can use
         // for e.g. egui::PaintCallback.
+        let mut font_definitions = FontDefinitions::default();
+        font_definitions.font_data.insert(
+            "firacode_nerd".to_owned(),
+            FontData::from_static(include_bytes!("../../assets/FiraCodeNerdFont-Regular.ttf")),
+        );
+        font_definitions
+            .families
+            .get_mut(&FontFamily::Proportional)
+            .unwrap()
+            .insert(0, "firacode_nerd".to_owned());
+        font_definitions
+            .families
+            .get_mut(&FontFamily::Monospace)
+            .unwrap()
+            .insert(0, "firacode_nerd".to_owned());
+        cc.egui_ctx.set_fonts(font_definitions.clone());
         Self {
             text: String::new(),
             total_frames: 0,
@@ -582,7 +598,7 @@ impl MyEguiApp {
             show_info: false,
             simulation_running: false,
             selected_network: 0,
-            fonts: Fonts::new(1.0, 2 * 1024, FontDefinitions::default()),
+            fonts: Fonts::new(1.0, 2 * 1024, font_definitions),
         }
     }
 }
@@ -1100,6 +1116,74 @@ impl eframe::App for MyEguiApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             // Primary Toolbar
             ui.horizontal_wrapped(|ui| {
+                ui.menu_button("View", |ui| {
+                    ui.menu_button("Display Settings", |ui| {
+                        ui.horizontal(|ui| {
+                            egui::stroke_ui(ui, &mut self.config.bg_color, "Background Color");
+                            egui::stroke_ui(ui, &mut self.config.scent_color, "Scent Color");
+                            egui::stroke_ui(ui, &mut self.config.tail_color, "Tail Color");
+                            egui::stroke_ui(ui, &mut self.config.food_color, "Food Color");
+                        });
+                    });
+                })
+                .response
+                .on_hover_text("Configure display settings");
+                ui.menu_button("Help", |ui| {
+                    let checked = self.show_info;
+                    if ui
+                        .selectable_label(checked, if checked { "✓ Info" } else { "Info" })
+                        .on_hover_text("Toggle help and keyboard shortcuts window")
+                        .clicked()
+                    {
+                        self.show_info = !self.show_info;
+                    }
+                })
+                .response
+                .on_hover_text("Get help and information");
+                if ui
+                    .button("🔄")
+                    .on_hover_text("Restart simulation")
+                    .clicked()
+                {
+                    self.engine_commands_sender
+                        .send(EngineCommand::StopSimulation)
+                        .unwrap();
+                    self.simulation_running = false;
+                }
+                if ui
+                    .button("🌍")
+                    .on_hover_text("Toggle environment settings window")
+                    .clicked()
+                {
+                    self.show_simulation_settings = !self.show_simulation_settings;
+                }
+                if ui
+                    .button("")
+                    .on_hover_text("Toggle mutation settings window")
+                    .clicked()
+                {
+                    self.show_mutation_settings = !self.show_mutation_settings;
+                }
+                if ui
+                    .button("🐾")
+                    .on_hover_text("Toggle species window")
+                    .clicked()
+                {
+                    self.show_species = !self.show_species;
+                }
+                if ui
+                    .button("󰧑 ")
+                    .on_hover_text("Toggle neural networks window")
+                    .clicked()
+                {
+                    self.show_networks = !self.show_networks;
+                }
+                // Add snakes
+                if ui.button("🐍").on_hover_text("Add 10 snakes").clicked() {
+                    self.engine_commands_sender
+                        .send(EngineCommand::CreateSnakes(10))
+                        .unwrap();
+                }
                 // Play/Pause button
                 let play_pause_icon = if self.simulation_running {
                     "⏸"
@@ -1126,107 +1210,6 @@ impl eframe::App for MyEguiApp {
                         .unwrap();
                     self.simulation_running = !self.simulation_running;
                 }
-                ui.label(format!(
-                    "x{:.1}",
-                    self.updates_per_second as f32 / self.frames_per_second as f32
-                ));
-                // Add snakes
-                if ui.button("🐍").on_hover_text("Add 10 snakes").clicked() {
-                    self.engine_commands_sender
-                        .send(EngineCommand::CreateSnakes(10))
-                        .unwrap();
-                }
-                ui.menu_button("Simulation", |ui| {
-                    let start_response = ui.add_enabled(
-                        !self.simulation_running,
-                        egui::Button::new("Start simulation"),
-                    );
-                    if start_response
-                        .on_hover_text("Begin a new simulation run")
-                        .clicked()
-                    {
-                        start_simulation(
-                            &self.engine_events_sender,
-                            Arc::clone(&self.engine_commands_receiver),
-                            ctx.clone(),
-                            self.config,
-                        );
-                        self.simulation_running = true;
-                    }
-                    if ui
-                        .button("Stop simulation")
-                        .on_hover_text("Halt the current simulation")
-                        .clicked()
-                    {
-                        self.engine_commands_sender
-                            .send(EngineCommand::StopSimulation)
-                            .unwrap();
-                        self.simulation_running = false;
-                    }
-                })
-                .response
-                .on_hover_text("Control simulation lifecycle");
-                if ui
-                    .button("🌍")
-                    .on_hover_text("Toggle environment settings window")
-                    .clicked()
-                {
-                    self.show_simulation_settings = !self.show_simulation_settings;
-                }
-                if ui
-                    .button("🧬")
-                    .on_hover_text("Toggle mutation settings window")
-                    .clicked()
-                {
-                    self.show_mutation_settings = !self.show_mutation_settings;
-                }
-                if ui
-                    .button("🐾")
-                    .on_hover_text("Toggle species window")
-                    .clicked()
-                {
-                    self.show_species = !self.show_species;
-                }
-                if ui
-                    .button("🧠")
-                    .on_hover_text("Toggle neural networks window")
-                    .clicked()
-                {
-                    self.show_networks = !self.show_networks;
-                }
-                ui.menu_button("View", |ui| {
-                    ui.menu_button("Display Settings", |ui| {
-                        ui.horizontal(|ui| {
-                            egui::stroke_ui(ui, &mut self.config.bg_color, "Background Color");
-                            egui::stroke_ui(ui, &mut self.config.scent_color, "Scent Color");
-                            egui::stroke_ui(ui, &mut self.config.tail_color, "Tail Color");
-                            egui::stroke_ui(ui, &mut self.config.food_color, "Food Color");
-                        });
-                    });
-                })
-                .response
-                .on_hover_text("Configure display settings");
-                ui.menu_button("Help", |ui| {
-                    let checked = self.show_info;
-                    if ui
-                        .selectable_label(checked, if checked { "✓ Info" } else { "Info" })
-                        .on_hover_text("Toggle help and keyboard shortcuts window")
-                        .clicked()
-                    {
-                        self.show_info = !self.show_info;
-                    }
-                })
-                .response
-                .on_hover_text("Get help and information");
-                if ui
-                    .small_button("+")
-                    .on_hover_text("Increase speed")
-                    .clicked()
-                {
-                    self.engine_commands_sender
-                        .send(EngineCommand::IncreaseSpeed)
-                        .unwrap();
-                }
                 if ui
                     .small_button("-")
                     .on_hover_text("Decrease speed")
@@ -1236,6 +1219,19 @@ impl eframe::App for MyEguiApp {
                         .send(EngineCommand::DecreaseSpeed)
                         .unwrap();
                 }
+                if ui
+                    .small_button("+")
+                    .on_hover_text("Increase speed")
+                    .clicked()
+                {
+                    self.engine_commands_sender
+                        .send(EngineCommand::IncreaseSpeed)
+                        .unwrap();
+                }
+                ui.label(format!(
+                    "x{:.1}",
+                    self.updates_per_second as f32 / self.frames_per_second as f32
+                ));
             });
             draw_hexes(ui, &self.hexes, &self.config);
             ScrollArea::vertical()
