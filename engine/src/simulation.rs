@@ -235,9 +235,18 @@ fn turn_counter(mut engine_state: ResMut<EngineState>) {
 }
 
 fn should_simulate_frame(engine_state: Res<EngineState>) -> bool {
-    engine_state.ignore_speed_limit
+    let result = engine_state.ignore_speed_limit
         || engine_state.speed_limit.is_none()
-        || (engine_state.running && engine_state.frames_left > 0.0)
+        || (engine_state.running && engine_state.frames_left > 0.0);
+    if result && !engine_state.running {
+        tracing::warn!(
+            "Simulating frame while not running: ignore={}, speed_limit={:?}, frames_left={}",
+            engine_state.ignore_speed_limit,
+            engine_state.speed_limit,
+            engine_state.frames_left
+        );
+    }
+    result
 }
 
 fn should_calculate_stats(engine_state: Res<EngineState>) -> bool {

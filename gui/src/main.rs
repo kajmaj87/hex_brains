@@ -509,6 +509,7 @@ struct MyEguiApp {
     show_info: bool,
     simulation_config: SimulationConfig,
     simulation_running: bool,
+    paused: bool,
     show_networks: bool,
     selected_network: u32,
     fonts: Fonts,
@@ -597,6 +598,7 @@ impl MyEguiApp {
             show_networks: false,
             show_info: false,
             simulation_running: false,
+            paused: false,
             selected_network: 0,
             fonts: Fonts::new(1.0, 2 * 1024, font_definitions),
         }
@@ -1149,6 +1151,7 @@ impl eframe::App for MyEguiApp {
                         .send(EngineCommand::StopSimulation)
                         .unwrap();
                     self.simulation_running = false;
+                    self.paused = false;
                 }
                 if ui
                     .button("🌍")
@@ -1185,30 +1188,25 @@ impl eframe::App for MyEguiApp {
                         .unwrap();
                 }
                 // Play/Pause button
-                let play_pause_icon = if self.simulation_running {
-                    "⏸"
+                let play_pause_icon = if self.paused { "▶" } else { "⏸" };
+                let play_button = egui::Button::new(play_pause_icon).fill(if self.paused {
+                    Color32::from_rgb(0, 128, 0) // Dark green for better contrast
                 } else {
-                    "▶"
-                };
-                let play_button =
-                    egui::Button::new(play_pause_icon).fill(if !self.simulation_running {
-                        Color32::from_rgb(0, 128, 0) // Dark green for better contrast
-                    } else {
-                        Color32::from_rgb(128, 0, 0) // Dark red for better contrast
-                    });
+                    Color32::from_rgb(128, 0, 0) // Dark red for better contrast
+                });
                 if ui
                     .add(play_button)
-                    .on_hover_text(if self.simulation_running {
-                        "Pause simulation"
-                    } else {
+                    .on_hover_text(if self.paused {
                         "Play simulation"
+                    } else {
+                        "Pause simulation"
                     })
                     .clicked()
                 {
+                    self.paused = !self.paused;
                     self.engine_commands_sender
                         .send(EngineCommand::FlipRunningState)
                         .unwrap();
-                    self.simulation_running = !self.simulation_running;
                 }
                 if ui
                     .small_button("-")
