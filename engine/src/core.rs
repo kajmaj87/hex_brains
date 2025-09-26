@@ -1119,17 +1119,19 @@ pub fn die_from_collisions(
 ) {
     puffin::profile_function!();
     for (head_id, mut snake, _) in &mut snake {
-        debug!("Snake {:?} collided with something solid", head_id);
-        kill_snake(
-            &mut commands,
-            &positions,
-            &mut food_map,
-            &mut species,
-            &mut solids_map,
-            &config,
-            head_id,
-            &mut snake,
-        );
+        if snake.energy.energy >= 0.0 {
+            debug!("Snake {:?} collided with something solid", head_id);
+            kill_snake(
+                &mut commands,
+                &positions,
+                &mut food_map,
+                &mut species,
+                &mut solids_map,
+                &config,
+                head_id,
+                &mut snake,
+            );
+        }
     }
 }
 
@@ -1151,7 +1153,9 @@ fn kill_snake(
         );
     }
     commands.entity(head_id).remove::<Snake>();
-    commands.entity(head_id).despawn();
+    if !snake.segments.contains(&head_id) {
+        commands.entity(head_id).despawn();
+    }
 }
 
 pub fn reproduce(
