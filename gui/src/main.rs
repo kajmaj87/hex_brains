@@ -126,6 +126,7 @@ fn draw_simulation(
     segments: Query<(Entity, &SegmentType), With<SegmentType>>,
     food: Query<(Entity, &Food)>,
     stats: Res<Stats>,
+    engine_state: Res<EngineState>,
 ) {
     puffin::profile_function!();
     let all_hexes: Vec<Hex> = solids
@@ -187,6 +188,7 @@ fn draw_simulation(
     let _ = engine_events.events.lock().send(EngineEvent::DrawData {
         hexes: all_hexes,
         stats: stats.clone(),
+        frames: engine_state.frames,
     });
 }
 
@@ -510,8 +512,9 @@ struct MyEguiApp {
     frames_per_second: u32,
     updates_per_second: u32,
     stats: Stats,
-    stats_history: VecDeque<Stats>,
+    stats_history: VecDeque<(u32, Stats)>,
     history_limit: usize,
+    smoothing_window: usize,
     show_statistics: bool,
     show_simulation_settings: bool,
     show_mutation_settings: bool,
@@ -642,6 +645,7 @@ impl MyEguiApp {
             paused: false,
             selected_network: 0,
             fonts: Fonts::new(1.0, 2 * 1024, font_definitions),
+            smoothing_window: 100,
         }
     }
 }
@@ -688,10 +692,14 @@ impl eframe::App for MyEguiApp {
                     self.updates_last_second += updates_done;
                     self.frames_last_second += 1;
                 }
-                EngineEvent::DrawData { hexes, stats } => {
+                EngineEvent::DrawData {
+                    hexes,
+                    stats,
+                    frames,
+                } => {
                     self.hexes = hexes;
                     self.stats = stats.clone();
-                    self.stats_history.push_back(stats);
+                    self.stats_history.push_back((frames, stats));
                     if self.stats_history.len() > self.history_limit {
                         self.stats_history.pop_front();
                     }
@@ -1063,17 +1071,47 @@ impl eframe::App for MyEguiApp {
                     ui.label("History limit");
                     ui.add(egui::DragValue::new(&mut self.history_limit).speed(10.0));
                 });
-                let snakes: PlotPoints = self
+                ui.horizontal(|ui| {
+                    ui.label("Smoothing window");
+                    ui.add(egui::DragValue::new(&mut self.smoothing_window).speed(10.0));
+                });
+                let raw_snakes: Vec<(f64, f64)> = self
                     .stats_history
                     .iter()
-                    .enumerate()
-                    .map(|(i, s)| [i as f64, s.total_snakes as f64])
+                    .map(|(f, s)| (*f as f64, s.total_snakes as f64))
                     .collect();
-                let food: PlotPoints = self
+                let raw_food: Vec<(f64, f64)> = self
                     .stats_history
                     .iter()
+                    .map(|(f, s)| (*f as f64, s.total_food as f64 / 100.0))
+                    .collect();
+                let snakes: PlotPoints = raw_snakes
+                    .iter()
                     .enumerate()
-                    .map(|(i, s)| [i as f64, s.total_food as f64 / 100.0])
+                    .map(|(i, _)| {
+                        let start = if i >= self.smoothing_window {
+                            i - self.smoothing_window + 1
+                        } else {
+                            0
+                        };
+                        let sum: f64 = raw_snakes[start..=i].iter().map(|(_, y)| *y).sum();
+                        let count = (i - start + 1) as f64;
+                        [raw_snakes[i].0, sum / count]
+                    })
+                    .collect();
+                let food: PlotPoints = raw_food
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| {
+                        let start = if i >= self.smoothing_window {
+                            i - self.smoothing_window + 1
+                        } else {
+                            0
+                        };
+                        let sum: f64 = raw_food[start..=i].iter().map(|(_, y)| *y).sum();
+                        let count = (i - start + 1) as f64;
+                        [raw_food[i].0, sum / count]
+                    })
                     .collect();
                 let snakes_line = Line::new(snakes).name("Snakes");
                 let food_line = Line::new(food).name("Food (100s)");

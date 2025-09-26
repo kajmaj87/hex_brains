@@ -86,6 +86,7 @@ pub enum EngineEvent {
     DrawData {
         hexes: Vec<Hex>,
         stats: Stats,
+        frames: u32,
     },
     FrameDrawn {
         updates_left: f32,
