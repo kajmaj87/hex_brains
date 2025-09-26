@@ -517,6 +517,7 @@ struct MyEguiApp {
     show_mutation_settings: bool,
     show_species: bool,
     show_info: bool,
+    show_dna_settings: bool,
     simulation_config: SimulationConfig,
     previous_simulation_config: SimulationConfig,
     started: bool,
@@ -636,6 +637,7 @@ impl MyEguiApp {
             show_species: false,
             show_networks: false,
             show_info: false,
+            show_dna_settings: false,
             started: false,
             paused: false,
             selected_network: 0,
@@ -1017,6 +1019,40 @@ impl eframe::App for MyEguiApp {
                     .on_hover_text("Set DNA mutation probability");
                 });
             });
+        egui::Window::new("DNA Settings")
+            .open(&mut self.show_dna_settings)
+            .show(ctx, |ui| {
+                ui.label("Disable segments from possible genes during mutation:")
+                    .on_hover_text("Uncheck to allow this segment type in DNA mutations");
+                let mut segment_configs = [
+                    (
+                        "Muscle",
+                        &mut self.simulation_config.mutation.disable_muscle,
+                        Color32::LIGHT_RED,
+                    ),
+                    (
+                        "Solid",
+                        &mut self.simulation_config.mutation.disable_solid,
+                        Color32::BROWN,
+                    ),
+                    (
+                        "Solar",
+                        &mut self.simulation_config.mutation.disable_solar,
+                        Color32::LIGHT_BLUE,
+                    ),
+                    (
+                        "Stomach",
+                        &mut self.simulation_config.mutation.disable_stomach,
+                        Color32::LIGHT_GREEN,
+                    ),
+                ];
+                for (i, (name, disable, color)) in segment_configs.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.colored_label(*color, format!("{i}: {name}"));
+                        ui.checkbox(disable, "Disable");
+                    });
+                }
+            });
         egui::Window::new("Species")
             .open(&mut self.show_species)
             .show(ctx, |_ui| {});
@@ -1266,6 +1302,13 @@ impl eframe::App for MyEguiApp {
                     self.show_mutation_settings = !self.show_mutation_settings;
                 }
                 if ui
+                    .button("🧬")
+                    .on_hover_text("Toggle DNA settings window (D)")
+                    .clicked()
+                {
+                    self.show_dna_settings = !self.show_dna_settings;
+                }
+                if ui
                     .button("🐾")
                     .on_hover_text("Toggle species window (P)")
                     .clicked()
@@ -1392,6 +1435,9 @@ impl eframe::App for MyEguiApp {
             }
             if ctx.input(|i| i.key_pressed(Key::M)) {
                 self.show_mutation_settings = !self.show_mutation_settings;
+            }
+            if ctx.input(|i| i.key_pressed(Key::D)) {
+                self.show_dna_settings = !self.show_dna_settings;
             }
             if ctx.input(|i| i.key_pressed(Key::P)) {
                 self.show_species = !self.show_species;

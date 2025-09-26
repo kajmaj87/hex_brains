@@ -450,7 +450,12 @@ pub fn movement(
             }
             snake.energy.move_potential -= 1.0;
         }
-        snake.energy.energy -= snake.metabolism.segment_basic_cost / age.efficiency_factor;
+        let basic_cost_deduction = snake.metabolism.segment_basic_cost / age.efficiency_factor;
+        debug!(
+            "Deducting basic cost: segment_basic_cost={}, efficiency_factor={}, deduction={}",
+            snake.metabolism.segment_basic_cost, age.efficiency_factor, basic_cost_deduction
+        );
+        snake.energy.energy -= basic_cost_deduction;
         // snake.energy.energy -= snake.brain.get_neural_network().unwrap().run_cost();
         // very old snakes wont produce energy anymore
         if age.efficiency_factor > 0.2 {
@@ -1218,7 +1223,7 @@ pub fn split(
                 let mut dna = snake.dna.clone();
                 if (rng.next_u32() as f64) / (u32::MAX as f64) < config.mutation.dna_mutation_chance
                 {
-                    dna.mutate(rng);
+                    dna.mutate(rng, &config.mutation);
                     mutations += 1;
                 }
                 (nn, mutations, dna)
@@ -1308,10 +1313,12 @@ fn recalculate_snake_params(
     snake.metabolism.segment_basic_cost += segment_basic_cost;
     snake.metabolism.segment_energy_production += segment_energy_production;
     if let Some(network) = snake.brain.get_neural_network() {
-        if network.run_cost() == 0.0 {
+        let run_cost = network.run_cost();
+        if run_cost == 0.0 {
             panic!("Neural network run cost is 0.0")
         }
-        snake.metabolism.segment_basic_cost += network.run_cost();
+        debug!("Adding network run_cost {} to segment_basic_cost", run_cost);
+        snake.metabolism.segment_basic_cost += run_cost;
     } else {
         panic!("Snake without neural network");
     }
@@ -1710,7 +1717,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(&mut rng, 1),
+            dna: Dna::random(&mut rng, 1, &MutationConfig::default()),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -1768,7 +1775,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(&mut rng, 1),
+            dna: Dna::random(&mut rng, 1, &MutationConfig::default()),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -1825,7 +1832,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(&mut rng, 1),
+            dna: Dna::random(&mut rng, 1, &MutationConfig::default()),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -1883,7 +1890,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(&mut rng, 1),
+            dna: Dna::random(&mut rng, 1, &MutationConfig::default()),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -1950,7 +1957,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(&mut rng, 1),
+            dna: Dna::random(&mut rng, 1, &MutationConfig::default()),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -2012,7 +2019,7 @@ mod tests {
             generation: 0,
             mutations: 0,
             species: None,
-            dna: Dna::random(&mut rng, 1),
+            dna: Dna::random(&mut rng, 1, &MutationConfig::default()),
             metabolism: Metabolism::default(),
             energy: Energy {
                 move_potential: 1.0,
@@ -2294,7 +2301,8 @@ mod tests {
         // Mutated DNA: to stomach (higher always cost 1.0)
         let mut mutated_dna = normal_dna.clone();
         let mut rng = tinyrand::SplitMix::default();
-        mutated_dna.mutate_specific(MutationType::ChangeSegmentType, &mut rng);
+        let config = crate::simulation::MutationConfig::default();
+        mutated_dna.mutate_specific(MutationType::ChangeSegmentType, &mut rng, &config);
         // Force to stomach for determinism
         if let Some(gene) = mutated_dna.genes.first_mut() {
             gene.segment_type = SegmentType::stomach();

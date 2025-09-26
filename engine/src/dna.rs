@@ -108,11 +108,30 @@ pub struct Dna {
 }
 
 impl Dna {
-    pub fn random(rng: &mut impl Rand, gene_pool_size: usize) -> Dna {
+    pub fn random(
+        rng: &mut impl Rand,
+        gene_pool_size: usize,
+        config: &crate::simulation::MutationConfig,
+    ) -> Dna {
         let mut genes = Vec::new();
+        let available_types: Vec<SegmentType> = all_segment_types()
+            .into_iter()
+            .filter(|t| match t {
+                SegmentType::Muscle(_) => !config.disable_muscle,
+                SegmentType::Solid(_) => !config.disable_solid,
+                SegmentType::Solar(_) => !config.disable_solar,
+                SegmentType::Stomach(_) => !config.disable_stomach,
+            })
+            .collect();
+        // If no types available, fall back to all types to avoid panic
+        let available_types = if available_types.is_empty() {
+            all_segment_types().to_vec()
+        } else {
+            available_types
+        };
         for i in 0..gene_pool_size {
-            let segment_types = all_segment_types();
-            let random_segment_type = segment_types[rng.next_range(0..segment_types.len())].clone();
+            let random_segment_type =
+                available_types[rng.next_range(0..available_types.len())].clone();
             let random_jump = rng.next_range(0..gene_pool_size);
             genes.push(Gene {
                 segment_type: random_segment_type,
@@ -125,7 +144,7 @@ impl Dna {
             current_gene: 0,
         }
     }
-    pub fn mutate(&mut self, rng: &mut impl Rand) {
+    pub fn mutate(&mut self, rng: &mut impl Rand, config: &crate::simulation::MutationConfig) {
         let mutations = [
             MutationType::AddGene,
             MutationType::RemoveGene,
@@ -133,22 +152,37 @@ impl Dna {
             MutationType::ChangeJump,
         ];
         let random_mutation = mutations[rng.next_range(0..mutations.len())].clone();
-        self.mutate_internal(random_mutation, rng);
+        self.mutate_internal(random_mutation, rng, config);
     }
 
-    fn mutate_internal(&mut self, mutation: MutationType, rng: &mut impl Rand) {
-        let segment_types = all_segment_types();
+    fn mutate_internal(
+        &mut self,
+        mutation: MutationType,
+        rng: &mut impl Rand,
+        config: &crate::simulation::MutationConfig,
+    ) {
+        let available_types: Vec<SegmentType> = all_segment_types()
+            .into_iter()
+            .filter(|t| match t {
+                SegmentType::Muscle(_) => !config.disable_muscle,
+                SegmentType::Solid(_) => !config.disable_solid,
+                SegmentType::Solar(_) => !config.disable_solar,
+                SegmentType::Stomach(_) => !config.disable_stomach,
+            })
+            .collect();
         match mutation {
             MutationType::AddGene => {
-                let new_id = self.genes.len();
-                let random_segment_type =
-                    segment_types[rng.next_range(0..segment_types.len())].clone();
-                let new_jump = rng.next_range(0..new_id);
-                self.genes.push(Gene {
-                    segment_type: random_segment_type,
-                    id: new_id,
-                    jump: new_jump,
-                });
+                if !available_types.is_empty() {
+                    let new_id = self.genes.len();
+                    let random_segment_type =
+                        available_types[rng.next_range(0..available_types.len())].clone();
+                    let new_jump = rng.next_range(0..new_id);
+                    self.genes.push(Gene {
+                        segment_type: random_segment_type,
+                        id: new_id,
+                        jump: new_jump,
+                    });
+                }
             }
             MutationType::RemoveGene => {
                 if self.genes.len() > 1 {
@@ -165,10 +199,12 @@ impl Dna {
                 }
             }
             MutationType::ChangeSegmentType => {
-                let random_segment_type =
-                    segment_types[rng.next_range(0..segment_types.len())].clone();
-                let random_index = rng.next_range(0..self.genes.len());
-                self.genes[random_index].segment_type = random_segment_type;
+                if !available_types.is_empty() {
+                    let random_segment_type =
+                        available_types[rng.next_range(0..available_types.len())].clone();
+                    let random_index = rng.next_range(0..self.genes.len());
+                    self.genes[random_index].segment_type = random_segment_type;
+                }
             }
             MutationType::ChangeJump => {
                 let random_jump = rng.next_range(0..self.genes.len());
@@ -199,8 +235,13 @@ impl Dna {
 
 #[cfg(any(test, feature = "integration"))]
 impl Dna {
-    pub fn mutate_specific(&mut self, mutation: MutationType, rng: &mut impl Rand) {
-        self.mutate_internal(mutation, rng);
+    pub fn mutate_specific(
+        &mut self,
+        mutation: MutationType,
+        rng: &mut impl Rand,
+        config: &crate::simulation::MutationConfig,
+    ) {
+        self.mutate_internal(mutation, rng, config);
     }
 }
 
@@ -270,8 +311,9 @@ mod tests {
         let mut dna = create_test_dna();
         let initial_len = dna.genes.len();
         let initial_genes = dna.genes.clone();
+        let config = crate::simulation::MutationConfig::default();
 
-        dna.mutate_internal(MutationType::AddGene, &mut rng);
+        dna.mutate_internal(MutationType::AddGene, &mut rng, &config);
 
         assert_eq!(dna.genes.len(), initial_len + 1);
         let new_gene = &dna.genes[initial_len];
@@ -297,8 +339,9 @@ mod tests {
         let mut rng = Wyrand::default();
         let mut dna = create_test_dna();
         let initial_len = dna.genes.len();
+        let config = crate::simulation::MutationConfig::default();
 
-        dna.mutate_internal(MutationType::RemoveGene, &mut rng);
+        dna.mutate_internal(MutationType::RemoveGene, &mut rng, &config);
 
         assert_eq!(dna.genes.len(), initial_len - 1);
         // Check ids are renumbered correctly
@@ -317,8 +360,9 @@ mod tests {
         let mut rng = Wyrand::seed(1);
         let mut dna = create_test_dna();
         let initial_genes = dna.genes.clone();
+        let config = crate::simulation::MutationConfig::default();
 
-        dna.mutate_internal(MutationType::ChangeSegmentType, &mut rng);
+        dna.mutate_internal(MutationType::ChangeSegmentType, &mut rng, &config);
 
         // One gene should have changed segment type
         let mut changed_count = 0;
@@ -342,8 +386,9 @@ mod tests {
         let mut rng = Wyrand::default();
         let mut dna = create_test_dna();
         let initial_genes = dna.genes.clone();
+        let config = crate::simulation::MutationConfig::default();
 
-        dna.mutate_internal(MutationType::ChangeJump, &mut rng);
+        dna.mutate_internal(MutationType::ChangeJump, &mut rng, &config);
 
         // One gene should have changed jump
         let mut changed_count = 0;
@@ -361,10 +406,11 @@ mod tests {
     fn test_multiple_mutations() {
         let mut rng = Wyrand::default();
         let mut dna = create_test_dna();
+        let config = crate::simulation::MutationConfig::default();
 
         // Perform 10 mutations
         for _ in 0..10 {
-            dna.mutate(&mut rng);
+            dna.mutate(&mut rng, &config);
             assert!(is_valid_dna(&dna));
             // Length should be at least 1
             assert!(dna.genes.len() >= 1);
@@ -388,10 +434,11 @@ mod tests {
             }],
             current_gene: 0,
         };
+        let config = crate::simulation::MutationConfig::default();
 
         // Try remove on length 1, should not change
         let initial_len = dna.genes.len();
-        dna.mutate_internal(MutationType::RemoveGene, &mut rng);
+        dna.mutate_internal(MutationType::RemoveGene, &mut rng, &config);
         assert_eq!(dna.genes.len(), initial_len);
         assert!(is_valid_dna(&dna));
     }
@@ -471,7 +518,8 @@ mod tests {
             current_gene: 1,
         };
         let mut rng = Wyrand::default();
-        dna.mutate_internal(MutationType::RemoveGene, &mut rng);
+        let config = crate::simulation::MutationConfig::default();
+        dna.mutate_internal(MutationType::RemoveGene, &mut rng, &config);
         // With buggy code (>), jumps may be invalid, causing panic in build_segment
         let result = std::panic::catch_unwind(|| {
             let mut dna_clone = dna.clone();

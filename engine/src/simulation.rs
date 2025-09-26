@@ -115,6 +115,10 @@ pub struct MutationConfig {
     pub weight_reset_chance: f64,
     pub weight_reset_range: f32,
     pub perturb_reset_connections: bool,
+    pub disable_muscle: bool,
+    pub disable_solid: bool,
+    pub disable_solar: bool,
+    pub disable_stomach: bool,
 }
 
 impl Default for MutationConfig {
@@ -142,6 +146,10 @@ impl Default for MutationConfig {
             meat_vision_left_range: 3,
             meat_vision_right_range: 3,
             meat_vision_enabled: true,
+            disable_muscle: false,
+            disable_solid: false,
+            disable_solar: false,
+            disable_stomach: false,
         }
     }
 }
@@ -446,7 +454,7 @@ impl Simulation {
                                     self.world.get_resource_mut::<RngResource>().unwrap();
                                 let x = rng_temp.0.next_range(0..config.columns) as i32;
                                 let y = rng_temp.0.next_range(0..config.rows) as i32;
-                                let dna = Dna::random(&mut rng_temp.0, 8);
+                                let dna = Dna::random(&mut rng_temp.0, 8, &config.mutation);
                                 snake_data.push((x, y, dna));
                             }
                             let mut entities_to_spawn = vec![];
