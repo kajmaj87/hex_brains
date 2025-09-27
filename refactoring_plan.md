@@ -36,7 +36,8 @@
      - Completed: Moved mutation application functions (apply_connection_flip, apply_weight_perturbation, apply_weight_reset, apply_dna_mutation) from core.rs to new mutation.rs module. Exported in lib.rs. No unexpected choices; extraction was straightforward and preserved functionality.
 16. [x] Create `ui_helpers.rs` module in `gui/src/`.
      - Completed: Moved `add_drag_value` and `add_checkbox` helper functions from `main.rs` to new `ui_helpers.rs` module. Added module declaration and imports in `main.rs`. No unexpected choices; extraction was straightforward and preserved functionality.
-17. [ ] Modularize GUI into submodules.
+17. [x] Modularize GUI into submodules.
+     - Completed: Created windows.rs with render_*_window functions for each GUI window, and components.rs with render_vision_ranges. Moved code from main.rs render_windows method. No unexpected choices; extraction was straightforward and preserved all functionality.
 18. [ ] Optimize ECS queries for reduced duplication.
 19. [ ] Implement config builders and validation.
 20. [ ] Replace `BrainType` enum with `Brain` trait.

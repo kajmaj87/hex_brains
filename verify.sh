@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # List of commands to run
-commands=("cargo fmt" "cargo clippy -- -D warnings" "cargo check" "cargo build" "cargo build --target x86_64-pc-windows-gnu" "cargo test")
+commands=("cargo check" "cargo fmt" "cargo clippy -- -D warnings" "cargo test" "cargo build" "cargo build --target x86_64-pc-windows-gnu")
 
 # ANSI colors
 GREEN='\033[0;32m'
