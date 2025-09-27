@@ -8,7 +8,8 @@
      - Completed: Extracted `handle_commands`, `simulation_loop`, and `send_events` methods. `handle_commands` processes incoming commands per simulation step, `simulation_loop` performs stepping and collects FrameDrawn events, `send_events` sends all collected events including SimulationFinished. Logic preserved with improved separation of concerns.
  3. [x] Extract mutation application functions from `split` in `engine/src/core.rs`.
      - Completed: Created functions apply_connection_flip, apply_weight_perturbation, apply_weight_reset, apply_dna_mutation. Used &mut Wyrand for RNG to match neural methods. In split, replaced inline mutation calls with function calls, passing config values as needed. No unexpected choices; functions are simple wrappers for clarity and modularity.
- 4. [ ] Extract shared helper for available segment types in `engine/src/dna.rs`.
+ 4. [x] Extract shared helper for available segment types in `engine/src/dna.rs`.
+      - Completed: Added get_available_segment_types helper function to centralize config-based filtering of segment types, reducing duplication in random and mutate_internal methods. No unexpected choices; function simply encapsulates the filter logic.
  5. [ ] Extract shared helper for random connection index in `engine/src/neural.rs`.
  6. [ ] Split long test function in `engine/src/core.rs`.
  7. [ ] Break `update` method into sub-methods in `gui/src/main.rs`.

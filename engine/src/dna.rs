@@ -85,6 +85,17 @@ fn all_segment_types() -> [SegmentType; 4] {
         SegmentType::stomach(),
     ]
 }
+fn get_available_segment_types(config: &crate::simulation::MutationConfig) -> Vec<SegmentType> {
+    all_segment_types()
+        .into_iter()
+        .filter(|t| match t {
+            SegmentType::Muscle(_) => !config.disable_muscle,
+            SegmentType::Solid(_) => !config.disable_solid,
+            SegmentType::Solar(_) => !config.disable_solar,
+            SegmentType::Stomach(_) => !config.disable_stomach,
+        })
+        .collect()
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum MutationType {
@@ -114,15 +125,7 @@ impl Dna {
         config: &crate::simulation::MutationConfig,
     ) -> Dna {
         let mut genes = Vec::new();
-        let available_types: Vec<SegmentType> = all_segment_types()
-            .into_iter()
-            .filter(|t| match t {
-                SegmentType::Muscle(_) => !config.disable_muscle,
-                SegmentType::Solid(_) => !config.disable_solid,
-                SegmentType::Solar(_) => !config.disable_solar,
-                SegmentType::Stomach(_) => !config.disable_stomach,
-            })
-            .collect();
+        let available_types = get_available_segment_types(config);
         // If no types available, fall back to all types to avoid panic
         let available_types = if available_types.is_empty() {
             all_segment_types().to_vec()
@@ -161,15 +164,7 @@ impl Dna {
         rng: &mut impl Rand,
         config: &crate::simulation::MutationConfig,
     ) {
-        let available_types: Vec<SegmentType> = all_segment_types()
-            .into_iter()
-            .filter(|t| match t {
-                SegmentType::Muscle(_) => !config.disable_muscle,
-                SegmentType::Solid(_) => !config.disable_solid,
-                SegmentType::Solar(_) => !config.disable_solar,
-                SegmentType::Stomach(_) => !config.disable_stomach,
-            })
-            .collect();
+        let available_types = get_available_segment_types(config);
         match mutation {
             MutationType::AddGene => {
                 if !available_types.is_empty() {
