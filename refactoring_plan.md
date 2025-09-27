@@ -20,7 +20,8 @@
      - Completed: Added `add_drag_value` and `add_checkbox` helper functions, replaced inline UI code in settings windows with calls to these helpers for standardization and reduced duplication. No unexpected choices; helpers use the same tooltip for label and control.
  9. [x] Split `MyEguiApp` struct into sub-structs in `gui/src/main.rs`.
      - Completed: Created three sub-structs: `UiState` (window visibility and UI state), `PerformanceStats` (frame tracking and performance metrics), and `ConfigState` (configuration and data management). Updated `MyEguiApp` to use these sub-structs and systematically updated all field accesses throughout the file. Improved code organization by grouping related fields with clear separation of concerns.
-10. [ ] Extract drawing functions to a new module in `gui/src/`.
+10. [x] Extract drawing functions to a new module in `gui/src/`.
+     - Completed: Created `drawing.rs` with `draw_hexes`, `draw_neural_network`, `get_node_position`, `transform_to_circle`, `with_alpha`, and `u32_to_color` functions. Moved all drawing logic from `main.rs` to the new module and updated all function calls and tests to use the drawing module. No unexpected choices; extraction was straightforward and preserved all functionality.
 11. [ ] Introduce `CommandDispatcher` for engine commands in `gui/src/main.rs`.
 12. [ ] Define constants for magic numbers in `gui/src/main.rs`.
 13. [ ] Simplify complex conditionals in GUI rendering.
