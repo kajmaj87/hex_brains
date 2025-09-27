@@ -2,8 +2,8 @@ use bevy_ecs::prelude::*;
 use hex_brains_engine::core::ScentMap as SimScentMap;
 use hex_brains_engine::core::{
     assign_missing_segments, assign_segment_positions, assign_species, create_snake, grow, split,
-    BrainType, Food, FoodMap as SimFoodMap, Map2d, Map3d, Position, RandomNeuralBrain, SegmentMap,
-    Snake, SolidsMap, Species,
+    Food, FoodMap as SimFoodMap, Map2d, Map3d, Position, RandomNeuralBrain, SegmentMap, Snake,
+    SolidsMap, Species,
 };
 use hex_brains_engine::dna::{Dna, Gene, MutationType, SegmentType};
 use hex_brains_engine::neural::{InnovationTracker, NeuralNetwork};
@@ -52,7 +52,7 @@ fn test_agent_reproduction_and_splitting_size_one() {
     // Create and spawn initial snake with sufficient energy
     let mut rng = tinyrand::Wyrand::seed(42);
     let initial_dna = Dna::random(&mut rng, 5, &MutationConfig::default());
-    let brain = BrainType::Neural(RandomNeuralBrain::new(&mut innovation_tracker, &mut rng));
+    let brain = Box::new(RandomNeuralBrain::new(&mut innovation_tracker, &mut rng));
     let (pos, meat, snake, age, justborn) = create_snake(
         200.0,  // High energy to test halving
         (5, 5), // Central position
@@ -316,7 +316,7 @@ fn test_grow_panic_index_out_of_bounds() {
     // Now dna has 4 genes, current_gene=4 is out of bounds
 
     let mut rng = tinyrand::Wyrand::seed(42);
-    let brain = BrainType::Neural(RandomNeuralBrain::new(
+    let brain = Box::new(RandomNeuralBrain::new(
         world.resource_mut::<InnovationTracker>().as_mut(),
         &mut rng,
     ));

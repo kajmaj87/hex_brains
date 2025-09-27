@@ -42,7 +42,8 @@
      - Created SensoryCache resource to cache sensory inputs computed once per frame, reducing duplication in think system and enabling potential reuse by other systems.
 19. [x] Implement config builders and validation.
      - Completed: Added MutationConfigBuilder and SimulationConfigBuilder structs with fluent methods for all fields and build() methods performing validation. Validation includes range checks for probabilities (0-1), positive values for costs/ranges, and non-zero dimensions. No unexpected choices; builders use defaults from Default impls.
-20. [ ] Replace `BrainType` enum with `Brain` trait.
+20. [x] Replace `BrainType` enum with `Brain` trait.
+     - Completed: Defined `Brain` trait with `decide` and `get_neural_network` methods, implemented for `RandomBrain` and `RandomNeuralBrain`. Changed `Snake.brain` to `Box<dyn Brain>`, updated all usages to use `Box::new` for brain creation. Used `&mut dyn Rand` in trait to make it object-safe. No unexpected choices; trait allows polymorphism for future brain types.
 21. [ ] Add proper error handling for neural operations.
 22. [ ] Split MyEguiApp struct and implementation into app.rs.
 23. [ ] Extract UI state structs into ui_state.rs.

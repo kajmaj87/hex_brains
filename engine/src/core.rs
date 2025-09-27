@@ -52,26 +52,9 @@ pub enum Decision {
     Wait,
 }
 
-#[derive(Debug, Clone)]
-pub enum BrainType {
-    Random(RandomBrain),
-    Neural(RandomNeuralBrain),
-}
-
-impl BrainType {
-    pub fn decide(&self, sensory_input: Vec<f32>, rng: &mut impl Rand) -> Decision {
-        match self {
-            BrainType::Random(brain) => brain.decide(sensory_input, rng),
-            BrainType::Neural(brain) => brain.decide(sensory_input, rng),
-        }
-    }
-
-    pub fn get_neural_network(&self) -> Option<&NeuralNetwork> {
-        match self {
-            BrainType::Random(brain) => brain.get_neural_network(),
-            BrainType::Neural(brain) => brain.get_neural_network(),
-        }
-    }
+pub trait Brain: Send + Sync + Debug {
+    fn decide(&self, sensory_input: Vec<f32>, rng: &mut dyn Rand) -> Decision;
+    fn get_neural_network(&self) -> Option<&NeuralNetwork>;
 }
 
 // Snake represents the head segment of snake and info about its other segments
@@ -92,7 +75,7 @@ pub struct Species {
 pub struct Snake {
     pub direction: Direction,
     pub decision: Decision,
-    pub brain: BrainType,
+    pub brain: Box<dyn Brain>,
     pub new_position: (i32, i32),
     pub last_position: (i32, i32),
     pub segments: Vec<Entity>,
@@ -171,10 +154,10 @@ pub struct JustBorn;
 #[derive(Debug, Clone)]
 pub struct RandomBrain;
 
-impl RandomBrain {
-    pub fn decide(&self, _sensory_input: Vec<f32>, rng: &mut impl Rand) -> Decision {
-        let val = rng.next_range(0u32..4u32);
-        match val as i32 {
+impl Brain for RandomBrain {
+    fn decide(&self, _sensory_input: Vec<f32>, rng: &mut dyn Rand) -> Decision {
+        let val = (rng.next_u64() % 4) as i32;
+        match val {
             0 => Decision::MoveForward,
             1 => Decision::MoveLeft,
             2 => Decision::MoveRight,
@@ -182,7 +165,7 @@ impl RandomBrain {
         }
     }
 
-    pub fn get_neural_network(&self) -> Option<&NeuralNetwork> {
+    fn get_neural_network(&self) -> Option<&NeuralNetwork> {
         None
     }
 }
@@ -198,16 +181,8 @@ pub struct Age {
     pub efficiency_factor: f32,
 }
 
-impl RandomNeuralBrain {
-    pub fn new(innovation_tracker: &mut InnovationTracker, rng: &mut impl Rand) -> Self {
-        let neural_network = NeuralNetwork::random_brain(18, 0.1, innovation_tracker, rng);
-        Self { neural_network }
-    }
-    pub fn from_neural_network(neural_network: NeuralNetwork) -> Self {
-        Self { neural_network }
-    }
-
-    pub fn decide(&self, sensor_input: Vec<f32>, _rng: &mut impl Rand) -> Decision {
+impl Brain for RandomNeuralBrain {
+    fn decide(&self, sensor_input: Vec<f32>, _rng: &mut dyn Rand) -> Decision {
         let sensor_input = sensor_input
             .iter()
             .enumerate()
@@ -234,8 +209,18 @@ impl RandomNeuralBrain {
         }
     }
 
-    pub fn get_neural_network(&self) -> Option<&NeuralNetwork> {
+    fn get_neural_network(&self) -> Option<&NeuralNetwork> {
         Some(&self.neural_network)
+    }
+}
+
+impl RandomNeuralBrain {
+    pub fn new(innovation_tracker: &mut InnovationTracker, rng: &mut impl Rand) -> Self {
+        let neural_network = NeuralNetwork::random_brain(18, 0.1, innovation_tracker, rng);
+        Self { neural_network }
+    }
+    pub fn from_neural_network(neural_network: NeuralNetwork) -> Self {
+        Self { neural_network }
     }
 }
 
@@ -1001,7 +986,7 @@ pub fn split(
             // new_snake_segments.reverse();
             let (mut new_snake, new_age, new_justborn) = create_head(
                 (new_head_position.x, new_head_position.y),
-                BrainType::Neural(RandomNeuralBrain::from_neural_network(new_neural_network)),
+                Box::new(RandomNeuralBrain::from_neural_network(new_neural_network)),
                 snake.generation + 1,
                 mutations,
                 dna,
@@ -1320,7 +1305,7 @@ fn calculate_gene_difference(leader: &NeuralNetwork, new_snake: &NeuralNetwork) 
 pub fn create_snake(
     meat_matter: f32,
     position: (i32, i32),
-    brain: BrainType,
+    brain: Box<dyn Brain>,
     dna: Dna,
     rng: &mut impl Rand,
 ) -> (Position, MeatMatter, Snake, Age, JustBorn) {
@@ -1344,7 +1329,7 @@ pub fn create_snake(
 
 fn create_head(
     position: (i32, i32),
-    brain: BrainType,
+    brain: Box<dyn Brain>,
     generation: u32,
     mutations: u32,
     dna: Dna,
@@ -1432,7 +1417,7 @@ mod tests {
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::MoveForward,
-            brain: BrainType::Random(RandomBrain {}),
+            brain: Box::new(RandomBrain {}),
             new_position: (0, 0),
             last_position: (0, 0),
             segments: vec![],
@@ -1490,7 +1475,7 @@ mod tests {
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::Wait,
-            brain: BrainType::Random(RandomBrain {}),
+            brain: Box::new(RandomBrain {}),
             new_position: (0, 0),
             last_position: (0, 0),
             segments: vec![],
@@ -1547,7 +1532,7 @@ mod tests {
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::MoveLeft,
-            brain: BrainType::Random(RandomBrain {}),
+            brain: Box::new(RandomBrain {}),
             new_position: (0, 0),
             last_position: (0, 0),
             segments: vec![],
@@ -1605,7 +1590,7 @@ mod tests {
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::MoveRight,
-            brain: BrainType::Random(RandomBrain {}),
+            brain: Box::new(RandomBrain {}),
             new_position: (0, 0),
             last_position: (0, 0),
             segments: vec![],
@@ -1668,7 +1653,7 @@ mod tests {
 
         let mut innovation_tracker = InnovationTracker::new();
         let mut rng_resource = world.resource_mut::<crate::simulation::RngResource>();
-        let brain = BrainType::Neural(RandomNeuralBrain::new(
+        let brain = Box::new(RandomNeuralBrain::new(
             &mut innovation_tracker,
             &mut rng_resource.rng,
         ));
@@ -1737,7 +1722,7 @@ mod tests {
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::MoveForward,
-            brain: BrainType::Random(RandomBrain {}),
+            brain: Box::new(RandomBrain {}),
             new_position: (4, 0),
             last_position: (4, 0),
             segments: vec![],
@@ -1814,7 +1799,7 @@ mod tests {
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::MoveForward,
-            brain: BrainType::Random(RandomBrain {}),
+            brain: Box::new(RandomBrain {}),
             new_position: (0, 0),
             last_position: (0, 0),
             segments: vec![],
@@ -1863,7 +1848,7 @@ mod tests {
 
         let mut nn = NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
         nn.add_connection(0, 21, 2.0, true, 0);
-        let brain = BrainType::Neural(RandomNeuralBrain::from_neural_network(nn));
+        let brain = Box::new(RandomNeuralBrain::from_neural_network(nn));
         let dna = Dna {
             genes: vec![Gene {
                 segment_type: SegmentType::solar(),
@@ -1908,7 +1893,7 @@ mod tests {
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::Wait,
-            brain: BrainType::Random(RandomBrain {}),
+            brain: Box::new(RandomBrain {}),
             new_position: (0, 0),
             last_position: (0, 0),
             segments: vec![],
@@ -1971,7 +1956,7 @@ mod tests {
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::Wait,
-            brain: BrainType::Random(RandomBrain {}),
+            brain: Box::new(RandomBrain {}),
             new_position: (0, 0),
             last_position: (0, 0),
             segments: vec![],
@@ -2023,7 +2008,7 @@ mod tests {
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::Wait,
-            brain: BrainType::Random(RandomBrain {}),
+            brain: Box::new(RandomBrain {}),
             new_position: (0, 0),
             last_position: (0, 0),
             segments: vec![],
@@ -2066,7 +2051,7 @@ mod tests {
         world.insert_resource(config);
 
         let nn = NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
-        let brain = BrainType::Neural(RandomNeuralBrain::from_neural_network(nn));
+        let brain = Box::new(RandomNeuralBrain::from_neural_network(nn));
         let dna = Dna {
             genes: vec![Gene {
                 segment_type: SegmentType::solar(),
@@ -2122,7 +2107,7 @@ mod tests {
         let mut rng_resource = world.resource_mut::<crate::simulation::RngResource>();
         let mut nn = NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
         nn.add_connection(0, 21, 2.0, true, 0);
-        let brain = BrainType::Neural(RandomNeuralBrain::from_neural_network(nn));
+        let brain = Box::new(RandomNeuralBrain::from_neural_network(nn));
         let snake = Snake {
             direction: Direction::East,
             decision: Decision::Wait,
@@ -2206,7 +2191,7 @@ mod tests {
         // Create normal snake
         let mut nn = NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
         nn.add_connection(0, 21, 2.0, true, 0);
-        let normal_brain = BrainType::Neural(RandomNeuralBrain::from_neural_network(nn.clone()));
+        let normal_brain = Box::new(RandomNeuralBrain::from_neural_network(nn.clone()));
         let (mut normal_snake, normal_age, normal_justborn) = create_head(
             (0, 0),
             normal_brain,
@@ -2234,7 +2219,7 @@ mod tests {
         normal_snake.metabolism.segment_basic_cost = 0.0; // solar
 
         // Create mutated snake
-        let mutated_brain = BrainType::Neural(RandomNeuralBrain::from_neural_network(nn));
+        let mutated_brain = Box::new(RandomNeuralBrain::from_neural_network(nn));
         let (mut mutated_snake, mutated_age, mutated_justborn) = create_head(
             (1, 0),
             mutated_brain,

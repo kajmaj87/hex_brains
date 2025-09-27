@@ -9,8 +9,8 @@ use crate::core::{
     RandomNeuralBrain, Species,
 };
 use crate::core::{
-    assign_segment_positions, despawn_food, incease_move_potential, process_food, BrainType, Food,
-    Map2d, Map3d, ScentMap, SegmentMap,
+    assign_segment_positions, despawn_food, incease_move_potential, process_food, Food, Map2d,
+    Map3d, ScentMap, SegmentMap,
 };
 use crate::dna::{Dna, SegmentType};
 use crate::neural::InnovationTracker;
@@ -941,7 +941,7 @@ impl Simulation {
                         let mut rng_resource = self.world.remove_resource::<RngResource>().unwrap();
                         {
                             for (x, y, dna) in snake_data {
-                                let brain = BrainType::Neural(RandomNeuralBrain::new(
+                                let brain = Box::new(RandomNeuralBrain::new(
                                     &mut innovation_tracker,
                                     &mut rng_resource.rng,
                                 ));
