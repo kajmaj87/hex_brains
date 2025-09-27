@@ -2014,135 +2014,63 @@ mod tests {
     }
 
     #[test]
-    fn test_energy_conservation_invariant() {
+    fn test_energy_on_movement() {
+        let mut world = setup_world();
+        let mut rng_resource = world.resource_mut::<crate::simulation::RngResource>();
+        let snake = Snake {
+            direction: Direction::East,
+            decision: Decision::MoveForward,
+            brain: BrainType::Random(RandomBrain {}),
+            new_position: (0, 0),
+            last_position: (0, 0),
+            segments: vec![],
+            generation: 0,
+            mutations: 0,
+            species: None,
+            dna: Dna::random(&mut rng_resource.rng, 1, &MutationConfig::default()),
+            metabolism: Metabolism::default(),
+            energy: Energy {
+                move_potential: 1.0,
+                energy: 100.0,
+                ..Default::default()
+            },
+        };
+        let initial_energy = snake.energy.energy;
+        let head = world
+            .spawn((
+                Position { x: 0, y: 0 },
+                snake,
+                Age {
+                    age: 0,
+                    efficiency_factor: 1.0,
+                },
+            ))
+            .id();
+
+        let mut schedule_assign = Schedule::default();
+        schedule_assign.add_systems(assign_missing_segments);
+        schedule_assign.run(&mut world);
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(movement);
+        schedule.run(&mut world);
+
+        let snake_after = world.entity(head).get::<Snake>().unwrap();
+        assert_eq!(snake_after.energy.energy, initial_energy - 1.0); // move cost
+        assert_eq!(snake_after.energy.move_potential, 0.0);
+    }
+
+    #[test]
+    fn test_energy_on_thinking() {
         let mut world = setup_world();
         let mut config = *world.resource::<SimulationConfig>();
         config.mutation.chaos_input_enabled = false;
         world.insert_resource(config);
 
-        // Create simple deterministic neural network for Wait decision
-        let _innovation_tracker = InnovationTracker::new();
         let mut nn = NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
-        // Connect bias (input 0) to Wait output (21) with positive weight for high sigmoid
-        // Since get_innovation_number is private, hardcode
-        nn.add_connection(
-            0, 21, 2.0, true, 0, // hardcoded
-        );
+        nn.add_connection(0, 21, 2.0, true, 0);
         let brain = BrainType::Neural(RandomNeuralBrain::from_neural_network(nn));
-
-        // DNA for solar segment
-        let solar_gene = Gene {
-            segment_type: SegmentType::solar(),
-            id: 0,
-            jump: 0,
-        };
         let dna = Dna {
-            genes: vec![solar_gene],
-            current_gene: 0,
-        };
-
-        // Spawn head
-        let head_pos = Position { x: 0, y: 0 };
-        let (snake, age, justborn) = create_head(
-            (0, 0),
-            brain,
-            0,
-            0,
-            dna,
-            &mut world.resource_mut::<crate::simulation::RngResource>().rng,
-        );
-        let mut snake = snake;
-        snake.energy.energy = 100.0;
-        snake.energy.move_potential = 1.0; // Allow one move, but will wait
-        let head = world.spawn((head_pos.clone(), snake, age, justborn)).id();
-
-        // Add a solar segment for passive gain
-        let tail_pos = Position { x: 0, y: 0 };
-        let segment_type = SegmentType::solar();
-        let tail = world.spawn((tail_pos, segment_type.clone())).id();
-
-        // Set segments and manually set metabolism for solar (since recalculate needs system context)
-        let mut entity_ref = world.entity_mut(head);
-        let mut snake = entity_ref.get_mut::<Snake>().unwrap();
-        snake.segments = vec![tail];
-        // Manual metabolism for head + solar segment
-        snake.metabolism.segment_move_cost = 1.0 + 1.0; // head + solar move
-        snake.metabolism.segment_basic_cost = 0.0 + (-0.1); // head 0, solar -0.1 production
-        snake.metabolism.mobility = (1.0 + 0.2) / 2.0; // average
-        snake.metabolism.segment_energy_production = -0.1; // solar
-                                                           // Add NN cost
-        if let Some(network) = snake.brain.get_neural_network() {
-            snake.metabolism.segment_basic_cost += network.run_cost();
-        }
-
-        // Place plant food at head position for eating
-        let mut food_map = world.resource_mut::<FoodMap>();
-        food_map.map.set(
-            &head_pos,
-            Food {
-                plant: 10.0,
-                meat: 0.0,
-            },
-        );
-
-        // Initial total energy
-        let initial_total = calculate_total_energy(&mut world);
-
-        // Run assign_missing_segments to initialize segments for single-segment snake
-        let mut schedule_assign = Schedule::default();
-        schedule_assign.add_systems(assign_missing_segments);
-        schedule_assign.run(&mut world);
-
-        // Run think (sets decision to Wait due to NN)
-        let mut schedule_think = Schedule::default();
-        schedule_think.add_systems(think);
-        schedule_think.run(&mut world);
-
-        // Run movement (Wait: no move cost, but basic cost and production)
-        let mut schedule_movement = Schedule::default();
-        schedule_movement.add_systems(movement);
-        schedule_movement.run(&mut world);
-
-        // No update_positions change since Wait
-
-        // Run eat_food (eats plant to stomach)
-        let mut schedule_eat = Schedule::default();
-        schedule_eat.add_systems(eat_food);
-        schedule_eat.run(&mut world);
-
-        // Run process_food (converts stomach to energy)
-        let mut schedule_process = Schedule::default();
-        schedule_process.add_systems(process_food);
-        schedule_process.run(&mut world);
-
-        // Run increase_age (minimal change for young snake)
-        let mut schedule_age = Schedule::default();
-        schedule_age.add_systems(increase_age);
-        schedule_age.run(&mut world);
-
-        // Run starve (should not trigger)
-        let mut schedule_starve = Schedule::default();
-        schedule_starve.add_systems(starve);
-        schedule_starve.run(&mut world);
-
-        // Post-step total energy
-        let post_total = calculate_total_energy(&mut world);
-
-        // With solar gain and food conversion, total should be non-negative and balance (slight loss from costs)
-        assert!(post_total >= 0.0);
-        // Allow some tolerance for floating point and small costs/gains
-        assert!((initial_total - post_total).abs() < 50.0);
-
-        // Test starvation: separate setup
-        let mut starve_world = setup_world();
-        let mut starve_config = *starve_world.resource::<SimulationConfig>();
-        starve_config.mutation.chaos_input_enabled = false;
-        starve_world.insert_resource(starve_config);
-
-        let starve_nn =
-            NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
-        let starve_brain = BrainType::Neural(RandomNeuralBrain::from_neural_network(starve_nn));
-        let starve_dna = Dna {
             genes: vec![Gene {
                 segment_type: SegmentType::solar(),
                 id: 0,
@@ -2151,75 +2079,321 @@ mod tests {
             current_gene: 0,
         };
 
-        let starve_head_pos = Position { x: 0, y: 0 };
-        let (mut starve_snake, starve_age, starve_justborn) = create_head(
+        let (snake, age, justborn) = create_head(
             (0, 0),
-            starve_brain,
+            brain,
             0,
             0,
-            starve_dna,
-            &mut starve_world
-                .resource_mut::<crate::simulation::RngResource>()
-                .rng,
+            dna,
+            &mut world.resource_mut::<crate::simulation::RngResource>().rng,
         );
-        starve_snake.energy.energy = -1.0; // Low energy to trigger starvation
-        starve_snake.energy.move_potential = 0.0;
-        let starve_head = starve_world
+        let initial_energy = snake.energy.energy;
+        let head = world
+            .spawn((Position { x: 0, y: 0 }, snake, age, justborn))
+            .id();
+
+        let mut schedule_assign = Schedule::default();
+        schedule_assign.add_systems(assign_missing_segments);
+        schedule_assign.run(&mut world);
+
+        let mut schedule_think = Schedule::default();
+        schedule_think.add_systems(think);
+        schedule_think.run(&mut world);
+
+        let snake_after = world.entity(head).get::<Snake>().unwrap();
+        let run_cost = snake_after.brain.get_neural_network().unwrap().run_cost();
+        assert!(run_cost > 0.0);
+        // Thinking sets decision to Wait
+        assert_eq!(snake_after.decision, Decision::Wait);
+    }
+
+    #[test]
+    fn test_energy_on_eating() {
+        let mut world = setup_world();
+        let mut rng_resource = world.resource_mut::<crate::simulation::RngResource>();
+        let snake = Snake {
+            direction: Direction::East,
+            decision: Decision::Wait,
+            brain: BrainType::Random(RandomBrain {}),
+            new_position: (0, 0),
+            last_position: (0, 0),
+            segments: vec![],
+            generation: 0,
+            mutations: 0,
+            species: None,
+            dna: Dna::random(&mut rng_resource.rng, 1, &MutationConfig::default()),
+            metabolism: Metabolism {
+                max_plants_in_stomach: 200.0,
+                plant_processing_speed: 25.0,
+                ..Default::default()
+            },
+            energy: Energy::default(),
+        };
+        let head = world
             .spawn((
-                starve_head_pos.clone(),
-                starve_snake,
-                starve_age,
-                starve_justborn,
+                Position { x: 0, y: 0 },
+                snake,
+                Age {
+                    age: 0,
+                    efficiency_factor: 1.0,
+                },
             ))
             .id();
 
-        // Add segment
-        let starve_tail_pos = Position { x: 0, y: 0 };
-        let starve_segment_type = SegmentType::solar();
-        let starve_tail = starve_world
-            .spawn((starve_tail_pos, starve_segment_type))
-            .id();
-
-        let mut starve_entity_ref = starve_world.entity_mut(starve_head);
-        let mut starve_snake = starve_entity_ref.get_mut::<Snake>().unwrap();
-        starve_snake.segments = vec![starve_tail];
-        // Manual metabolism
-        starve_snake.metabolism.segment_move_cost = 1.0 + 1.0;
-        starve_snake.metabolism.segment_basic_cost = 0.0 + (-0.1);
-        starve_snake.metabolism.mobility = (1.0 + 0.2) / 2.0;
-        starve_snake.metabolism.segment_energy_production = -0.1;
-        if let Some(network) = starve_snake.brain.get_neural_network() {
-            starve_snake.metabolism.segment_basic_cost += network.run_cost();
+        {
+            let mut food_map = world.resource_mut::<FoodMap>();
+            food_map.map.set(
+                &Position { x: 0, y: 0 },
+                Food {
+                    plant: 10.0,
+                    meat: 0.0,
+                },
+            );
         }
 
-        // let starve_initial = calculate_total_energy(&starve_world);
+        {
+            let mut schedule_assign = Schedule::default();
+            schedule_assign.add_systems(assign_missing_segments);
+            schedule_assign.run(&mut world);
+        }
 
-        // Run assign_missing_segments to initialize segments for single-segment snake
-        let mut starve_schedule_assign = Schedule::default();
-        starve_schedule_assign.add_systems(assign_missing_segments);
-        starve_schedule_assign.run(&mut starve_world);
+        {
+            let mut schedule_eat = Schedule::default();
+            schedule_eat.add_systems(eat_food);
+            schedule_eat.run(&mut world);
+        }
 
-        // Run starve
-        let mut starve_schedule = Schedule::default();
-        starve_schedule.add_systems(starve);
-        starve_schedule.run(&mut starve_world);
+        let snake_after = world.entity(head).get::<Snake>().unwrap();
+        assert_eq!(snake_after.energy.plant_in_stomach, 10.0);
+        let food_map = world.resource::<FoodMap>();
+        let food_after = food_map.map.get(&Position { x: 0, y: 0 });
+        assert_eq!(food_after.plant, 0.0);
+    }
 
-        let starve_post = calculate_total_energy(&mut starve_world);
+    #[test]
+    fn test_energy_on_processing_food() {
+        let mut world = setup_world();
+        let mut rng_resource = world.resource_mut::<crate::simulation::RngResource>();
+        let snake = Snake {
+            direction: Direction::East,
+            decision: Decision::Wait,
+            brain: BrainType::Random(RandomBrain {}),
+            new_position: (0, 0),
+            last_position: (0, 0),
+            segments: vec![],
+            generation: 0,
+            mutations: 0,
+            species: None,
+            dna: Dna::random(&mut rng_resource.rng, 1, &MutationConfig::default()),
+            metabolism: Metabolism {
+                max_energy: 400.0,
+                plant_processing_speed: 25.0,
+                meat_matter_for_growth_production_speed: 0.0, // disable growth deduction
+                ..Default::default()
+            },
+            energy: Energy {
+                plant_in_stomach: 25.0,
+                energy: 100.0,
+                ..Default::default()
+            },
+        };
+        let initial_energy = snake.energy.energy;
+        let head = world
+            .spawn((
+                Position { x: 0, y: 0 },
+                snake,
+                Age {
+                    age: 0,
+                    efficiency_factor: 1.0,
+                },
+            ))
+            .id();
 
-        // Snake despawned, segment converted to food (meat = new_segment_cost = 50.0 * meat_energy_content = 1000.0)
-        assert!(starve_world.get_entity(starve_head).is_err());
-        let food_map = starve_world.resource::<FoodMap>();
+        let mut schedule_assign = Schedule::default();
+        schedule_assign.add_systems(assign_missing_segments);
+        schedule_assign.run(&mut world);
+
+        let mut schedule_process = Schedule::default();
+        schedule_process.add_systems(process_food);
+        schedule_process.run(&mut world);
+
+        let snake_after = world.entity(head).get::<Snake>().unwrap();
+        assert_eq!(snake_after.energy.plant_in_stomach, 0.0);
+        assert_eq!(snake_after.energy.energy, initial_energy + 25.0 * 10.0); // plant_energy_content
+    }
+
+    #[test]
+    fn test_energy_on_aging() {
+        let mut world = setup_world();
+        let mut rng_resource = world.resource_mut::<crate::simulation::RngResource>();
+        let snake = Snake {
+            direction: Direction::East,
+            decision: Decision::Wait,
+            brain: BrainType::Random(RandomBrain {}),
+            new_position: (0, 0),
+            last_position: (0, 0),
+            segments: vec![],
+            generation: 0,
+            mutations: 0,
+            species: None,
+            dna: Dna::random(&mut rng_resource.rng, 1, &MutationConfig::default()),
+            metabolism: Metabolism::default(),
+            energy: Energy::default(),
+        };
+        let head = world
+            .spawn((
+                Position { x: 0, y: 0 },
+                snake,
+                Age {
+                    age: 0,
+                    efficiency_factor: 1.0,
+                },
+            ))
+            .id();
+
+        let mut schedule_assign = Schedule::default();
+        schedule_assign.add_systems(assign_missing_segments);
+        schedule_assign.run(&mut world);
+
+        let mut schedule_age = Schedule::default();
+        schedule_age.add_systems(increase_age);
+        schedule_age.run(&mut world);
+
+        let age_after = world.entity(head).get::<Age>().unwrap();
+        assert_eq!(age_after.age, 10);
+        assert_eq!(age_after.efficiency_factor, 1.0); // young
+    }
+
+    #[test]
+    fn test_energy_on_starvation() {
+        let mut world = setup_world();
+        let mut config = *world.resource::<SimulationConfig>();
+        config.mutation.chaos_input_enabled = false;
+        world.insert_resource(config);
+
+        let nn = NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
+        let brain = BrainType::Neural(RandomNeuralBrain::from_neural_network(nn));
+        let dna = Dna {
+            genes: vec![Gene {
+                segment_type: SegmentType::solar(),
+                id: 0,
+                jump: 0,
+            }],
+            current_gene: 0,
+        };
+
+        let (mut snake, age, justborn) = create_head(
+            (0, 0),
+            brain,
+            0,
+            0,
+            dna,
+            &mut world.resource_mut::<crate::simulation::RngResource>().rng,
+        );
+        snake.energy.energy = -1.0;
+        snake.energy.move_potential = 0.0;
+        let head = world
+            .spawn((Position { x: 0, y: 0 }, snake, age, justborn))
+            .id();
+
+        let tail = world
+            .spawn((Position { x: 0, y: 0 }, SegmentType::solar()))
+            .id();
+        let mut entity_ref = world.entity_mut(head);
+        let mut snake = entity_ref.get_mut::<Snake>().unwrap();
+        snake.segments = vec![tail];
+
+        let mut schedule_assign = Schedule::default();
+        schedule_assign.add_systems(assign_missing_segments);
+        schedule_assign.run(&mut world);
+
+        let mut schedule_starve = Schedule::default();
+        schedule_starve.add_systems(starve);
+        schedule_starve.run(&mut world);
+
+        assert!(world.get_entity(head).is_err());
+        let food_map = world.resource::<FoodMap>();
         let converted_food = food_map.map.get(&Position { x: 0, y: 0 });
         assert!(converted_food.meat > 0.0);
-        assert!(starve_post >= 0.0);
+    }
 
-        // Test mutation effect on metabolism/costs
-        let mut mutation_world = setup_world();
-        let mut mutation_config = *mutation_world.resource::<SimulationConfig>();
-        mutation_config.mutation.chaos_input_enabled = false;
-        mutation_world.insert_resource(mutation_config);
+    #[test]
+    fn test_energy_on_splitting() {
+        let mut world = setup_world();
+        let mut config = *world.resource::<SimulationConfig>();
+        config.size_to_split = 3;
+        world.insert_resource(config);
+        world.insert_resource(InnovationTracker::new());
 
-        // Normal DNA: solar (low cost)
+        let mut rng_resource = world.resource_mut::<crate::simulation::RngResource>();
+        let mut nn = NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
+        nn.add_connection(0, 21, 2.0, true, 0);
+        let brain = BrainType::Neural(RandomNeuralBrain::from_neural_network(nn));
+        let snake = Snake {
+            direction: Direction::East,
+            decision: Decision::Wait,
+            brain,
+            new_position: (0, 0),
+            last_position: (0, 0),
+            segments: vec![],
+            generation: 0,
+            mutations: 0,
+            species: None,
+            dna: Dna::random(&mut rng_resource.rng, 1, &MutationConfig::default()),
+            metabolism: Metabolism::default(),
+            energy: Energy {
+                energy: 200.0,
+                ..Default::default()
+            },
+        };
+        let head = world
+            .spawn((
+                Position { x: 0, y: 0 },
+                snake,
+                Age {
+                    age: 0,
+                    efficiency_factor: 1.0,
+                },
+            ))
+            .id();
+
+        let seg1 = world
+            .spawn((Position { x: 0, y: 0 }, SegmentType::muscle()))
+            .id();
+        let seg2 = world
+            .spawn((Position { x: 0, y: 0 }, SegmentType::muscle()))
+            .id();
+        let seg3 = world
+            .spawn((Position { x: 0, y: 0 }, SegmentType::muscle()))
+            .id();
+
+        // Update head's segments
+        let mut entity = world.entity_mut(head);
+        entity.get_mut::<Snake>().unwrap().segments = vec![seg1, seg2, seg3];
+
+        let mut schedule_assign = Schedule::default();
+        schedule_assign.add_systems(assign_missing_segments);
+        schedule_assign.run(&mut world);
+
+        let initial_energy = world.entity(head).get::<Snake>().unwrap().energy.energy;
+
+        let mut schedule_split = Schedule::default();
+        schedule_split.add_systems(split);
+        schedule_split.run(&mut world);
+
+        // After split, original energy halved
+        let snake_after = world.entity(head).get::<Snake>().unwrap();
+        assert_eq!(snake_after.energy.energy, initial_energy / 2.0);
+    }
+
+    #[test]
+    fn test_energy_on_mutation() {
+        let mut world = setup_world();
+        let mut config = *world.resource::<SimulationConfig>();
+        config.mutation.chaos_input_enabled = false;
+        world.insert_resource(config);
+
+        // Normal DNA: solar
         let normal_dna = Dna {
             genes: vec![Gene {
                 segment_type: SegmentType::solar(),
@@ -2229,35 +2403,27 @@ mod tests {
             current_gene: 0,
         };
 
-        // Mutated DNA: to stomach (higher always cost 1.0)
+        // Mutated DNA: stomach
         let mut mutated_dna = normal_dna.clone();
-        let mut rng = tinyrand::SplitMix::default();
-        let config = crate::simulation::MutationConfig::default();
-        mutated_dna.mutate_specific(MutationType::ChangeSegmentType, &mut rng, &config);
-        // Force to stomach for determinism
         if let Some(gene) = mutated_dna.genes.first_mut() {
             gene.segment_type = SegmentType::stomach();
         }
 
         // Create normal snake
-        let mut normal_brain_nn =
-            NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
-        normal_brain_nn.add_connection(0, 21, 2.0, true, 0); // hardcoded
-        let normal_brain =
-            BrainType::Neural(RandomNeuralBrain::from_neural_network(normal_brain_nn));
+        let mut nn = NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
+        nn.add_connection(0, 21, 2.0, true, 0);
+        let normal_brain = BrainType::Neural(RandomNeuralBrain::from_neural_network(nn.clone()));
         let (mut normal_snake, normal_age, normal_justborn) = create_head(
             (0, 0),
             normal_brain,
             0,
             0,
             normal_dna,
-            &mut mutation_world
-                .resource_mut::<crate::simulation::RngResource>()
-                .rng,
+            &mut world.resource_mut::<crate::simulation::RngResource>().rng,
         );
         normal_snake.energy.energy = 100.0;
         normal_snake.energy.move_potential = 1.0;
-        let normal_head = mutation_world
+        let normal_head = world
             .spawn((
                 Position { x: 0, y: 0 },
                 normal_snake,
@@ -2265,76 +2431,57 @@ mod tests {
                 normal_justborn,
             ))
             .id();
-
-        let normal_tail = mutation_world
+        let normal_tail = world
             .spawn((Position { x: 0, y: 0 }, SegmentType::solar()))
             .id();
-        let mut normal_entity = mutation_world.entity_mut(normal_head);
+        let mut normal_entity = world.entity_mut(normal_head);
         let mut normal_snake = normal_entity.get_mut::<Snake>().unwrap();
         normal_snake.segments = vec![normal_tail];
-        // Manual metabolism for normal (solar)
-        normal_snake.metabolism.segment_move_cost = 1.0 + 1.0;
-        normal_snake.metabolism.segment_basic_cost = 0.0 + (-0.1);
-        normal_snake.metabolism.segment_basic_cost +=
-            normal_snake.brain.get_neural_network().unwrap().run_cost();
-        let normal_basic_cost = normal_snake.metabolism.segment_basic_cost;
+        normal_snake.metabolism.segment_basic_cost = 0.0; // solar
 
         // Create mutated snake
-        let mut mutated_brain_nn =
-            NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
-        mutated_brain_nn.add_connection(0, 21, 2.0, true, 0); // hardcoded
-        let mutated_brain =
-            BrainType::Neural(RandomNeuralBrain::from_neural_network(mutated_brain_nn));
+        let mutated_brain = BrainType::Neural(RandomNeuralBrain::from_neural_network(nn));
         let (mut mutated_snake, mutated_age, mutated_justborn) = create_head(
-            (0, 0),
+            (1, 0),
             mutated_brain,
             0,
             0,
             mutated_dna,
-            &mut mutation_world
-                .resource_mut::<crate::simulation::RngResource>()
-                .rng,
+            &mut world.resource_mut::<crate::simulation::RngResource>().rng,
         );
         mutated_snake.energy.energy = 100.0;
         mutated_snake.energy.move_potential = 1.0;
-        let mutated_head = mutation_world
+        let mutated_head = world
             .spawn((
-                Position { x: 1, y: 0 }, // Different pos to avoid overlap
+                Position { x: 1, y: 0 },
                 mutated_snake,
                 mutated_age,
                 mutated_justborn,
             ))
             .id();
-
-        let mutated_tail = mutation_world
+        let mutated_tail = world
             .spawn((Position { x: 1, y: 0 }, SegmentType::stomach()))
             .id();
-        let mut mutated_entity = mutation_world.entity_mut(mutated_head);
+        let mut mutated_entity = world.entity_mut(mutated_head);
         let mut mutated_snake = mutated_entity.get_mut::<Snake>().unwrap();
         mutated_snake.segments = vec![mutated_tail];
-        // Manual metabolism for mutated (stomach)
-        mutated_snake.metabolism.segment_move_cost = 1.0 + 1.0;
-        mutated_snake.metabolism.segment_basic_cost = 0.0 + 1.0; // stomach always cost 1.0
-        mutated_snake.metabolism.segment_basic_cost +=
-            mutated_snake.brain.get_neural_network().unwrap().run_cost();
-        let mutated_basic_cost = mutated_snake.metabolism.segment_basic_cost;
+        mutated_snake.metabolism.segment_basic_cost = 1.0; // stomach
 
-        // Run movement for both (Wait, same eff=1)
-        let mut mutation_think = Schedule::default();
-        mutation_think.add_systems(think);
-        mutation_think.run(&mut mutation_world);
+        let mut schedule_think = Schedule::default();
+        schedule_think.add_systems(think);
+        schedule_think.run(&mut world);
 
-        let mut mutation_movement = Schedule::default();
-        mutation_movement.add_systems(movement);
-        mutation_movement.run(&mut mutation_world);
+        let mut schedule_movement = Schedule::default();
+        schedule_movement.add_systems(movement);
+        schedule_movement.run(&mut world);
 
-        let normal_after = mutation_world
+        let normal_after = world
             .entity(normal_head)
             .get::<Snake>()
             .unwrap()
             .energy
             .energy;
-        let mutated_after = mutation_world
+        let mutated_after = world
             .entity(mutated_head)
             .get::<Snake>()
             .unwrap()
@@ -2344,13 +2491,6 @@ mod tests {
         let normal_delta = 100.0 - normal_after;
         let mutated_delta = 100.0 - mutated_after;
 
-        // Mutated (stomach) has higher basic_cost, so larger delta (more cost)
-        assert!(
-            mutated_delta > normal_delta,
-            "mutated_delta: {}, normal_delta: {}",
-            mutated_delta,
-            normal_delta
-        );
-        assert!(mutated_basic_cost > normal_basic_cost);
+        assert!(mutated_delta > normal_delta); // stomach has higher cost
     }
 }

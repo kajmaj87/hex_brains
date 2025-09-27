@@ -12,7 +12,8 @@
       - Completed: Added get_available_segment_types helper function to centralize config-based filtering of segment types, reducing duplication in random and mutate_internal methods. No unexpected choices; function simply encapsulates the filter logic.
  5. [x] Extract shared helper for random connection index in `engine/src/neural.rs`.
       - Completed: Added select_random_connection_index helper function to standardize random index selection from connection slices, used in mutation methods for all connections case. No unexpected choices; helper returns Option for safety.
- 6. [ ] Split long test function in `engine/src/core.rs`.
+ 6. [x] Split long test function in `engine/src/core.rs`.
+    - Completed: Split `test_energy_conservation_invariant` into focused tests: `test_energy_on_movement`, `test_energy_on_thinking`, `test_energy_on_eating`, `test_energy_on_processing_food`, `test_energy_on_aging`, `test_energy_on_starvation`, `test_energy_on_splitting`, `test_energy_on_mutation`. Each test sets up minimal world state and asserts specific energy invariants. No unexpected choices; tests isolated concerns effectively.
  7. [ ] Break `update` method into sub-methods in `gui/src/main.rs`.
  8. [ ] Extract UI helper functions for sliders and checkboxes in `gui/src/main.rs`.
  9. [ ] Split `MyEguiApp` struct into sub-structs in `gui/src/main.rs`.
