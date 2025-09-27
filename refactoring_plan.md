@@ -6,7 +6,8 @@
      - Completed: Created `collect_scent_inputs` returning [f32; 3] for left/front/right scents, and `collect_vision_inputs` returning [f32; 9] for plant/meat/solid visions. Used &Direction in helper signatures to handle non-Copy Direction enum.
  2. [x] Break `simulation::run` method into smaller methods in `engine/src/simulation.rs`.
      - Completed: Extracted `handle_commands`, `simulation_loop`, and `send_events` methods. `handle_commands` processes incoming commands per simulation step, `simulation_loop` performs stepping and collects FrameDrawn events, `send_events` sends all collected events including SimulationFinished. Logic preserved with improved separation of concerns.
- 3. [ ] Extract mutation application functions from `split` in `engine/src/core.rs`.
+ 3. [x] Extract mutation application functions from `split` in `engine/src/core.rs`.
+     - Completed: Created functions apply_connection_flip, apply_weight_perturbation, apply_weight_reset, apply_dna_mutation. Used &mut Wyrand for RNG to match neural methods. In split, replaced inline mutation calls with function calls, passing config values as needed. No unexpected choices; functions are simple wrappers for clarity and modularity.
  4. [ ] Extract shared helper for available segment types in `engine/src/dna.rs`.
  5. [ ] Extract shared helper for random connection index in `engine/src/neural.rs`.
  6. [ ] Split long test function in `engine/src/core.rs`.

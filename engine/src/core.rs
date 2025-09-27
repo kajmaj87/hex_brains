@@ -1,11 +1,11 @@
 use crate::dna::{Dna, SegmentType};
 use crate::neural::{ConnectionGene, InnovationTracker, NeuralNetwork, SensorInput};
-use crate::simulation::{SimulationConfig, Stats};
+use crate::simulation::{MutationConfig, SimulationConfig, Stats};
 use bevy_ecs::prelude::*;
 use std::clone::Clone;
 use std::collections::VecDeque;
 use std::fmt::Debug;
-use tinyrand::{Rand, RandRange};
+use tinyrand::{Rand, RandRange, Wyrand};
 use tracing::{debug, warn};
 
 #[derive(Component, Clone, Default, Debug)]
@@ -1119,6 +1119,31 @@ pub fn reproduce(
     //     }
     // }
 }
+fn apply_connection_flip(neural: &mut NeuralNetwork, rng: &mut Wyrand) {
+    neural.flip_random_connection(rng);
+}
+
+fn apply_weight_perturbation(
+    neural: &mut NeuralNetwork,
+    rng: &mut Wyrand,
+    range: f32,
+    perturb_disabled: bool,
+) {
+    neural.mutate_perturb_random_connection_weight(range, perturb_disabled, rng);
+}
+
+fn apply_weight_reset(
+    neural: &mut NeuralNetwork,
+    rng: &mut Wyrand,
+    range: f32,
+    perturb_disabled: bool,
+) {
+    neural.mutate_reset_random_connection_weight(range, perturb_disabled, rng);
+}
+
+fn apply_dna_mutation(dna: &mut Dna, rng: &mut Wyrand, mutation_config: &MutationConfig) {
+    dna.mutate(rng, mutation_config);
+}
 
 pub fn split(
     mut commands: Commands,
@@ -1141,32 +1166,34 @@ pub fn split(
                 if (rng.next_u32() as f64) / (u32::MAX as f64)
                     < config.mutation.connection_flip_chance
                 {
-                    nn.flip_random_connection(rng);
+                    apply_connection_flip(&mut nn, rng);
                     mutations += 1;
                 }
                 if (rng.next_u32() as f64) / (u32::MAX as f64)
                     < config.mutation.weight_perturbation_chance
                 {
-                    nn.mutate_perturb_random_connection_weight(
+                    apply_weight_perturbation(
+                        &mut nn,
+                        rng,
                         config.mutation.weight_perturbation_range,
                         config.mutation.perturb_disabled_connections,
-                        rng,
                     );
                     mutations += 1;
                 }
                 if (rng.next_u32() as f64) / (u32::MAX as f64) < config.mutation.weight_reset_chance
                 {
-                    nn.mutate_reset_random_connection_weight(
+                    apply_weight_reset(
+                        &mut nn,
+                        rng,
                         config.mutation.weight_reset_range,
                         config.mutation.perturb_disabled_connections,
-                        rng,
                     );
                     mutations += 1;
                 }
                 let mut dna = snake.dna.clone();
                 if (rng.next_u32() as f64) / (u32::MAX as f64) < config.mutation.dna_mutation_chance
                 {
-                    dna.mutate(rng, &config.mutation);
+                    apply_dna_mutation(&mut dna, rng, &config.mutation);
                     mutations += 1;
                 }
                 (nn, mutations, dna)
