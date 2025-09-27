@@ -22,7 +22,8 @@
      - Completed: Created three sub-structs: `UiState` (window visibility and UI state), `PerformanceStats` (frame tracking and performance metrics), and `ConfigState` (configuration and data management). Updated `MyEguiApp` to use these sub-structs and systematically updated all field accesses throughout the file. Improved code organization by grouping related fields with clear separation of concerns.
 10. [x] Extract drawing functions to a new module in `gui/src/`.
      - Completed: Created `drawing.rs` with `draw_hexes`, `draw_neural_network`, `get_node_position`, `transform_to_circle`, `with_alpha`, and `u32_to_color` functions. Moved all drawing logic from `main.rs` to the new module and updated all function calls and tests to use the drawing module. No unexpected choices; extraction was straightforward and preserved all functionality.
-11. [ ] Introduce `CommandDispatcher` for engine commands in `gui/src/main.rs`.
+11. [x] Introduce `CommandDispatcher` for engine commands in `gui/src/main.rs`.
+     - Completed: Introduced CommandDispatcher struct with sender field and methods for all EngineCommand variants. Replaced direct sender.send() calls with dispatcher method calls throughout MyEguiApp. No unexpected choices; abstraction improves decoupling between UI and engine.
 12. [ ] Define constants for magic numbers in `gui/src/main.rs`.
 13. [ ] Simplify complex conditionals in GUI rendering.
 14. [ ] Create `sensory.rs` utility module in `engine/src/`.

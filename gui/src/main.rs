@@ -23,6 +23,51 @@ use tracing::Level;
 use tracing_subscriber::fmt;
 
 mod drawing;
+struct CommandDispatcher {
+    sender: Sender<EngineCommand>,
+}
+
+impl CommandDispatcher {
+    fn send_create_snakes(&self, count: usize) {
+        self.sender
+            .send(EngineCommand::CreateSnakes(count))
+            .unwrap();
+    }
+
+    fn send_update_simulation_config(&self, config: SimulationConfig) {
+        self.sender
+            .send(EngineCommand::UpdateSimulationConfig(config))
+            .unwrap();
+    }
+
+    fn send_reset_world(&self) {
+        self.sender.send(EngineCommand::ResetWorld).unwrap();
+    }
+
+    fn send_flip_running_state(&self) {
+        self.sender.send(EngineCommand::FlipRunningState).unwrap();
+    }
+
+    fn send_decrease_speed(&self) {
+        self.sender.send(EngineCommand::DecreaseSpeed).unwrap();
+    }
+
+    fn send_increase_speed(&self) {
+        self.sender.send(EngineCommand::IncreaseSpeed).unwrap();
+    }
+
+    fn send_ignore_speed_limit(&self) {
+        self.sender.send(EngineCommand::IgnoreSpeedLimit).unwrap();
+    }
+
+    fn send_advance_one_frame(&self) {
+        self.sender.send(EngineCommand::AdvanceOneFrame).unwrap();
+    }
+
+    fn send_repaint_requested(&self) {
+        self.sender.send(EngineCommand::RepaintRequested).unwrap();
+    }
+}
 
 use crate::drawing::{draw_hexes, draw_neural_network};
 
@@ -250,7 +295,7 @@ struct ConfigState {
 
 struct MyEguiApp {
     text: String,
-    engine_commands_sender: Sender<EngineCommand>,
+    command_dispatcher: CommandDispatcher,
     engine_events_sender: Sender<EngineEvent>,
     engine_events_receiver: Receiver<EngineEvent>,
     engine_commands_receiver: Arc<Mutex<Receiver<EngineCommand>>>,
@@ -344,7 +389,9 @@ impl MyEguiApp {
         };
         Self {
             text: String::new(),
-            engine_commands_sender,
+            command_dispatcher: CommandDispatcher {
+                sender: engine_commands_sender,
+            },
             engine_events_sender,
             engine_events_receiver,
             engine_commands_receiver: Arc::new(Mutex::new(engine_commands_receiver)),
@@ -392,9 +439,7 @@ impl MyEguiApp {
                 self.config_state.simulation_config,
             );
             self.ui_state.started = true;
-            self.engine_commands_sender
-                .send(EngineCommand::CreateSnakes(10))
-                .unwrap();
+            self.command_dispatcher.send_create_snakes(10);
         }
         self.engine_events_receiver
             .try_iter()
@@ -1184,17 +1229,10 @@ impl MyEguiApp {
                 .on_hover_text("Restart simulation (Ctrl+R)")
                 .clicked()
             {
-                self.engine_commands_sender
-                    .send(EngineCommand::UpdateSimulationConfig(
-                        self.config_state.simulation_config,
-                    ))
-                    .unwrap();
-                self.engine_commands_sender
-                    .send(EngineCommand::ResetWorld)
-                    .unwrap();
-                self.engine_commands_sender
-                    .send(EngineCommand::CreateSnakes(10))
-                    .unwrap();
+                self.command_dispatcher
+                    .send_update_simulation_config(self.config_state.simulation_config);
+                self.command_dispatcher.send_reset_world();
+                self.command_dispatcher.send_create_snakes(10);
                 self.ui_state.paused = false;
             }
             if ui
@@ -1241,9 +1279,7 @@ impl MyEguiApp {
             }
             // Add snakes
             if ui.button("🐍").on_hover_text("Add 10 snakes (S)").clicked() {
-                self.engine_commands_sender
-                    .send(EngineCommand::CreateSnakes(10))
-                    .unwrap();
+                self.command_dispatcher.send_create_snakes(10);
             }
             // Play/Pause button
             let play_pause_icon = if self.ui_state.paused { "▶" } else { "⏸" };
@@ -1262,27 +1298,21 @@ impl MyEguiApp {
                 .clicked()
             {
                 self.ui_state.paused = !self.ui_state.paused;
-                self.engine_commands_sender
-                    .send(EngineCommand::FlipRunningState)
-                    .unwrap();
+                self.command_dispatcher.send_flip_running_state();
             }
             if ui
                 .small_button("-")
                 .on_hover_text("Decrease speed (-)")
                 .clicked()
             {
-                self.engine_commands_sender
-                    .send(EngineCommand::DecreaseSpeed)
-                    .unwrap();
+                self.command_dispatcher.send_decrease_speed();
             }
             if ui
                 .small_button("+")
                 .on_hover_text("Increase speed (+)")
                 .clicked()
             {
-                self.engine_commands_sender
-                    .send(EngineCommand::IncreaseSpeed)
-                    .unwrap();
+                self.command_dispatcher.send_increase_speed();
             }
             ui.label(format!(
                 "x{:.1}",
@@ -1304,46 +1334,29 @@ impl MyEguiApp {
 
     fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
         if ctx.input(|i| i.key_pressed(Key::PlusEquals)) {
-            self.engine_commands_sender
-                .send(EngineCommand::IncreaseSpeed)
-                .unwrap();
+            self.command_dispatcher.send_increase_speed();
         }
         if ctx.input(|i| i.key_pressed(Key::Minus)) {
-            self.engine_commands_sender
-                .send(EngineCommand::DecreaseSpeed)
-                .unwrap();
+            self.command_dispatcher.send_decrease_speed();
         }
         if ctx.input(|i| i.key_pressed(Key::Tab)) {
-            self.engine_commands_sender
-                .send(EngineCommand::IgnoreSpeedLimit)
-                .unwrap();
+            self.command_dispatcher.send_ignore_speed_limit();
         }
         if ctx.input(|i| i.key_pressed(Key::O)) {
-            self.engine_commands_sender
-                .send(EngineCommand::CreateSnakes(1))
-                .unwrap();
+            self.command_dispatcher.send_create_snakes(1);
         }
         if ctx.input(|i| i.key_pressed(Key::A)) {
-            self.engine_commands_sender
-                .send(EngineCommand::AdvanceOneFrame)
-                .unwrap();
+            self.command_dispatcher.send_advance_one_frame();
         }
         // New shortcuts for toolbar buttons
         if ctx.input(|i| i.key_pressed(Key::F1)) {
             self.ui_state.show_info = !self.ui_state.show_info;
         }
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::R)) {
-            self.engine_commands_sender
-                .send(EngineCommand::UpdateSimulationConfig(
-                    self.config_state.simulation_config,
-                ))
-                .unwrap();
-            self.engine_commands_sender
-                .send(EngineCommand::ResetWorld)
-                .unwrap();
-            self.engine_commands_sender
-                .send(EngineCommand::CreateSnakes(10))
-                .unwrap();
+            self.command_dispatcher
+                .send_update_simulation_config(self.config_state.simulation_config);
+            self.command_dispatcher.send_reset_world();
+            self.command_dispatcher.send_create_snakes(10);
             self.ui_state.paused = false;
         }
         if ctx.input(|i| i.key_pressed(Key::E)) {
@@ -1365,15 +1378,11 @@ impl MyEguiApp {
             self.ui_state.show_statistics = !self.ui_state.show_statistics;
         }
         if ctx.input(|i| i.key_pressed(Key::S)) {
-            self.engine_commands_sender
-                .send(EngineCommand::CreateSnakes(10))
-                .unwrap();
+            self.command_dispatcher.send_create_snakes(10);
         }
         if ctx.input(|i| i.key_pressed(Key::Space)) {
             self.ui_state.paused = !self.ui_state.paused;
-            self.engine_commands_sender
-                .send(EngineCommand::FlipRunningState)
-                .unwrap();
+            self.command_dispatcher.send_flip_running_state();
         }
     }
 }
@@ -1394,11 +1403,8 @@ impl eframe::App for MyEguiApp {
                 &self.config_state.previous_simulation_config,
             ) || self.ui_state.paused
             {
-                self.engine_commands_sender
-                    .send(EngineCommand::UpdateSimulationConfig(
-                        self.config_state.simulation_config,
-                    ))
-                    .unwrap();
+                self.command_dispatcher
+                    .send_update_simulation_config(self.config_state.simulation_config);
             }
             self.config_state.previous_simulation_config = self.config_state.simulation_config;
         }
@@ -1412,9 +1418,7 @@ impl eframe::App for MyEguiApp {
             self.performance_stats.can_draw_frame = false;
         }
         self.performance_stats.last_frame = Instant::now();
-        let _ = self
-            .engine_commands_sender
-            .send(EngineCommand::RepaintRequested);
+        self.command_dispatcher.send_repaint_requested();
     }
 }
 fn u32_to_color(u: u32) -> Color32 {
