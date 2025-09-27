@@ -26,7 +26,10 @@
      - Completed: Introduced CommandDispatcher struct with sender field and methods for all EngineCommand variants. Replaced direct sender.send() calls with dispatcher method calls throughout MyEguiApp. No unexpected choices; abstraction improves decoupling between UI and engine.
 12. [x] Define constants for magic numbers in `gui/src/main.rs`.
     - Completed: Defined constants for window size, speed limit, history limit, smoothing window, performance update interval, and default snakes to add. Replaced literals with constants throughout the file. Colors were not made const due to non-const constructors. No unexpected choices; constants improve tunability without changing visuals.
-13. [ ] Simplify complex conditionals in GUI rendering.
+13. [x] Simplify complex conditionals in GUI rendering.
+     - Added early return in Statistics window when no species exist.
+     - Extracted render_vision_ranges helper function to flatten nested ui.horizontal chains in Mutation Settings for plant, meat, and obstacle vision ranges.
+     - Used guard clauses for vision range rendering only when enabled.
 14. [ ] Create `sensory.rs` utility module in `engine/src/`.
 15. [ ] Create `mutation.rs` utility module in `engine/src/`.
 16. [ ] Create `ui_helpers.rs` module in `gui/src/`.

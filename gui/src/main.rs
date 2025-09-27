@@ -80,6 +80,36 @@ impl CommandDispatcher {
 
 use crate::drawing::{draw_hexes, draw_neural_network};
 
+fn render_vision_ranges(ui: &mut Ui, front: &mut u32, left: &mut u32, right: &mut u32, name: &str) {
+    ui.horizontal(|ui| {
+        ui.label(format!("{name} Front range"))
+            .on_hover_text("Vision range directly ahead");
+        ui.add(egui::DragValue::new(front).speed(1.0))
+            .on_hover_text(format!(
+                "Set front vision distance for {}",
+                name.to_lowercase()
+            ));
+    });
+    ui.horizontal(|ui| {
+        ui.label(format!("{name} Left range"))
+            .on_hover_text("Vision range to the left");
+        ui.add(egui::DragValue::new(left).speed(1.0))
+            .on_hover_text(format!(
+                "Set left vision distance for {}",
+                name.to_lowercase()
+            ));
+    });
+    ui.horizontal(|ui| {
+        ui.label(format!("{name} Right range"))
+            .on_hover_text("Vision range to the right");
+        ui.add(egui::DragValue::new(right).speed(1.0))
+            .on_hover_text(format!(
+                "Set right vision distance for {}",
+                name.to_lowercase()
+            ));
+    });
+}
+
 fn main() {
     let native_options = eframe::NativeOptions {
         initial_window_size: Some(Vec2 {
@@ -632,47 +662,32 @@ impl MyEguiApp {
                         .plant_vision_enabled,
                     "Allow vision of plant food",
                 );
-                ui.horizontal(|ui| {
-                    ui.label("Front range")
-                        .on_hover_text("Vision range directly ahead");
-                    ui.add(
-                        egui::DragValue::new(
-                            &mut self
-                                .config_state
-                                .simulation_config
-                                .mutation
-                                .plant_vision_front_range,
-                        )
-                        .speed(1.0),
-                    )
-                    .on_hover_text("Set front vision distance for plants");
-                    ui.label("Left range")
-                        .on_hover_text("Vision range to the left");
-                    ui.add(
-                        egui::DragValue::new(
-                            &mut self
-                                .config_state
-                                .simulation_config
-                                .mutation
-                                .plant_vision_left_range,
-                        )
-                        .speed(1.0),
-                    )
-                    .on_hover_text("Set left vision distance for plants");
-                    ui.label("Right range")
-                        .on_hover_text("Vision range to the right");
-                    ui.add(
-                        egui::DragValue::new(
-                            &mut self
-                                .config_state
-                                .simulation_config
-                                .mutation
-                                .plant_vision_right_range,
-                        )
-                        .speed(1.0),
-                    )
-                    .on_hover_text("Set right vision distance for plants");
-                });
+                if self
+                    .config_state
+                    .simulation_config
+                    .mutation
+                    .plant_vision_enabled
+                {
+                    render_vision_ranges(
+                        ui,
+                        &mut self
+                            .config_state
+                            .simulation_config
+                            .mutation
+                            .plant_vision_front_range,
+                        &mut self
+                            .config_state
+                            .simulation_config
+                            .mutation
+                            .plant_vision_left_range,
+                        &mut self
+                            .config_state
+                            .simulation_config
+                            .mutation
+                            .plant_vision_right_range,
+                        "Plant",
+                    );
+                }
                 add_checkbox(
                     ui,
                     "Meat vision",
@@ -683,47 +698,32 @@ impl MyEguiApp {
                         .meat_vision_enabled,
                     "Allow vision of meat food",
                 );
-                ui.horizontal(|ui| {
-                    ui.label("Front range")
-                        .on_hover_text("Vision range directly ahead");
-                    ui.add(
-                        egui::DragValue::new(
-                            &mut self
-                                .config_state
-                                .simulation_config
-                                .mutation
-                                .meat_vision_front_range,
-                        )
-                        .speed(1.0),
-                    )
-                    .on_hover_text("Set front vision distance for meat");
-                    ui.label("Left range")
-                        .on_hover_text("Vision range to the left");
-                    ui.add(
-                        egui::DragValue::new(
-                            &mut self
-                                .config_state
-                                .simulation_config
-                                .mutation
-                                .meat_vision_left_range,
-                        )
-                        .speed(1.0),
-                    )
-                    .on_hover_text("Set left vision distance for meat");
-                    ui.label("Right range")
-                        .on_hover_text("Vision range to the right");
-                    ui.add(
-                        egui::DragValue::new(
-                            &mut self
-                                .config_state
-                                .simulation_config
-                                .mutation
-                                .meat_vision_right_range,
-                        )
-                        .speed(1.0),
-                    )
-                    .on_hover_text("Set right vision distance for meat");
-                });
+                if self
+                    .config_state
+                    .simulation_config
+                    .mutation
+                    .meat_vision_enabled
+                {
+                    render_vision_ranges(
+                        ui,
+                        &mut self
+                            .config_state
+                            .simulation_config
+                            .mutation
+                            .meat_vision_front_range,
+                        &mut self
+                            .config_state
+                            .simulation_config
+                            .mutation
+                            .meat_vision_left_range,
+                        &mut self
+                            .config_state
+                            .simulation_config
+                            .mutation
+                            .meat_vision_right_range,
+                        "Meat",
+                    );
+                }
                 add_checkbox(
                     ui,
                     "Obstacle vision",
@@ -734,47 +734,32 @@ impl MyEguiApp {
                         .obstacle_vision_enabled,
                     "Allow vision of obstacles/walls",
                 );
-                ui.horizontal(|ui| {
-                    ui.label("Front range")
-                        .on_hover_text("Vision range directly ahead");
-                    ui.add(
-                        egui::DragValue::new(
-                            &mut self
-                                .config_state
-                                .simulation_config
-                                .mutation
-                                .obstacle_vision_front_range,
-                        )
-                        .speed(1.0),
-                    )
-                    .on_hover_text("Set front vision distance for obstacles");
-                    ui.label("Left range")
-                        .on_hover_text("Vision range to the left");
-                    ui.add(
-                        egui::DragValue::new(
-                            &mut self
-                                .config_state
-                                .simulation_config
-                                .mutation
-                                .obstacle_vision_left_range,
-                        )
-                        .speed(1.0),
-                    )
-                    .on_hover_text("Set left vision distance for obstacles");
-                    ui.label("Right range")
-                        .on_hover_text("Vision range to the right");
-                    ui.add(
-                        egui::DragValue::new(
-                            &mut self
-                                .config_state
-                                .simulation_config
-                                .mutation
-                                .obstacle_vision_right_range,
-                        )
-                        .speed(1.0),
-                    )
-                    .on_hover_text("Set right vision distance for obstacles");
-                });
+                if self
+                    .config_state
+                    .simulation_config
+                    .mutation
+                    .obstacle_vision_enabled
+                {
+                    render_vision_ranges(
+                        ui,
+                        &mut self
+                            .config_state
+                            .simulation_config
+                            .mutation
+                            .obstacle_vision_front_range,
+                        &mut self
+                            .config_state
+                            .simulation_config
+                            .mutation
+                            .obstacle_vision_left_range,
+                        &mut self
+                            .config_state
+                            .simulation_config
+                            .mutation
+                            .obstacle_vision_right_range,
+                        "Obstacle",
+                    );
+                }
                 ui.label("Mutation settings:")
                     .on_hover_text("Configure neural network mutation parameters");
                 add_drag_value(
@@ -1007,25 +992,25 @@ impl MyEguiApp {
                     });
                 if self.config_state.stats.species.species.is_empty() {
                     ui.label("No species yet.");
-                } else {
-                    let mut sorted = self.config_state.stats.species.species.clone();
-                    sorted.sort_by(|a, b| b.members.len().cmp(&a.members.len()));
-                    let bars: Vec<Bar> = sorted
-                        .iter()
-                        .enumerate()
-                        .map(|(i, specie)| {
-                            Bar::new(i as f64, specie.members.len() as f64)
-                                .name(format!("{}", specie.id))
-                                .fill(u32_to_color(specie.id))
-                        })
-                        .collect();
-                    let bar_chart = BarChart::new(bars);
-                    Plot::new("species_plot")
-                        .view_aspect(2.0)
-                        .show(ui, |plot_ui| {
-                            plot_ui.bar_chart(bar_chart);
-                        });
+                    return;
                 }
+                let mut sorted = self.config_state.stats.species.species.clone();
+                sorted.sort_by(|a, b| b.members.len().cmp(&a.members.len()));
+                let bars: Vec<Bar> = sorted
+                    .iter()
+                    .enumerate()
+                    .map(|(i, specie)| {
+                        Bar::new(i as f64, specie.members.len() as f64)
+                            .name(format!("{}", specie.id))
+                            .fill(u32_to_color(specie.id))
+                    })
+                    .collect();
+                let bar_chart = BarChart::new(bars);
+                Plot::new("species_plot")
+                    .view_aspect(2.0)
+                    .show(ui, |plot_ui| {
+                        plot_ui.bar_chart(bar_chart);
+                    });
             });
         egui::Window::new("Networks").open(&mut self.ui_state.show_networks).show(ctx, |ui| {
             let specie_ids = &self.config_state.stats.species.species.iter().map(|specie| specie.id).collect::<Vec<u32>>();
