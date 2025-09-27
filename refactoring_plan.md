@@ -34,7 +34,8 @@
       - Completed: Moved sensory helper functions from core.rs to new sensory.rs module, added pub mod sensory to lib.rs, and updated calls in think function. Made turn_left and turn_right pub for use in sensory.rs. No unexpected choices; extraction was straightforward and preserved all functionality.
 15. [x] Create `mutation.rs` utility module in `engine/src/`.
      - Completed: Moved mutation application functions (apply_connection_flip, apply_weight_perturbation, apply_weight_reset, apply_dna_mutation) from core.rs to new mutation.rs module. Exported in lib.rs. No unexpected choices; extraction was straightforward and preserved functionality.
-16. [ ] Create `ui_helpers.rs` module in `gui/src/`.
+16. [x] Create `ui_helpers.rs` module in `gui/src/`.
+     - Completed: Moved `add_drag_value` and `add_checkbox` helper functions from `main.rs` to new `ui_helpers.rs` module. Added module declaration and imports in `main.rs`. No unexpected choices; extraction was straightforward and preserved functionality.
 17. [ ] Modularize GUI into submodules.
 18. [ ] Optimize ECS queries for reduced duplication.
 19. [ ] Implement config builders and validation.

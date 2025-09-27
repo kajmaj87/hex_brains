@@ -1,7 +1,7 @@
 use bevy_ecs::prelude::*;
+use eframe::egui;
 use eframe::emath::Vec2;
 use eframe::epaint::{Color32, Fonts};
-use eframe::{egui, emath};
 use egui::{FontData, FontDefinitions, FontFamily, Key, ScrollArea, Stroke, Ui};
 use egui_plot::{Bar, BarChart, Line, Plot, PlotPoints};
 use hex_brains_engine::core::{Food, Position, Scent, ScentMap, Snake, Solid};
@@ -32,6 +32,8 @@ const PERFORMANCE_UPDATE_INTERVAL_MS: u128 = 1000;
 const DEFAULT_SNAKES_TO_ADD: usize = 10;
 
 mod drawing;
+mod ui_helpers;
+use ui_helpers::{add_checkbox, add_drag_value};
 struct CommandDispatcher {
     sender: Sender<EngineCommand>,
 }
@@ -1430,25 +1432,6 @@ fn u32_to_color(u: u32) -> Color32 {
     let b = hash as u8;
 
     Color32::from_rgb(r, g, b)
-}
-
-fn add_drag_value<T: emath::Numeric>(
-    ui: &mut Ui,
-    label: &str,
-    value: &mut T,
-    speed: f64,
-    tooltip: &str,
-) {
-    ui.horizontal(|ui| {
-        ui.label(label).on_hover_text(tooltip);
-        ui.add(egui::DragValue::new(value).speed(speed))
-            .on_hover_text(tooltip);
-    });
-}
-
-fn add_checkbox(ui: &mut Ui, label: &str, value: &mut bool, tooltip: &str) {
-    ui.add(egui::Checkbox::new(value, label))
-        .on_hover_text(tooltip);
 }
 
 #[cfg(test)]
