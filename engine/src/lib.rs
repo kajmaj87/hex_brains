@@ -1,5 +1,6 @@
 pub mod core;
 pub mod dna;
+pub mod mutation;
 pub mod neural;
 pub mod sensory;
 pub mod simulation;

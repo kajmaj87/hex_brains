@@ -1,11 +1,12 @@
 use crate::dna::{Dna, SegmentType};
+use crate::mutation::*;
 use crate::neural::{ConnectionGene, InnovationTracker, NeuralNetwork, SensorInput};
-use crate::simulation::{MutationConfig, SimulationConfig, Stats};
+use crate::simulation::{SimulationConfig, Stats};
 use bevy_ecs::prelude::*;
 use std::clone::Clone;
 use std::collections::VecDeque;
 use std::fmt::Debug;
-use tinyrand::{Rand, RandRange, Wyrand};
+use tinyrand::{Rand, RandRange};
 use tracing::{debug, warn};
 
 #[derive(Component, Clone, Default, Debug)]
@@ -938,32 +939,6 @@ pub fn reproduce(
     //     }
     // }
 }
-fn apply_connection_flip(neural: &mut NeuralNetwork, rng: &mut Wyrand) {
-    neural.flip_random_connection(rng);
-}
-
-fn apply_weight_perturbation(
-    neural: &mut NeuralNetwork,
-    rng: &mut Wyrand,
-    range: f32,
-    perturb_disabled: bool,
-) {
-    neural.mutate_perturb_random_connection_weight(range, perturb_disabled, rng);
-}
-
-fn apply_weight_reset(
-    neural: &mut NeuralNetwork,
-    rng: &mut Wyrand,
-    range: f32,
-    perturb_disabled: bool,
-) {
-    neural.mutate_reset_random_connection_weight(range, perturb_disabled, rng);
-}
-
-fn apply_dna_mutation(dna: &mut Dna, rng: &mut Wyrand, mutation_config: &MutationConfig) {
-    dna.mutate(rng, mutation_config);
-}
-
 pub fn split(
     mut commands: Commands,
     mut snakes: Query<(Entity, &mut Snake)>,

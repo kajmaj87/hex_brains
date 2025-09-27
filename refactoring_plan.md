@@ -32,7 +32,8 @@
       - Used guard clauses for vision range rendering only when enabled.
 14. [x] Create `sensory.rs` utility module in `engine/src/`.
       - Completed: Moved sensory helper functions from core.rs to new sensory.rs module, added pub mod sensory to lib.rs, and updated calls in think function. Made turn_left and turn_right pub for use in sensory.rs. No unexpected choices; extraction was straightforward and preserved all functionality.
-15. [ ] Create `mutation.rs` utility module in `engine/src/`.
+15. [x] Create `mutation.rs` utility module in `engine/src/`.
+     - Completed: Moved mutation application functions (apply_connection_flip, apply_weight_perturbation, apply_weight_reset, apply_dna_mutation) from core.rs to new mutation.rs module. Exported in lib.rs. No unexpected choices; extraction was straightforward and preserved functionality.
 16. [ ] Create `ui_helpers.rs` module in `gui/src/`.
 17. [ ] Modularize GUI into submodules.
 18. [ ] Optimize ECS queries for reduced duplication.
