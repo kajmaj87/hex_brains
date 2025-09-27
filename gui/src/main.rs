@@ -22,6 +22,15 @@ use std::time::Instant;
 use tracing::Level;
 use tracing_subscriber::fmt;
 
+// Constants for magic numbers to improve maintainability and tuning
+const INITIAL_WINDOW_WIDTH: f32 = 1200.0;
+const INITIAL_WINDOW_HEIGHT: f32 = 1200.0;
+const SPEED_LIMIT: f32 = 200.0;
+const HISTORY_LIMIT: usize = 1000;
+const SMOOTHING_WINDOW: usize = 100;
+const PERFORMANCE_UPDATE_INTERVAL_MS: u128 = 1000;
+const DEFAULT_SNAKES_TO_ADD: usize = 10;
+
 mod drawing;
 struct CommandDispatcher {
     sender: Sender<EngineCommand>,
@@ -74,8 +83,8 @@ use crate::drawing::{draw_hexes, draw_neural_network};
 fn main() {
     let native_options = eframe::NativeOptions {
         initial_window_size: Some(Vec2 {
-            x: 1200.0,
-            y: 1200.0,
+            x: INITIAL_WINDOW_WIDTH,
+            y: INITIAL_WINDOW_HEIGHT,
         }),
         ..Default::default()
     };
@@ -143,7 +152,7 @@ fn start_simulation(
     simulation.insert_resource(config);
     simulation.insert_resource(EngineState {
         repaint_needed: false,
-        speed_limit: Some(200.0),
+        speed_limit: Some(SPEED_LIMIT),
         running: true,
         frames_left: 0.0,
         frames: 0,
@@ -423,8 +432,8 @@ impl MyEguiApp {
                 previous_simulation_config: simulation_config,
                 stats: Stats::default(),
                 stats_history: VecDeque::new(),
-                history_limit: 1000,
-                smoothing_window: 100,
+                history_limit: HISTORY_LIMIT,
+                smoothing_window: SMOOTHING_WINDOW,
                 hexes: vec![],
                 fonts: Fonts::new(1.0, 2 * 1024, font_definitions),
             },
@@ -439,7 +448,8 @@ impl MyEguiApp {
                 self.config_state.simulation_config,
             );
             self.ui_state.started = true;
-            self.command_dispatcher.send_create_snakes(10);
+            self.command_dispatcher
+                .send_create_snakes(DEFAULT_SNAKES_TO_ADD);
         }
         self.engine_events_receiver
             .try_iter()
@@ -477,7 +487,8 @@ impl MyEguiApp {
                     }
                 }
             });
-        if self.performance_stats.last_second.elapsed().as_millis() > 1000 {
+        if self.performance_stats.last_second.elapsed().as_millis() > PERFORMANCE_UPDATE_INTERVAL_MS
+        {
             self.performance_stats.last_second = Instant::now();
             self.performance_stats.updates_per_second = self.performance_stats.updates_last_second;
             self.performance_stats.frames_per_second = self.performance_stats.frames_last_second;
@@ -1279,7 +1290,8 @@ impl MyEguiApp {
             }
             // Add snakes
             if ui.button("🐍").on_hover_text("Add 10 snakes (S)").clicked() {
-                self.command_dispatcher.send_create_snakes(10);
+                self.command_dispatcher
+                    .send_create_snakes(DEFAULT_SNAKES_TO_ADD);
             }
             // Play/Pause button
             let play_pause_icon = if self.ui_state.paused { "▶" } else { "⏸" };
@@ -1356,7 +1368,8 @@ impl MyEguiApp {
             self.command_dispatcher
                 .send_update_simulation_config(self.config_state.simulation_config);
             self.command_dispatcher.send_reset_world();
-            self.command_dispatcher.send_create_snakes(10);
+            self.command_dispatcher
+                .send_create_snakes(DEFAULT_SNAKES_TO_ADD);
             self.ui_state.paused = false;
         }
         if ctx.input(|i| i.key_pressed(Key::E)) {
@@ -1378,7 +1391,8 @@ impl MyEguiApp {
             self.ui_state.show_statistics = !self.ui_state.show_statistics;
         }
         if ctx.input(|i| i.key_pressed(Key::S)) {
-            self.command_dispatcher.send_create_snakes(10);
+            self.command_dispatcher
+                .send_create_snakes(DEFAULT_SNAKES_TO_ADD);
         }
         if ctx.input(|i| i.key_pressed(Key::Space)) {
             self.ui_state.paused = !self.ui_state.paused;

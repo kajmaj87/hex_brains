@@ -24,7 +24,8 @@
      - Completed: Created `drawing.rs` with `draw_hexes`, `draw_neural_network`, `get_node_position`, `transform_to_circle`, `with_alpha`, and `u32_to_color` functions. Moved all drawing logic from `main.rs` to the new module and updated all function calls and tests to use the drawing module. No unexpected choices; extraction was straightforward and preserved all functionality.
 11. [x] Introduce `CommandDispatcher` for engine commands in `gui/src/main.rs`.
      - Completed: Introduced CommandDispatcher struct with sender field and methods for all EngineCommand variants. Replaced direct sender.send() calls with dispatcher method calls throughout MyEguiApp. No unexpected choices; abstraction improves decoupling between UI and engine.
-12. [ ] Define constants for magic numbers in `gui/src/main.rs`.
+12. [x] Define constants for magic numbers in `gui/src/main.rs`.
+    - Completed: Defined constants for window size, speed limit, history limit, smoothing window, performance update interval, and default snakes to add. Replaced literals with constants throughout the file. Colors were not made const due to non-const constructors. No unexpected choices; constants improve tunability without changing visuals.
 13. [ ] Simplify complex conditionals in GUI rendering.
 14. [ ] Create `sensory.rs` utility module in `engine/src/`.
 15. [ ] Create `mutation.rs` utility module in `engine/src/`.
