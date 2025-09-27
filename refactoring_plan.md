@@ -18,7 +18,8 @@
      - Completed: Extracted `handle_events`, `render_windows`, `render_toolbar`, `render_central_panel`, `handle_keyboard_shortcuts` as private methods in `impl MyEguiApp`. Moved keyboard shortcuts handling outside central panel to `handle_keyboard_shortcuts`. Updated `update` to call these methods in order. No unexpected choices; methods are simple extractions for better organization.
  8. [x] Extract UI helper functions for sliders and checkboxes in `gui/src/main.rs`.
      - Completed: Added `add_drag_value` and `add_checkbox` helper functions, replaced inline UI code in settings windows with calls to these helpers for standardization and reduced duplication. No unexpected choices; helpers use the same tooltip for label and control.
- 9. [ ] Split `MyEguiApp` struct into sub-structs in `gui/src/main.rs`.
+ 9. [x] Split `MyEguiApp` struct into sub-structs in `gui/src/main.rs`.
+     - Completed: Created three sub-structs: `UiState` (window visibility and UI state), `PerformanceStats` (frame tracking and performance metrics), and `ConfigState` (configuration and data management). Updated `MyEguiApp` to use these sub-structs and systematically updated all field accesses throughout the file. Improved code organization by grouping related fields with clear separation of concerns.
 10. [ ] Extract drawing functions to a new module in `gui/src/`.
 11. [ ] Introduce `CommandDispatcher` for engine commands in `gui/src/main.rs`.
 12. [ ] Define constants for magic numbers in `gui/src/main.rs`.

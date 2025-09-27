@@ -495,39 +495,54 @@ struct Config {
     add_walls: bool,
 }
 
-struct MyEguiApp {
-    text: String,
-    total_frames: usize,
-    last_frame: Instant,
-    engine_commands_sender: Sender<EngineCommand>,
-    engine_events_sender: Sender<EngineEvent>,
-    engine_events_receiver: Receiver<EngineEvent>,
-    engine_commands_receiver: Arc<Mutex<Receiver<EngineCommand>>>,
-    can_draw_frame: bool,
-    config: Config,
-    hexes: Vec<Hex>,
-    updates_last_second: u32,
-    last_second: Instant,
-    frames_last_second: u32,
-    frames_per_second: u32,
-    updates_per_second: u32,
-    stats: Stats,
-    stats_history: VecDeque<(u32, Stats)>,
-    history_limit: usize,
-    smoothing_window: usize,
+/// UI state tracking window visibility and user interface state
+struct UiState {
     show_statistics: bool,
     show_simulation_settings: bool,
     show_mutation_settings: bool,
     show_species: bool,
     show_info: bool,
     show_dna_settings: bool,
-    simulation_config: SimulationConfig,
-    previous_simulation_config: SimulationConfig,
-    started: bool,
-    paused: bool,
     show_networks: bool,
     selected_network: u32,
+    started: bool,
+    paused: bool,
+}
+
+/// Performance tracking and frame rate statistics
+struct PerformanceStats {
+    total_frames: usize,
+    last_frame: Instant,
+    updates_last_second: u32,
+    last_second: Instant,
+    frames_last_second: u32,
+    frames_per_second: u32,
+    updates_per_second: u32,
+    can_draw_frame: bool,
+}
+
+/// Configuration state and data management
+struct ConfigState {
+    config: Config,
+    simulation_config: SimulationConfig,
+    previous_simulation_config: SimulationConfig,
+    stats: Stats,
+    stats_history: VecDeque<(u32, Stats)>,
+    history_limit: usize,
+    smoothing_window: usize,
+    hexes: Vec<Hex>,
     fonts: Fonts,
+}
+
+struct MyEguiApp {
+    text: String,
+    engine_commands_sender: Sender<EngineCommand>,
+    engine_events_sender: Sender<EngineEvent>,
+    engine_events_receiver: Receiver<EngineEvent>,
+    engine_commands_receiver: Arc<Mutex<Receiver<EngineCommand>>>,
+    ui_state: UiState,
+    performance_stats: PerformanceStats,
+    config_state: ConfigState,
 }
 
 impl MyEguiApp {
@@ -571,7 +586,7 @@ impl MyEguiApp {
     }
 
     fn save_config(&self) {
-        if let Ok(toml_str) = toml::to_string(&self.simulation_config) {
+        if let Ok(toml_str) = toml::to_string(&self.config_state.simulation_config) {
             let _ = fs::write("config.toml", toml_str);
         }
     }
@@ -615,48 +630,54 @@ impl MyEguiApp {
         };
         Self {
             text: String::new(),
-            total_frames: 0,
-            updates_last_second: 0,
-            frames_last_second: 0,
-            frames_per_second: 0,
-            updates_per_second: 0,
-            last_frame: Instant::now(),
-            last_second: Instant::now(),
             engine_commands_sender,
             engine_events_sender,
             engine_events_receiver,
             engine_commands_receiver: Arc::new(Mutex::new(engine_commands_receiver)),
-            config,
-            simulation_config,
-            previous_simulation_config: simulation_config,
-            can_draw_frame: true,
-            stats: Stats::default(),
-            stats_history: VecDeque::new(),
-            history_limit: 1000,
-            show_statistics: false,
-            hexes: vec![],
-            show_simulation_settings: false,
-            show_mutation_settings: false,
-            show_species: false,
-            show_networks: false,
-            show_info: false,
-            show_dna_settings: false,
-            started: false,
-            paused: false,
-            selected_network: 0,
-            fonts: Fonts::new(1.0, 2 * 1024, font_definitions),
-            smoothing_window: 100,
+            ui_state: UiState {
+                show_statistics: false,
+                show_simulation_settings: false,
+                show_mutation_settings: false,
+                show_species: false,
+                show_info: false,
+                show_dna_settings: false,
+                show_networks: false,
+                selected_network: 0,
+                started: false,
+                paused: false,
+            },
+            performance_stats: PerformanceStats {
+                total_frames: 0,
+                last_frame: Instant::now(),
+                updates_last_second: 0,
+                last_second: Instant::now(),
+                frames_last_second: 0,
+                frames_per_second: 0,
+                updates_per_second: 0,
+                can_draw_frame: true,
+            },
+            config_state: ConfigState {
+                config,
+                simulation_config,
+                previous_simulation_config: simulation_config,
+                stats: Stats::default(),
+                stats_history: VecDeque::new(),
+                history_limit: 1000,
+                smoothing_window: 100,
+                hexes: vec![],
+                fonts: Fonts::new(1.0, 2 * 1024, font_definitions),
+            },
         }
     }
     fn handle_events(&mut self, _ctx: &egui::Context) {
-        if !self.started {
+        if !self.ui_state.started {
             start_simulation(
                 &self.engine_events_sender,
                 Arc::clone(&self.engine_commands_receiver),
                 _ctx.clone(),
-                self.simulation_config,
+                self.config_state.simulation_config,
             );
-            self.started = true;
+            self.ui_state.started = true;
             self.engine_commands_sender
                 .send(EngineCommand::CreateSnakes(10))
                 .unwrap();
@@ -679,151 +700,166 @@ impl MyEguiApp {
                 } => {
                     self.text =
                         format!("{updates_left:.1} updates left, {updates_done} updates done");
-                    self.can_draw_frame = true;
-                    self.total_frames += 1;
-                    self.updates_last_second += updates_done;
-                    self.frames_last_second += 1;
+                    self.performance_stats.can_draw_frame = true;
+                    self.performance_stats.total_frames += 1;
+                    self.performance_stats.updates_last_second += updates_done;
+                    self.performance_stats.frames_last_second += 1;
                 }
                 EngineEvent::DrawData {
                     hexes,
                     stats,
                     frames,
                 } => {
-                    self.hexes = hexes;
-                    self.stats = stats.clone();
-                    self.stats_history.push_back((frames, stats));
-                    if self.stats_history.len() > self.history_limit {
-                        self.stats_history.pop_front();
+                    self.config_state.hexes = hexes;
+                    self.config_state.stats = stats.clone();
+                    self.config_state.stats_history.push_back((frames, stats));
+                    if self.config_state.stats_history.len() > self.config_state.history_limit {
+                        self.config_state.stats_history.pop_front();
                     }
                 }
             });
-        if self.last_second.elapsed().as_millis() > 1000 {
-            self.last_second = Instant::now();
-            self.updates_per_second = self.updates_last_second;
-            self.frames_per_second = self.frames_last_second;
-            self.updates_last_second = 0;
-            self.frames_last_second = 0;
+        if self.performance_stats.last_second.elapsed().as_millis() > 1000 {
+            self.performance_stats.last_second = Instant::now();
+            self.performance_stats.updates_per_second = self.performance_stats.updates_last_second;
+            self.performance_stats.frames_per_second = self.performance_stats.frames_last_second;
+            self.performance_stats.updates_last_second = 0;
+            self.performance_stats.frames_last_second = 0;
         }
     }
 
     fn render_windows(&mut self, ctx: &egui::Context) {
         egui::Window::new("Environment Settings")
-            .open(&mut self.show_simulation_settings)
+            .open(&mut self.ui_state.show_simulation_settings)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("Size*")
                         .on_hover_text("Grid size in hexes (width and height)");
-                    ui.add(egui::DragValue::new(&mut self.config.columns).speed(1.0))
+                    ui.add(egui::DragValue::new(&mut self.config_state.config.columns).speed(1.0))
                         .on_hover_text("Adjust grid dimensions");
-                    self.config.rows = self.config.columns;
-                    self.simulation_config.rows = self.config.rows;
-                    self.simulation_config.columns = self.config.columns;
+                    self.config_state.config.rows = self.config_state.config.columns;
+                    self.config_state.simulation_config.rows = self.config_state.config.rows;
+                    self.config_state.simulation_config.columns = self.config_state.config.columns;
                 });
                 add_checkbox(
                     ui,
                     "Add walls*",
-                    &mut self.config.add_walls,
+                    &mut self.config_state.config.add_walls,
                     "Add walls around the grid perimeter",
                 );
                 add_drag_value(
                     ui,
                     "Food per step",
-                    &mut self.simulation_config.food_per_step,
+                    &mut self.config_state.simulation_config.food_per_step,
                     1.0,
                     "Number of food items added each simulation step",
                 );
                 add_drag_value(
                     ui,
                     "Energy per segment",
-                    &mut self.simulation_config.plant_matter_per_segment,
+                    &mut self.config_state.simulation_config.plant_matter_per_segment,
                     1.0,
                     "Energy content of plant food per snake segment",
                 );
                 add_drag_value(
                     ui,
                     "Wait cost",
-                    &mut self.simulation_config.wait_cost,
+                    &mut self.config_state.simulation_config.wait_cost,
                     1.0,
                     "Energy cost for waiting action",
                 );
                 add_drag_value(
                     ui,
                     "Move cost",
-                    &mut self.simulation_config.move_cost,
+                    &mut self.config_state.simulation_config.move_cost,
                     1.0,
                     "Energy cost for moving action",
                 );
                 add_drag_value(
                     ui,
                     "New segment energy cost",
-                    &mut self.simulation_config.new_segment_cost,
+                    &mut self.config_state.simulation_config.new_segment_cost,
                     1.0,
                     "Energy cost to grow a new segment",
                 );
                 add_drag_value(
                     ui,
                     "Size to split",
-                    &mut self.simulation_config.size_to_split,
+                    &mut self.config_state.simulation_config.size_to_split,
                     1.0,
                     "Minimum segments required to split/reproduce",
                 );
                 add_drag_value(
                     ui,
                     "Aging starts at",
-                    &mut self.simulation_config.snake_max_age,
+                    &mut self.config_state.simulation_config.snake_max_age,
                     1.0,
                     "Age when snakes start losing energy",
                 );
                 add_drag_value(
                     ui,
                     "Species coloring threshold",
-                    &mut self.simulation_config.species_threshold,
+                    &mut self.config_state.simulation_config.species_threshold,
                     1.0,
                     "Genetic distance for species clustering",
                 );
                 add_checkbox(
                     ui,
                     "Create smell (low performance, memory leaks)",
-                    &mut self.simulation_config.create_scents,
+                    &mut self.config_state.simulation_config.create_scents,
                     "Enable scent diffusion (experimental, may cause performance issues)",
                 );
                 add_drag_value(
                     ui,
                     "Smell diffusion rate",
-                    &mut self.simulation_config.scent_diffusion_rate,
+                    &mut self.config_state.simulation_config.scent_diffusion_rate,
                     1.0,
                     "Rate at which scents spread",
                 );
                 add_drag_value(
                     ui,
                     "Smell dispersion rate per step",
-                    &mut self.simulation_config.scent_dispersion_per_step,
+                    &mut self
+                        .config_state
+                        .simulation_config
+                        .scent_dispersion_per_step,
                     1.0,
                     "Scent dispersion per simulation step",
                 );
                 ui.label("Settings marked with * will only take effect after a restart.");
             });
         egui::Window::new("Mutation Settings")
-            .open(&mut self.show_mutation_settings)
+            .open(&mut self.ui_state.show_mutation_settings)
             .show(ctx, |ui| {
                 ui.label("Senses:")
                     .on_hover_text("Configure sensory capabilities that can mutate");
                 add_checkbox(
                     ui,
                     "Chaos gene",
-                    &mut self.simulation_config.mutation.chaos_input_enabled,
+                    &mut self
+                        .config_state
+                        .simulation_config
+                        .mutation
+                        .chaos_input_enabled,
                     "Allow random input to neural networks",
                 );
                 add_checkbox(
                     ui,
                     "Food smelling",
-                    &mut self.simulation_config.mutation.scent_sensing_enabled,
+                    &mut self
+                        .config_state
+                        .simulation_config
+                        .mutation
+                        .scent_sensing_enabled,
                     "Enable scent-based food detection",
                 );
                 add_checkbox(
                     ui,
                     "Plant vision",
-                    &mut self.simulation_config.mutation.plant_vision_enabled,
+                    &mut self
+                        .config_state
+                        .simulation_config
+                        .mutation
+                        .plant_vision_enabled,
                     "Allow vision of plant food",
                 );
                 ui.horizontal(|ui| {
@@ -831,7 +867,11 @@ impl MyEguiApp {
                         .on_hover_text("Vision range directly ahead");
                     ui.add(
                         egui::DragValue::new(
-                            &mut self.simulation_config.mutation.plant_vision_front_range,
+                            &mut self
+                                .config_state
+                                .simulation_config
+                                .mutation
+                                .plant_vision_front_range,
                         )
                         .speed(1.0),
                     )
@@ -840,7 +880,11 @@ impl MyEguiApp {
                         .on_hover_text("Vision range to the left");
                     ui.add(
                         egui::DragValue::new(
-                            &mut self.simulation_config.mutation.plant_vision_left_range,
+                            &mut self
+                                .config_state
+                                .simulation_config
+                                .mutation
+                                .plant_vision_left_range,
                         )
                         .speed(1.0),
                     )
@@ -849,7 +893,11 @@ impl MyEguiApp {
                         .on_hover_text("Vision range to the right");
                     ui.add(
                         egui::DragValue::new(
-                            &mut self.simulation_config.mutation.plant_vision_right_range,
+                            &mut self
+                                .config_state
+                                .simulation_config
+                                .mutation
+                                .plant_vision_right_range,
                         )
                         .speed(1.0),
                     )
@@ -858,7 +906,11 @@ impl MyEguiApp {
                 add_checkbox(
                     ui,
                     "Meat vision",
-                    &mut self.simulation_config.mutation.meat_vision_enabled,
+                    &mut self
+                        .config_state
+                        .simulation_config
+                        .mutation
+                        .meat_vision_enabled,
                     "Allow vision of meat food",
                 );
                 ui.horizontal(|ui| {
@@ -866,7 +918,11 @@ impl MyEguiApp {
                         .on_hover_text("Vision range directly ahead");
                     ui.add(
                         egui::DragValue::new(
-                            &mut self.simulation_config.mutation.meat_vision_front_range,
+                            &mut self
+                                .config_state
+                                .simulation_config
+                                .mutation
+                                .meat_vision_front_range,
                         )
                         .speed(1.0),
                     )
@@ -875,7 +931,11 @@ impl MyEguiApp {
                         .on_hover_text("Vision range to the left");
                     ui.add(
                         egui::DragValue::new(
-                            &mut self.simulation_config.mutation.meat_vision_left_range,
+                            &mut self
+                                .config_state
+                                .simulation_config
+                                .mutation
+                                .meat_vision_left_range,
                         )
                         .speed(1.0),
                     )
@@ -884,7 +944,11 @@ impl MyEguiApp {
                         .on_hover_text("Vision range to the right");
                     ui.add(
                         egui::DragValue::new(
-                            &mut self.simulation_config.mutation.meat_vision_right_range,
+                            &mut self
+                                .config_state
+                                .simulation_config
+                                .mutation
+                                .meat_vision_right_range,
                         )
                         .speed(1.0),
                     )
@@ -893,7 +957,11 @@ impl MyEguiApp {
                 add_checkbox(
                     ui,
                     "Obstacle vision",
-                    &mut self.simulation_config.mutation.obstacle_vision_enabled,
+                    &mut self
+                        .config_state
+                        .simulation_config
+                        .mutation
+                        .obstacle_vision_enabled,
                     "Allow vision of obstacles/walls",
                 );
                 ui.horizontal(|ui| {
@@ -901,7 +969,11 @@ impl MyEguiApp {
                         .on_hover_text("Vision range directly ahead");
                     ui.add(
                         egui::DragValue::new(
-                            &mut self.simulation_config.mutation.obstacle_vision_front_range,
+                            &mut self
+                                .config_state
+                                .simulation_config
+                                .mutation
+                                .obstacle_vision_front_range,
                         )
                         .speed(1.0),
                     )
@@ -910,7 +982,11 @@ impl MyEguiApp {
                         .on_hover_text("Vision range to the left");
                     ui.add(
                         egui::DragValue::new(
-                            &mut self.simulation_config.mutation.obstacle_vision_left_range,
+                            &mut self
+                                .config_state
+                                .simulation_config
+                                .mutation
+                                .obstacle_vision_left_range,
                         )
                         .speed(1.0),
                     )
@@ -919,7 +995,11 @@ impl MyEguiApp {
                         .on_hover_text("Vision range to the right");
                     ui.add(
                         egui::DragValue::new(
-                            &mut self.simulation_config.mutation.obstacle_vision_right_range,
+                            &mut self
+                                .config_state
+                                .simulation_config
+                                .mutation
+                                .obstacle_vision_right_range,
                         )
                         .speed(1.0),
                     )
@@ -930,82 +1010,114 @@ impl MyEguiApp {
                 add_drag_value(
                     ui,
                     "Weights perturbation chance",
-                    &mut self.simulation_config.mutation.weight_perturbation_chance,
+                    &mut self
+                        .config_state
+                        .simulation_config
+                        .mutation
+                        .weight_perturbation_chance,
                     1.0,
                     "Probability of randomly adjusting connection weights",
                 );
                 add_drag_value(
                     ui,
                     "Weights perturbation range",
-                    &mut self.simulation_config.mutation.weight_perturbation_range,
+                    &mut self
+                        .config_state
+                        .simulation_config
+                        .mutation
+                        .weight_perturbation_range,
                     1.0,
                     "Maximum adjustment amount for weights",
                 );
                 add_checkbox(
                     ui,
                     "Perturb disabled connections",
-                    &mut self.simulation_config.mutation.perturb_disabled_connections,
+                    &mut self
+                        .config_state
+                        .simulation_config
+                        .mutation
+                        .perturb_disabled_connections,
                     "Allow mutation of disabled neural connections",
                 );
                 add_drag_value(
                     ui,
                     "Weights reset chance",
-                    &mut self.simulation_config.mutation.weight_reset_chance,
+                    &mut self
+                        .config_state
+                        .simulation_config
+                        .mutation
+                        .weight_reset_chance,
                     1.0,
                     "Probability of resetting weights to new random values",
                 );
                 add_drag_value(
                     ui,
                     "Weights reset range",
-                    &mut self.simulation_config.mutation.weight_reset_range,
+                    &mut self
+                        .config_state
+                        .simulation_config
+                        .mutation
+                        .weight_reset_range,
                     1.0,
                     "Range for new random weights",
                 );
                 add_checkbox(
                     ui,
                     "Perturb reset connections",
-                    &mut self.simulation_config.mutation.perturb_disabled_connections,
+                    &mut self
+                        .config_state
+                        .simulation_config
+                        .mutation
+                        .perturb_disabled_connections,
                     "Allow perturbation of newly reset connections",
                 );
                 add_drag_value(
                     ui,
                     "Connection flip chance",
-                    &mut self.simulation_config.mutation.connection_flip_chance,
+                    &mut self
+                        .config_state
+                        .simulation_config
+                        .mutation
+                        .connection_flip_chance,
                     1.0,
                     "Probability of enabling/disabling connections",
                 );
                 add_drag_value(
                     ui,
                     "Dna mutation chance",
-                    &mut self.simulation_config.mutation.dna_mutation_chance,
+                    &mut self
+                        .config_state
+                        .simulation_config
+                        .mutation
+                        .dna_mutation_chance,
                     1.0,
                     "Probability of mutating snake DNA segments",
                 );
             });
         egui::Window::new("DNA Settings")
-            .open(&mut self.show_dna_settings)
+            .open(&mut self.ui_state.show_dna_settings)
             .show(ctx, |ui| {
                 ui.label("Disable segments from possible genes during mutation:")
                     .on_hover_text("Uncheck to allow this segment type in DNA mutations");
                 let mut segment_configs = [
                     (
                         "Muscle",
-                        &mut self.simulation_config.mutation.disable_muscle,
+                        &mut self.config_state.simulation_config.mutation.disable_muscle,
                         Color32::LIGHT_RED,
                     ),
                     (
                         "Solid",
-                        &mut self.simulation_config.mutation.disable_solid,
+                        &mut self.config_state.simulation_config.mutation.disable_solid,
                         Color32::BROWN,
                     ),
                     (
                         "Solar",
-                        &mut self.simulation_config.mutation.disable_solar,
+                        &mut self.config_state.simulation_config.mutation.disable_solar,
                         Color32::LIGHT_BLUE,
                     ),
                     (
                         "Stomach",
-                        &mut self.simulation_config.mutation.disable_stomach,
+                        &mut self.config_state.simulation_config.mutation.disable_stomach,
                         Color32::LIGHT_GREEN,
                     ),
                 ];
@@ -1017,25 +1129,29 @@ impl MyEguiApp {
                 }
             });
         egui::Window::new("Species")
-            .open(&mut self.show_species)
+            .open(&mut self.ui_state.show_species)
             .show(ctx, |_ui| {});
         egui::Window::new("Statistics")
-            .open(&mut self.show_statistics)
+            .open(&mut self.ui_state.show_statistics)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("History limit");
-                    ui.add(egui::DragValue::new(&mut self.history_limit).speed(10.0));
+                    ui.add(egui::DragValue::new(&mut self.config_state.history_limit).speed(10.0));
                 });
                 ui.horizontal(|ui| {
                     ui.label("Smoothing window");
-                    ui.add(egui::DragValue::new(&mut self.smoothing_window).speed(10.0));
+                    ui.add(
+                        egui::DragValue::new(&mut self.config_state.smoothing_window).speed(10.0),
+                    );
                 });
                 let current_frame = self
+                    .config_state
                     .stats_history
                     .back()
                     .map(|(f, _)| *f as f64)
                     .unwrap_or(0.0);
                 let raw_plant_energy: Vec<(f64, f64)> = self
+                    .config_state
                     .stats_history
                     .iter()
                     .map(|(f, s)| {
@@ -1046,6 +1162,7 @@ impl MyEguiApp {
                     })
                     .collect();
                 let raw_meat_energy: Vec<(f64, f64)> = self
+                    .config_state
                     .stats_history
                     .iter()
                     .map(|(f, s)| {
@@ -1056,6 +1173,7 @@ impl MyEguiApp {
                     })
                     .collect();
                 let raw_snake_energy: Vec<(f64, f64)> = self
+                    .config_state
                     .stats_history
                     .iter()
                     .map(|(f, s)| {
@@ -1069,8 +1187,8 @@ impl MyEguiApp {
                     .iter()
                     .enumerate()
                     .map(|(i, _)| {
-                        let start = if i >= self.smoothing_window {
-                            i - self.smoothing_window + 1
+                        let start = if i >= self.config_state.smoothing_window {
+                            i - self.config_state.smoothing_window + 1
                         } else {
                             0
                         };
@@ -1083,8 +1201,8 @@ impl MyEguiApp {
                     .iter()
                     .enumerate()
                     .map(|(i, _)| {
-                        let start = if i >= self.smoothing_window {
-                            i - self.smoothing_window + 1
+                        let start = if i >= self.config_state.smoothing_window {
+                            i - self.config_state.smoothing_window + 1
                         } else {
                             0
                         };
@@ -1097,8 +1215,8 @@ impl MyEguiApp {
                     .iter()
                     .enumerate()
                     .map(|(i, _)| {
-                        let start = if i >= self.smoothing_window {
-                            i - self.smoothing_window + 1
+                        let start = if i >= self.config_state.smoothing_window {
+                            i - self.config_state.smoothing_window + 1
                         } else {
                             0
                         };
@@ -1117,10 +1235,10 @@ impl MyEguiApp {
                         plot_ui.line(meat_line);
                         plot_ui.line(snake_line);
                     });
-                if self.stats.species.species.is_empty() {
+                if self.config_state.stats.species.species.is_empty() {
                     ui.label("No species yet.");
                 } else {
-                    let mut sorted = self.stats.species.species.clone();
+                    let mut sorted = self.config_state.stats.species.species.clone();
                     sorted.sort_by(|a, b| b.members.len().cmp(&a.members.len()));
                     let bars: Vec<Bar> = sorted
                         .iter()
@@ -1139,29 +1257,29 @@ impl MyEguiApp {
                         });
                 }
             });
-        egui::Window::new("Networks").open(&mut self.show_networks).show(ctx, |ui| {
-            let specie_ids = &self.stats.species.species.iter().map(|specie| specie.id).collect::<Vec<u32>>();
+        egui::Window::new("Networks").open(&mut self.ui_state.show_networks).show(ctx, |ui| {
+            let specie_ids = &self.config_state.stats.species.species.iter().map(|specie| specie.id).collect::<Vec<u32>>();
             if specie_ids.is_empty() {
                 ui.label("No networks yet").on_hover_text("No species have formed yet - start a simulation to see neural networks");
                 return;
             }
-            let selected_specie_in_list = specie_ids.contains(&self.selected_network);
+            let selected_specie_in_list = specie_ids.contains(&self.ui_state.selected_network);
             if !selected_specie_in_list {
-                self.selected_network = specie_ids[0];
+                self.ui_state.selected_network = specie_ids[0];
             }
             ui.horizontal(|ui| {
                 egui::ComboBox::from_label("Specie")
-                    .selected_text(format!("{:?}", self.selected_network))
+                    .selected_text(format!("{:?}", self.ui_state.selected_network))
                     .show_ui(ui, |ui| {
                         for specie_id in specie_ids {
-                            ui.selectable_value(&mut self.selected_network, *specie_id, format!("{specie_id:?}"));
+                            ui.selectable_value(&mut self.ui_state.selected_network, *specie_id, format!("{specie_id:?}"));
                         }
                     }).response.on_hover_text("Select species to view its neural network");
                 if ui.button("Next").on_hover_text("View next species").clicked() {
-                    self.selected_network = specie_ids[(specie_ids.iter().position(|id| *id == self.selected_network).unwrap() + 1) % specie_ids.len()];
+                    self.ui_state.selected_network = specie_ids[(specie_ids.iter().position(|id| *id == self.ui_state.selected_network).unwrap() + 1) % specie_ids.len()];
                 }
                 if ui.button("Previous").on_hover_text("View previous species").clicked() {
-                    self.selected_network = specie_ids[(specie_ids.iter().position(|id| *id == self.selected_network).unwrap() + specie_ids.len() - 1) % specie_ids.len()];
+                    self.ui_state.selected_network = specie_ids[(specie_ids.iter().position(|id| *id == self.ui_state.selected_network).unwrap() + specie_ids.len() - 1) % specie_ids.len()];
                 }
             });
             ui.collapsing("Information", |ui| {
@@ -1182,13 +1300,13 @@ impl MyEguiApp {
                     Wait"#).on_hover_text("List of neural network outputs");
                 });
             }).header_response.on_hover_text("Show/hide neural network information");
-            if let Some(selected_specie) = self.stats.species.species.iter().find(|specie| specie.id == self.selected_network) {
+            if let Some(selected_specie) = self.config_state.stats.species.species.iter().find(|specie| specie.id == self.ui_state.selected_network) {
                 ui.label(format!("Network run cost: {}", selected_specie.leader_network.run_cost())).on_hover_text("Energy cost per neural network evaluation");
-                draw_neural_network(ui, &self.fonts, selected_specie.id, &selected_specie.leader_network.get_nodes(), &selected_specie.leader_network.get_active_connections());
+                draw_neural_network(ui, &self.config_state.fonts, selected_specie.id, &selected_specie.leader_network.get_nodes(), &selected_specie.leader_network.get_active_connections());
             }
         });
         egui::Window::new("Info")
-            .open(&mut self.show_info)
+            .open(&mut self.ui_state.show_info)
             .show(ctx, |ui| {
                 ui.label("Press 'o' to add one snake")
                     .on_hover_text("Keyboard shortcut to spawn a single snake");
@@ -1205,65 +1323,110 @@ impl MyEguiApp {
                 ui.label("To change disabled settings, stop the simulation first")
                     .on_hover_text("Some settings require simulation restart");
                 ui.horizontal(|ui| {
-                    ui.label(format!("Tot: {}", self.total_frames))
-                        .on_hover_text(format!("Total frames: {}", self.total_frames));
-                    ui.label(format!("FPS: {:.1}", self.frames_per_second))
-                        .on_hover_text(format!("Frames per second: {:.1}", self.frames_per_second));
-                    ui.label(format!("UPS: {}", self.updates_per_second))
-                        .on_hover_text(format!("Updates per second: {}", self.updates_per_second));
+                    ui.label(format!("Tot: {}", self.performance_stats.total_frames))
+                        .on_hover_text(format!(
+                            "Total frames: {}",
+                            self.performance_stats.total_frames
+                        ));
+                    ui.label(format!(
+                        "FPS: {:.1}",
+                        self.performance_stats.frames_per_second
+                    ))
+                    .on_hover_text(format!(
+                        "Frames per second: {:.1}",
+                        self.performance_stats.frames_per_second
+                    ));
+                    ui.label(format!(
+                        "UPS: {}",
+                        self.performance_stats.updates_per_second
+                    ))
+                    .on_hover_text(format!(
+                        "Updates per second: {}",
+                        self.performance_stats.updates_per_second
+                    ));
                     ui.label(format!(
                         "Spd: x{:.1}",
-                        self.updates_per_second as f32 / self.frames_per_second as f32
+                        self.performance_stats.updates_per_second as f32
+                            / self.performance_stats.frames_per_second as f32
                     ))
                     .on_hover_text(format!(
                         "Speed: x{:.1}",
-                        self.updates_per_second as f32 / self.frames_per_second as f32
+                        self.performance_stats.updates_per_second as f32
+                            / self.performance_stats.frames_per_second as f32
                     ));
-                    ui.label(format!("Old: {}", self.stats.oldest_snake))
-                        .on_hover_text(format!("Oldest snake: {}", self.stats.oldest_snake));
-                    ui.label(format!("Gen: {}", self.stats.max_generation))
-                        .on_hover_text(format!("Max generation: {}", self.stats.max_generation));
-                    ui.label(format!("Mut: {}", self.stats.max_mutations))
-                        .on_hover_text(format!("Max mutations: {}", self.stats.max_mutations));
+                    ui.label(format!("Old: {}", self.config_state.stats.oldest_snake))
+                        .on_hover_text(format!(
+                            "Oldest snake: {}",
+                            self.config_state.stats.oldest_snake
+                        ));
+                    ui.label(format!("Gen: {}", self.config_state.stats.max_generation))
+                        .on_hover_text(format!(
+                            "Max generation: {}",
+                            self.config_state.stats.max_generation
+                        ));
+                    ui.label(format!("Mut: {}", self.config_state.stats.max_mutations))
+                        .on_hover_text(format!(
+                            "Max mutations: {}",
+                            self.config_state.stats.max_mutations
+                        ));
                     ui.label(format!(
                         "Snk: {}/{}",
-                        self.stats.total_snakes, self.stats.total_segments
+                        self.config_state.stats.total_snakes,
+                        self.config_state.stats.total_segments
                     ))
                     .on_hover_text(format!(
                         "Snakes/segments: {}/{}",
-                        self.stats.total_snakes, self.stats.total_segments
+                        self.config_state.stats.total_snakes,
+                        self.config_state.stats.total_segments
                     ));
-                    ui.label(format!("Food: {}", self.stats.total_food))
-                        .on_hover_text(format!("Food: {}", self.stats.total_food));
-                    ui.label(format!("Spc: {}", self.stats.species.species.len()))
-                        .on_hover_text(format!("Species: {}", self.stats.species.species.len()));
-                    ui.label(format!("Snt: {}", self.stats.total_scents))
-                        .on_hover_text(format!("Scents: {}", self.stats.total_scents));
-                    ui.label(format!("Ent: {}", self.stats.total_entities))
-                        .on_hover_text(format!("Entities: {}", self.stats.total_entities));
+                    ui.label(format!("Food: {}", self.config_state.stats.total_food))
+                        .on_hover_text(format!("Food: {}", self.config_state.stats.total_food));
+                    ui.label(format!(
+                        "Spc: {}",
+                        self.config_state.stats.species.species.len()
+                    ))
+                    .on_hover_text(format!(
+                        "Species: {}",
+                        self.config_state.stats.species.species.len()
+                    ));
+                    ui.label(format!("Snt: {}", self.config_state.stats.total_scents))
+                        .on_hover_text(format!("Scents: {}", self.config_state.stats.total_scents));
+                    ui.label(format!("Ent: {}", self.config_state.stats.total_entities))
+                        .on_hover_text(format!(
+                            "Entities: {}",
+                            self.config_state.stats.total_entities
+                        ));
                     ui.label(format!(
                         "P/M: {}/{}",
-                        self.stats.total_plants, self.stats.total_meat
+                        self.config_state.stats.total_plants, self.config_state.stats.total_meat
                     ))
                     .on_hover_text(format!(
                         "Plants/Meat: {}/{}",
-                        self.stats.total_plants, self.stats.total_meat
+                        self.config_state.stats.total_plants, self.config_state.stats.total_meat
                     ));
                     ui.label(format!(
                         "Stm: P/M {}/{}",
-                        self.stats.total_plants_in_stomachs, self.stats.total_meat_in_stomachs
+                        self.config_state.stats.total_plants_in_stomachs,
+                        self.config_state.stats.total_meat_in_stomachs
                     ))
                     .on_hover_text(format!(
                         "Stomachs: P/M {}/{}",
-                        self.stats.total_plants_in_stomachs, self.stats.total_meat_in_stomachs
+                        self.config_state.stats.total_plants_in_stomachs,
+                        self.config_state.stats.total_meat_in_stomachs
                     ));
-                    ui.label(format!("SnkE: {}", self.stats.total_snake_energy))
+                    ui.label(format!(
+                        "SnkE: {}",
+                        self.config_state.stats.total_snake_energy
+                    ))
+                    .on_hover_text(format!(
+                        "Total snake energy: {}",
+                        self.config_state.stats.total_snake_energy
+                    ));
+                    ui.label(format!("TotE: {}", self.config_state.stats.total_energy))
                         .on_hover_text(format!(
-                            "Total snake energy: {}",
-                            self.stats.total_snake_energy
+                            "Total energy: {}",
+                            self.config_state.stats.total_energy
                         ));
-                    ui.label(format!("TotE: {}", self.stats.total_energy))
-                        .on_hover_text(format!("Total energy: {}", self.stats.total_energy));
                 });
             });
     }
@@ -1273,23 +1436,31 @@ impl MyEguiApp {
             ui.menu_button("View", |ui| {
                 ui.menu_button("Display Settings", |ui| {
                     ui.horizontal(|ui| {
-                        egui::stroke_ui(ui, &mut self.config.bg_color, "Background Color");
-                        egui::stroke_ui(ui, &mut self.config.scent_color, "Scent Color");
-                        egui::stroke_ui(ui, &mut self.config.tail_color, "Tail Color");
-                        egui::stroke_ui(ui, &mut self.config.food_color, "Food Color");
+                        egui::stroke_ui(
+                            ui,
+                            &mut self.config_state.config.bg_color,
+                            "Background Color",
+                        );
+                        egui::stroke_ui(
+                            ui,
+                            &mut self.config_state.config.scent_color,
+                            "Scent Color",
+                        );
+                        egui::stroke_ui(ui, &mut self.config_state.config.tail_color, "Tail Color");
+                        egui::stroke_ui(ui, &mut self.config_state.config.food_color, "Food Color");
                     });
                 });
             })
             .response
             .on_hover_text("Configure display settings");
             ui.menu_button("Help", |ui| {
-                let checked = self.show_info;
+                let checked = self.ui_state.show_info;
                 if ui
                     .selectable_label(checked, if checked { "✓ Info" } else { "Info" })
                     .on_hover_text("Toggle help and keyboard shortcuts window (F1)")
                     .clicked()
                 {
-                    self.show_info = !self.show_info;
+                    self.ui_state.show_info = !self.ui_state.show_info;
                 }
             })
             .response
@@ -1301,7 +1472,7 @@ impl MyEguiApp {
             {
                 self.engine_commands_sender
                     .send(EngineCommand::UpdateSimulationConfig(
-                        self.simulation_config,
+                        self.config_state.simulation_config,
                     ))
                     .unwrap();
                 self.engine_commands_sender
@@ -1310,49 +1481,49 @@ impl MyEguiApp {
                 self.engine_commands_sender
                     .send(EngineCommand::CreateSnakes(10))
                     .unwrap();
-                self.paused = false;
+                self.ui_state.paused = false;
             }
             if ui
                 .button("🌍")
                 .on_hover_text("Toggle environment settings window (E)")
                 .clicked()
             {
-                self.show_simulation_settings = !self.show_simulation_settings;
+                self.ui_state.show_simulation_settings = !self.ui_state.show_simulation_settings;
             }
             if ui
                 .button("")
                 .on_hover_text("Toggle mutation settings window (M)")
                 .clicked()
             {
-                self.show_mutation_settings = !self.show_mutation_settings;
+                self.ui_state.show_mutation_settings = !self.ui_state.show_mutation_settings;
             }
             if ui
                 .button("🧬")
                 .on_hover_text("Toggle DNA settings window (D)")
                 .clicked()
             {
-                self.show_dna_settings = !self.show_dna_settings;
+                self.ui_state.show_dna_settings = !self.ui_state.show_dna_settings;
             }
             if ui
                 .button("🐾")
                 .on_hover_text("Toggle species window (P)")
                 .clicked()
             {
-                self.show_species = !self.show_species;
+                self.ui_state.show_species = !self.ui_state.show_species;
             }
             if ui
                 .button("󰧑 ")
                 .on_hover_text("Toggle neural networks window (N)")
                 .clicked()
             {
-                self.show_networks = !self.show_networks;
+                self.ui_state.show_networks = !self.ui_state.show_networks;
             }
             if ui
                 .button("📊")
                 .on_hover_text("Toggle statistics window (T)")
                 .clicked()
             {
-                self.show_statistics = !self.show_statistics;
+                self.ui_state.show_statistics = !self.ui_state.show_statistics;
             }
             // Add snakes
             if ui.button("🐍").on_hover_text("Add 10 snakes (S)").clicked() {
@@ -1361,22 +1532,22 @@ impl MyEguiApp {
                     .unwrap();
             }
             // Play/Pause button
-            let play_pause_icon = if self.paused { "▶" } else { "⏸" };
-            let play_button = egui::Button::new(play_pause_icon).fill(if self.paused {
+            let play_pause_icon = if self.ui_state.paused { "▶" } else { "⏸" };
+            let play_button = egui::Button::new(play_pause_icon).fill(if self.ui_state.paused {
                 Color32::from_rgb(0, 128, 0) // Dark green for better contrast
             } else {
                 Color32::from_rgb(128, 0, 0) // Dark red for better contrast
             });
             if ui
                 .add(play_button)
-                .on_hover_text(if self.paused {
+                .on_hover_text(if self.ui_state.paused {
                     "Play simulation (Space)"
                 } else {
                     "Pause simulation (Space)"
                 })
                 .clicked()
             {
-                self.paused = !self.paused;
+                self.ui_state.paused = !self.ui_state.paused;
                 self.engine_commands_sender
                     .send(EngineCommand::FlipRunningState)
                     .unwrap();
@@ -1401,13 +1572,14 @@ impl MyEguiApp {
             }
             ui.label(format!(
                 "x{:.1}",
-                self.updates_per_second as f32 / self.frames_per_second as f32
+                self.performance_stats.updates_per_second as f32
+                    / self.performance_stats.frames_per_second as f32
             ));
         });
     }
 
     fn render_central_panel(&mut self, _ctx: &egui::Context, ui: &mut Ui) {
-        draw_hexes(ui, &self.hexes, &self.config);
+        draw_hexes(ui, &self.config_state.hexes, &self.config_state.config);
         ScrollArea::vertical()
             .auto_shrink([false; 2])
             .stick_to_bottom(true)
@@ -1444,12 +1616,12 @@ impl MyEguiApp {
         }
         // New shortcuts for toolbar buttons
         if ctx.input(|i| i.key_pressed(Key::F1)) {
-            self.show_info = !self.show_info;
+            self.ui_state.show_info = !self.ui_state.show_info;
         }
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::R)) {
             self.engine_commands_sender
                 .send(EngineCommand::UpdateSimulationConfig(
-                    self.simulation_config,
+                    self.config_state.simulation_config,
                 ))
                 .unwrap();
             self.engine_commands_sender
@@ -1458,25 +1630,25 @@ impl MyEguiApp {
             self.engine_commands_sender
                 .send(EngineCommand::CreateSnakes(10))
                 .unwrap();
-            self.paused = false;
+            self.ui_state.paused = false;
         }
         if ctx.input(|i| i.key_pressed(Key::E)) {
-            self.show_simulation_settings = !self.show_simulation_settings;
+            self.ui_state.show_simulation_settings = !self.ui_state.show_simulation_settings;
         }
         if ctx.input(|i| i.key_pressed(Key::M)) {
-            self.show_mutation_settings = !self.show_mutation_settings;
+            self.ui_state.show_mutation_settings = !self.ui_state.show_mutation_settings;
         }
         if ctx.input(|i| i.key_pressed(Key::D)) {
-            self.show_dna_settings = !self.show_dna_settings;
+            self.ui_state.show_dna_settings = !self.ui_state.show_dna_settings;
         }
         if ctx.input(|i| i.key_pressed(Key::P)) {
-            self.show_species = !self.show_species;
+            self.ui_state.show_species = !self.ui_state.show_species;
         }
         if ctx.input(|i| i.key_pressed(Key::N)) {
-            self.show_networks = !self.show_networks;
+            self.ui_state.show_networks = !self.ui_state.show_networks;
         }
         if ctx.input(|i| i.key_pressed(Key::T)) {
-            self.show_statistics = !self.show_statistics;
+            self.ui_state.show_statistics = !self.ui_state.show_statistics;
         }
         if ctx.input(|i| i.key_pressed(Key::S)) {
             self.engine_commands_sender
@@ -1484,7 +1656,7 @@ impl MyEguiApp {
                 .unwrap();
         }
         if ctx.input(|i| i.key_pressed(Key::Space)) {
-            self.paused = !self.paused;
+            self.ui_state.paused = !self.ui_state.paused;
             self.engine_commands_sender
                 .send(EngineCommand::FlipRunningState)
                 .unwrap();
@@ -1501,29 +1673,31 @@ impl eframe::App for MyEguiApp {
         }
         self.handle_events(ctx);
         self.render_windows(ctx);
-        if self.simulation_config != self.previous_simulation_config {
+        if self.config_state.simulation_config != self.config_state.previous_simulation_config {
             self.save_config();
-            if !only_star_fields_differ(&self.simulation_config, &self.previous_simulation_config)
-                || self.paused
+            if !only_star_fields_differ(
+                &self.config_state.simulation_config,
+                &self.config_state.previous_simulation_config,
+            ) || self.ui_state.paused
             {
                 self.engine_commands_sender
                     .send(EngineCommand::UpdateSimulationConfig(
-                        self.simulation_config,
+                        self.config_state.simulation_config,
                     ))
                     .unwrap();
             }
-            self.previous_simulation_config = self.simulation_config;
+            self.config_state.previous_simulation_config = self.config_state.simulation_config;
         }
         egui::CentralPanel::default().show(ctx, |ui| {
             self.render_toolbar(ui);
             self.render_central_panel(ctx, ui);
         });
         self.handle_keyboard_shortcuts(ctx);
-        if self.can_draw_frame {
+        if self.performance_stats.can_draw_frame {
             ctx.request_repaint();
-            self.can_draw_frame = false;
+            self.performance_stats.can_draw_frame = false;
         }
-        self.last_frame = Instant::now();
+        self.performance_stats.last_frame = Instant::now();
         let _ = self
             .engine_commands_sender
             .send(EngineCommand::RepaintRequested);
