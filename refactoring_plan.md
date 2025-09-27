@@ -27,10 +27,11 @@
 12. [x] Define constants for magic numbers in `gui/src/main.rs`.
     - Completed: Defined constants for window size, speed limit, history limit, smoothing window, performance update interval, and default snakes to add. Replaced literals with constants throughout the file. Colors were not made const due to non-const constructors. No unexpected choices; constants improve tunability without changing visuals.
 13. [x] Simplify complex conditionals in GUI rendering.
-     - Added early return in Statistics window when no species exist.
-     - Extracted render_vision_ranges helper function to flatten nested ui.horizontal chains in Mutation Settings for plant, meat, and obstacle vision ranges.
-     - Used guard clauses for vision range rendering only when enabled.
-14. [ ] Create `sensory.rs` utility module in `engine/src/`.
+      - Added early return in Statistics window when no species exist.
+      - Extracted render_vision_ranges helper function to flatten nested ui.horizontal chains in Mutation Settings for plant, meat, and obstacle vision ranges.
+      - Used guard clauses for vision range rendering only when enabled.
+14. [x] Create `sensory.rs` utility module in `engine/src/`.
+      - Completed: Moved sensory helper functions from core.rs to new sensory.rs module, added pub mod sensory to lib.rs, and updated calls in think function. Made turn_left and turn_right pub for use in sensory.rs. No unexpected choices; extraction was straightforward and preserved all functionality.
 15. [ ] Create `mutation.rs` utility module in `engine/src/`.
 16. [ ] Create `ui_helpers.rs` module in `gui/src/`.
 17. [ ] Modularize GUI into submodules.

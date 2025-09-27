@@ -1,6 +1,7 @@
 pub mod core;
 pub mod dna;
 pub mod neural;
+pub mod sensory;
 pub mod simulation;
 pub mod test_utils;
 
