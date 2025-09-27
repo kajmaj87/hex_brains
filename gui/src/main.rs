@@ -719,101 +719,88 @@ impl MyEguiApp {
                     self.simulation_config.rows = self.config.rows;
                     self.simulation_config.columns = self.config.columns;
                 });
-                ui.horizontal(|ui| {
-                    ui.add(egui::Checkbox::new(
-                        &mut self.config.add_walls,
-                        "Add walls*",
-                    ))
-                    .on_hover_text("Add walls around the grid perimeter");
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Food per step")
-                        .on_hover_text("Number of food items added each simulation step");
-                    ui.add(
-                        egui::DragValue::new(&mut self.simulation_config.food_per_step).speed(1.0),
-                    )
-                    .on_hover_text("Adjust food spawn rate");
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Energy per segment")
-                        .on_hover_text("Energy content of plant food per snake segment");
-                    ui.add(
-                        egui::DragValue::new(&mut self.simulation_config.plant_matter_per_segment)
-                            .speed(1.0),
-                    )
-                    .on_hover_text("Set plant energy density");
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Wait cost")
-                        .on_hover_text("Energy cost for waiting action");
-                    ui.add(egui::DragValue::new(&mut self.simulation_config.wait_cost).speed(1.0))
-                        .on_hover_text("Adjust wait energy cost");
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Move cost")
-                        .on_hover_text("Energy cost for moving action");
-                    ui.add(egui::DragValue::new(&mut self.simulation_config.move_cost).speed(1.0))
-                        .on_hover_text("Adjust move energy cost");
-                });
-                ui.horizontal(|ui| {
-                    ui.label("New segment energy cost")
-                        .on_hover_text("Energy cost to grow a new segment");
-                    ui.add(
-                        egui::DragValue::new(&mut self.simulation_config.new_segment_cost)
-                            .speed(1.0),
-                    )
-                    .on_hover_text("Set growth energy cost");
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Size to split")
-                        .on_hover_text("Minimum segments required to split/reproduce");
-                    ui.add(
-                        egui::DragValue::new(&mut self.simulation_config.size_to_split).speed(1.0),
-                    )
-                    .on_hover_text("Adjust reproduction threshold");
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Aging starts at")
-                        .on_hover_text("Age when snakes start losing energy");
-                    ui.add(
-                        egui::DragValue::new(&mut self.simulation_config.snake_max_age).speed(1.0),
-                    )
-                    .on_hover_text("Set aging threshold");
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Species coloring threshold")
-                        .on_hover_text("Genetic distance for species clustering");
-                    ui.add(
-                        egui::DragValue::new(&mut self.simulation_config.species_threshold)
-                            .speed(1.0),
-                    )
-                    .on_hover_text("Adjust species similarity threshold");
-                });
-                ui.add(egui::Checkbox::new(
-                    &mut self.simulation_config.create_scents,
+                add_checkbox(
+                    ui,
+                    "Add walls*",
+                    &mut self.config.add_walls,
+                    "Add walls around the grid perimeter",
+                );
+                add_drag_value(
+                    ui,
+                    "Food per step",
+                    &mut self.simulation_config.food_per_step,
+                    1.0,
+                    "Number of food items added each simulation step",
+                );
+                add_drag_value(
+                    ui,
+                    "Energy per segment",
+                    &mut self.simulation_config.plant_matter_per_segment,
+                    1.0,
+                    "Energy content of plant food per snake segment",
+                );
+                add_drag_value(
+                    ui,
+                    "Wait cost",
+                    &mut self.simulation_config.wait_cost,
+                    1.0,
+                    "Energy cost for waiting action",
+                );
+                add_drag_value(
+                    ui,
+                    "Move cost",
+                    &mut self.simulation_config.move_cost,
+                    1.0,
+                    "Energy cost for moving action",
+                );
+                add_drag_value(
+                    ui,
+                    "New segment energy cost",
+                    &mut self.simulation_config.new_segment_cost,
+                    1.0,
+                    "Energy cost to grow a new segment",
+                );
+                add_drag_value(
+                    ui,
+                    "Size to split",
+                    &mut self.simulation_config.size_to_split,
+                    1.0,
+                    "Minimum segments required to split/reproduce",
+                );
+                add_drag_value(
+                    ui,
+                    "Aging starts at",
+                    &mut self.simulation_config.snake_max_age,
+                    1.0,
+                    "Age when snakes start losing energy",
+                );
+                add_drag_value(
+                    ui,
+                    "Species coloring threshold",
+                    &mut self.simulation_config.species_threshold,
+                    1.0,
+                    "Genetic distance for species clustering",
+                );
+                add_checkbox(
+                    ui,
                     "Create smell (low performance, memory leaks)",
-                ))
-                .on_hover_text(
+                    &mut self.simulation_config.create_scents,
                     "Enable scent diffusion (experimental, may cause performance issues)",
                 );
-                ui.horizontal(|ui| {
-                    ui.label("Smell diffusion rate")
-                        .on_hover_text("Rate at which scents spread");
-                    ui.add(
-                        egui::DragValue::new(&mut self.simulation_config.scent_diffusion_rate)
-                            .speed(1.0),
-                    )
-                    .on_hover_text("Adjust scent diffusion speed");
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Smell dispersion rate per step")
-                        .on_hover_text("Scent dispersion per simulation step");
-                    ui.add(
-                        egui::DragValue::new(&mut self.simulation_config.scent_dispersion_per_step)
-                            .speed(1.0),
-                    )
-                    .on_hover_text("Set scent dispersion amount");
-                });
+                add_drag_value(
+                    ui,
+                    "Smell diffusion rate",
+                    &mut self.simulation_config.scent_diffusion_rate,
+                    1.0,
+                    "Rate at which scents spread",
+                );
+                add_drag_value(
+                    ui,
+                    "Smell dispersion rate per step",
+                    &mut self.simulation_config.scent_dispersion_per_step,
+                    1.0,
+                    "Scent dispersion per simulation step",
+                );
                 ui.label("Settings marked with * will only take effect after a restart.");
             });
         egui::Window::new("Mutation Settings")
@@ -821,27 +808,24 @@ impl MyEguiApp {
             .show(ctx, |ui| {
                 ui.label("Senses:")
                     .on_hover_text("Configure sensory capabilities that can mutate");
-                ui.horizontal(|ui| {
-                    ui.checkbox(
-                        &mut self.simulation_config.mutation.chaos_input_enabled,
-                        "Chaos gene",
-                    )
-                    .on_hover_text("Allow random input to neural networks");
-                });
-                ui.horizontal(|ui| {
-                    ui.checkbox(
-                        &mut self.simulation_config.mutation.scent_sensing_enabled,
-                        "Food smelling",
-                    )
-                    .on_hover_text("Enable scent-based food detection");
-                });
-                ui.horizontal(|ui| {
-                    ui.checkbox(
-                        &mut self.simulation_config.mutation.plant_vision_enabled,
-                        "Plant vision",
-                    )
-                    .on_hover_text("Allow vision of plant food");
-                });
+                add_checkbox(
+                    ui,
+                    "Chaos gene",
+                    &mut self.simulation_config.mutation.chaos_input_enabled,
+                    "Allow random input to neural networks",
+                );
+                add_checkbox(
+                    ui,
+                    "Food smelling",
+                    &mut self.simulation_config.mutation.scent_sensing_enabled,
+                    "Enable scent-based food detection",
+                );
+                add_checkbox(
+                    ui,
+                    "Plant vision",
+                    &mut self.simulation_config.mutation.plant_vision_enabled,
+                    "Allow vision of plant food",
+                );
                 ui.horizontal(|ui| {
                     ui.label("Front range")
                         .on_hover_text("Vision range directly ahead");
@@ -871,13 +855,12 @@ impl MyEguiApp {
                     )
                     .on_hover_text("Set right vision distance for plants");
                 });
-                ui.horizontal(|ui| {
-                    ui.checkbox(
-                        &mut self.simulation_config.mutation.meat_vision_enabled,
-                        "Meat vision",
-                    )
-                    .on_hover_text("Allow vision of meat food");
-                });
+                add_checkbox(
+                    ui,
+                    "Meat vision",
+                    &mut self.simulation_config.mutation.meat_vision_enabled,
+                    "Allow vision of meat food",
+                );
                 ui.horizontal(|ui| {
                     ui.label("Front range")
                         .on_hover_text("Vision range directly ahead");
@@ -907,13 +890,12 @@ impl MyEguiApp {
                     )
                     .on_hover_text("Set right vision distance for meat");
                 });
-                ui.horizontal(|ui| {
-                    ui.checkbox(
-                        &mut self.simulation_config.mutation.obstacle_vision_enabled,
-                        "Obstacle vision",
-                    )
-                    .on_hover_text("Allow vision of obstacles/walls");
-                });
+                add_checkbox(
+                    ui,
+                    "Obstacle vision",
+                    &mut self.simulation_config.mutation.obstacle_vision_enabled,
+                    "Allow vision of obstacles/walls",
+                );
                 ui.horizontal(|ui| {
                     ui.label("Front range")
                         .on_hover_text("Vision range directly ahead");
@@ -945,82 +927,60 @@ impl MyEguiApp {
                 });
                 ui.label("Mutation settings:")
                     .on_hover_text("Configure neural network mutation parameters");
-                ui.horizontal(|ui| {
-                    ui.label("Weights perturbation chance")
-                        .on_hover_text("Probability of randomly adjusting connection weights");
-                    ui.add(
-                        egui::DragValue::new(
-                            &mut self.simulation_config.mutation.weight_perturbation_chance,
-                        )
-                        .speed(1.0),
-                    )
-                    .on_hover_text("Set perturbation probability");
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Weights perturbation range")
-                        .on_hover_text("Maximum adjustment amount for weights");
-                    ui.add(
-                        egui::DragValue::new(
-                            &mut self.simulation_config.mutation.weight_perturbation_range,
-                        )
-                        .speed(1.0),
-                    )
-                    .on_hover_text("Set perturbation magnitude");
-                });
-                ui.add(egui::Checkbox::new(
-                    &mut self.simulation_config.mutation.perturb_disabled_connections,
+                add_drag_value(
+                    ui,
+                    "Weights perturbation chance",
+                    &mut self.simulation_config.mutation.weight_perturbation_chance,
+                    1.0,
+                    "Probability of randomly adjusting connection weights",
+                );
+                add_drag_value(
+                    ui,
+                    "Weights perturbation range",
+                    &mut self.simulation_config.mutation.weight_perturbation_range,
+                    1.0,
+                    "Maximum adjustment amount for weights",
+                );
+                add_checkbox(
+                    ui,
                     "Perturb disabled connections",
-                ))
-                .on_hover_text("Allow mutation of disabled neural connections");
-                ui.horizontal(|ui| {
-                    ui.label("Weights reset chance")
-                        .on_hover_text("Probability of resetting weights to new random values");
-                    ui.add(
-                        egui::DragValue::new(
-                            &mut self.simulation_config.mutation.weight_reset_chance,
-                        )
-                        .speed(1.0),
-                    )
-                    .on_hover_text("Set reset probability");
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Weights reset range")
-                        .on_hover_text("Range for new random weights");
-                    ui.add(
-                        egui::DragValue::new(
-                            &mut self.simulation_config.mutation.weight_reset_range,
-                        )
-                        .speed(1.0),
-                    )
-                    .on_hover_text("Set reset range");
-                });
-                ui.add(egui::Checkbox::new(
                     &mut self.simulation_config.mutation.perturb_disabled_connections,
+                    "Allow mutation of disabled neural connections",
+                );
+                add_drag_value(
+                    ui,
+                    "Weights reset chance",
+                    &mut self.simulation_config.mutation.weight_reset_chance,
+                    1.0,
+                    "Probability of resetting weights to new random values",
+                );
+                add_drag_value(
+                    ui,
+                    "Weights reset range",
+                    &mut self.simulation_config.mutation.weight_reset_range,
+                    1.0,
+                    "Range for new random weights",
+                );
+                add_checkbox(
+                    ui,
                     "Perturb reset connections",
-                ))
-                .on_hover_text("Allow perturbation of newly reset connections");
-                ui.horizontal(|ui| {
-                    ui.label("Connection flip chance")
-                        .on_hover_text("Probability of enabling/disabling connections");
-                    ui.add(
-                        egui::DragValue::new(
-                            &mut self.simulation_config.mutation.connection_flip_chance,
-                        )
-                        .speed(1.0),
-                    )
-                    .on_hover_text("Set flip probability");
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Dna mutation chance")
-                        .on_hover_text("Probability of mutating snake DNA segments");
-                    ui.add(
-                        egui::DragValue::new(
-                            &mut self.simulation_config.mutation.dna_mutation_chance,
-                        )
-                        .speed(1.0),
-                    )
-                    .on_hover_text("Set DNA mutation probability");
-                });
+                    &mut self.simulation_config.mutation.perturb_disabled_connections,
+                    "Allow perturbation of newly reset connections",
+                );
+                add_drag_value(
+                    ui,
+                    "Connection flip chance",
+                    &mut self.simulation_config.mutation.connection_flip_chance,
+                    1.0,
+                    "Probability of enabling/disabling connections",
+                );
+                add_drag_value(
+                    ui,
+                    "Dna mutation chance",
+                    &mut self.simulation_config.mutation.dna_mutation_chance,
+                    1.0,
+                    "Probability of mutating snake DNA segments",
+                );
             });
         egui::Window::new("DNA Settings")
             .open(&mut self.show_dna_settings)
@@ -1579,6 +1539,25 @@ fn u32_to_color(u: u32) -> Color32 {
     let b = hash as u8;
 
     Color32::from_rgb(r, g, b)
+}
+
+fn add_drag_value<T: emath::Numeric>(
+    ui: &mut Ui,
+    label: &str,
+    value: &mut T,
+    speed: f64,
+    tooltip: &str,
+) {
+    ui.horizontal(|ui| {
+        ui.label(label).on_hover_text(tooltip);
+        ui.add(egui::DragValue::new(value).speed(speed))
+            .on_hover_text(tooltip);
+    });
+}
+
+fn add_checkbox(ui: &mut Ui, label: &str, value: &mut bool, tooltip: &str) {
+    ui.add(egui::Checkbox::new(value, label))
+        .on_hover_text(tooltip);
 }
 
 #[cfg(test)]

@@ -16,7 +16,8 @@
     - Completed: Split `test_energy_conservation_invariant` into focused tests: `test_energy_on_movement`, `test_energy_on_thinking`, `test_energy_on_eating`, `test_energy_on_processing_food`, `test_energy_on_aging`, `test_energy_on_starvation`, `test_energy_on_splitting`, `test_energy_on_mutation`. Each test sets up minimal world state and asserts specific energy invariants. No unexpected choices; tests isolated concerns effectively.
  7. [x] Break `update` method into sub-methods in `gui/src/main.rs`.
      - Completed: Extracted `handle_events`, `render_windows`, `render_toolbar`, `render_central_panel`, `handle_keyboard_shortcuts` as private methods in `impl MyEguiApp`. Moved keyboard shortcuts handling outside central panel to `handle_keyboard_shortcuts`. Updated `update` to call these methods in order. No unexpected choices; methods are simple extractions for better organization.
- 8. [ ] Extract UI helper functions for sliders and checkboxes in `gui/src/main.rs`.
+ 8. [x] Extract UI helper functions for sliders and checkboxes in `gui/src/main.rs`.
+     - Completed: Added `add_drag_value` and `add_checkbox` helper functions, replaced inline UI code in settings windows with calls to these helpers for standardization and reduced duplication. No unexpected choices; helpers use the same tooltip for label and control.
  9. [ ] Split `MyEguiApp` struct into sub-structs in `gui/src/main.rs`.
 10. [ ] Extract drawing functions to a new module in `gui/src/`.
 11. [ ] Introduce `CommandDispatcher` for engine commands in `gui/src/main.rs`.
