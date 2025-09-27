@@ -48,7 +48,8 @@
      - Completed: Introduced NeuralError enum with variants for InvalidActivation, InvalidNodeIndex, NoConnections. Changed Activation::apply, NodeGene::activate, NeuralNetwork::run, add_connection, flip_random_connection, mutate_perturb_random_connection_weight, mutate_reset_random_connection_weight to return Result. Updated mutation.rs functions to propagate errors. Handled Results in core.rs with unwrap_or defaults for run, unwrap for mutations and add_connection. No unexpected choices; errors are propagated where possible, with unwrap in non-Result contexts.
 22. [x] Split MyEguiApp struct and implementation into app.rs.
      - Completed: Created app.rs with MyEguiApp struct, UiState, PerformanceStats, ConfigState, CommandDispatcher, and all impl methods. Moved constants to app.rs. Updated main.rs to import app module and instantiate MyEguiApp. No unexpected choices; extraction preserved all functionality and UI interactions.
-23. [ ] Extract UI state structs into ui_state.rs.
+23. [x] Extract UI state structs into ui_state.rs.
+    - Completed: Created ui_state.rs with UiState and PerformanceStats structs. Moved from app.rs, added mod in main.rs, updated imports. No unexpected choices; extraction was straightforward and preserved all functionality.
 24. [ ] Create config.rs for configuration management.
 25. [ ] Move main function and entry point to minimal main.rs.
 

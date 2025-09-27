@@ -28,6 +28,7 @@ mod app;
 mod components;
 mod drawing;
 mod ui_helpers;
+mod ui_state;
 mod windows;
 
 fn main() {
