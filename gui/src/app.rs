@@ -1,16 +1,14 @@
 use eframe::egui;
 use eframe::epaint::{Color32, Fonts};
-use egui::{FontData, FontDefinitions, FontFamily, Key, ScrollArea, Stroke, Ui};
-use hex_brains_engine::simulation::{
-    EngineCommand, EngineEvent, Hex, MutationConfig, SimulationConfig, Stats,
-};
+use egui::{FontData, FontDefinitions, FontFamily, Key, ScrollArea, Ui};
+use hex_brains_engine::simulation::{EngineCommand, EngineEvent, Hex, SimulationConfig, Stats};
 use parking_lot::Mutex;
 use std::collections::VecDeque;
-use std::fs;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::time::Instant;
 
+use crate::config;
 use crate::drawing::draw_hexes;
 use crate::ui_state::{PerformanceStats, UiState};
 
@@ -62,7 +60,7 @@ impl CommandDispatcher {
 
 /// Configuration state and data management
 pub struct ConfigState {
-    pub config: super::Config,
+    pub config: config::Config,
     pub simulation_config: SimulationConfig,
     pub previous_simulation_config: SimulationConfig,
     pub stats: Stats,
@@ -85,51 +83,6 @@ pub struct MyEguiApp {
 }
 
 impl MyEguiApp {
-    fn load_config() -> SimulationConfig {
-        let default_config = SimulationConfig {
-            rows: 100,
-            columns: 100,
-            create_scents: false,
-            scent_diffusion_rate: 0.2,
-            scent_dispersion_per_step: 30.0,
-            starting_snakes: 0,
-            starting_food: 0,
-            food_per_step: 2,
-            plant_matter_per_segment: 100.0,
-            wait_cost: 1.0,
-            move_cost: 10.0,
-            new_segment_cost: 100.0,
-            size_to_split: 12,
-            species_threshold: 0.2,
-            add_walls: false,
-            mutation: MutationConfig::default(),
-            snake_max_age: 2_000,
-            meat_energy_content: 5.0,
-            plant_energy_content: 1.0,
-        };
-        if let Ok(contents) = fs::read_to_string("config.toml") {
-            match toml::from_str(&contents) {
-                Ok(loaded) => {
-                    tracing::info!("Config loaded successfully from config.toml");
-                    loaded
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to parse config.toml: {}, using defaults", e);
-                    default_config
-                }
-            }
-        } else {
-            tracing::info!("config.toml not found, using defaults");
-            default_config
-        }
-    }
-
-    fn save_config(&self) {
-        if let Ok(toml_str) = toml::to_string(&self.config_state.simulation_config) {
-            let _ = fs::write("config.toml", toml_str);
-        }
-    }
-
     pub fn new(
         cc: &eframe::CreationContext<'_>,
         engine_commands_sender: Sender<EngineCommand>,
@@ -157,16 +110,8 @@ impl MyEguiApp {
             .unwrap()
             .insert(0, "firacode_nerd".to_owned());
         cc.egui_ctx.set_fonts(font_definitions.clone());
-        let simulation_config = Self::load_config();
-        let config = super::Config {
-            rows: simulation_config.rows,
-            columns: simulation_config.columns,
-            bg_color: Stroke::new(1.0, Color32::LIGHT_GREEN),
-            scent_color: Stroke::new(1.0, Color32::from_rgba_unmultiplied(0xAD, 0xD8, 0xE6, 50)),
-            tail_color: Stroke::new(1.0, Color32::LIGHT_RED),
-            food_color: Stroke::new(1.0, Color32::YELLOW),
-            add_walls: simulation_config.add_walls,
-        };
+        let simulation_config = config::load_config();
+        let config = config::create_drawing_config(&simulation_config);
         Self {
             text: String::new(),
             command_dispatcher: CommandDispatcher {
@@ -489,8 +434,8 @@ impl eframe::App for MyEguiApp {
         self.handle_events(ctx);
         self.render_windows(ctx);
         if self.config_state.simulation_config != self.config_state.previous_simulation_config {
-            self.save_config();
-            if !super::only_star_fields_differ(
+            config::save_config(&self.config_state.simulation_config);
+            if !config::only_star_fields_differ(
                 &self.config_state.simulation_config,
                 &self.config_state.previous_simulation_config,
             ) || self.ui_state.paused

@@ -1,6 +1,7 @@
 use bevy_ecs::prelude::*;
 use eframe::egui;
 use eframe::emath::Vec2;
+#[allow(unused_imports)]
 use eframe::epaint::{Color32, Stroke};
 use hex_brains_engine::core::{Food, Position, Scent, ScentMap, Snake, Solid};
 use hex_brains_engine::dna::SegmentType;
@@ -26,6 +27,7 @@ const DEFAULT_SNAKES_TO_ADD: usize = 10;
 
 mod app;
 mod components;
+mod config;
 mod drawing;
 mod ui_helpers;
 mod ui_state;
@@ -57,41 +59,13 @@ fn main() {
     );
 }
 
-fn only_star_fields_differ(a: &SimulationConfig, b: &SimulationConfig) -> bool {
-    (a.rows != b.rows || a.columns != b.columns || a.add_walls != b.add_walls)
-        && a.food_per_step == b.food_per_step
-        && a.plant_matter_per_segment == b.plant_matter_per_segment
-        && a.wait_cost == b.wait_cost
-        && a.move_cost == b.move_cost
-        && a.new_segment_cost == b.new_segment_cost
-        && a.size_to_split == b.size_to_split
-        && a.snake_max_age == b.snake_max_age
-        && a.species_threshold == b.species_threshold
-        && a.create_scents == b.create_scents
-        && a.scent_diffusion_rate == b.scent_diffusion_rate
-        && a.scent_dispersion_per_step == b.scent_dispersion_per_step
-        && a.starting_snakes == b.starting_snakes
-        && a.starting_food == b.starting_food
-        && a.meat_energy_content == b.meat_energy_content
-        && a.plant_energy_content == b.plant_energy_content
-        && a.mutation == b.mutation
-}
-
 fn start_simulation(
     engine_events_sender: &Sender<EngineEvent>,
     engine_commands_receiver: Arc<Mutex<Receiver<EngineCommand>>>,
     context: egui::Context,
     simulation_config: SimulationConfig,
 ) {
-    let config = Config {
-        rows: simulation_config.rows,
-        columns: simulation_config.columns,
-        bg_color: Stroke::new(1.0, Color32::LIGHT_GREEN),
-        scent_color: Stroke::new(1.0, Color32::from_rgba_unmultiplied(0xAD, 0xD8, 0xE6, 50)),
-        tail_color: Stroke::new(1.0, Color32::LIGHT_RED),
-        food_color: Stroke::new(1.0, Color32::YELLOW),
-        add_walls: simulation_config.add_walls,
-    };
+    let config = config::create_drawing_config(&simulation_config);
     let mut simulation = Simulation::new(
         "Main".to_string(),
         engine_events_sender.clone(),
@@ -203,17 +177,6 @@ struct EguiEcsContext {
     _context: egui::Context,
 }
 
-#[derive(Resource, Clone, Copy)]
-pub struct Config {
-    rows: usize,
-    columns: usize,
-    bg_color: Stroke,
-    scent_color: Stroke,
-    food_color: Stroke,
-    tail_color: Stroke,
-    add_walls: bool,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -280,7 +243,7 @@ mod tests {
 
     #[test]
     fn test_transform_to_circle_logic() {
-        let config = Config {
+        let config = config::Config {
             rows: 10,
             columns: 10,
             bg_color: Stroke::new(1.0, Color32::WHITE),
@@ -308,7 +271,7 @@ mod tests {
 
     #[test]
     fn test_hex_color_selection() {
-        let config = Config {
+        let config = config::Config {
             rows: 10,
             columns: 10,
             bg_color: Stroke::new(1.0, Color32::from_gray(100)),

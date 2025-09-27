@@ -11,7 +11,7 @@ use hex_brains_engine::simulation::{Hex, HexType};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use crate::Config;
+use crate::config::Config;
 
 pub fn draw_neural_network(
     ui: &mut Ui,
