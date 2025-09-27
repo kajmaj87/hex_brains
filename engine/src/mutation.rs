@@ -1,10 +1,13 @@
 use crate::dna::Dna;
-use crate::neural::NeuralNetwork;
+use crate::neural::{NeuralError, NeuralNetwork};
 use crate::simulation::MutationConfig;
 use tinyrand::Wyrand;
 
-pub fn apply_connection_flip(neural: &mut NeuralNetwork, rng: &mut Wyrand) {
-    neural.flip_random_connection(rng);
+pub fn apply_connection_flip(
+    neural: &mut NeuralNetwork,
+    rng: &mut Wyrand,
+) -> Result<(), NeuralError> {
+    neural.flip_random_connection(rng)
 }
 
 pub fn apply_weight_perturbation(
@@ -12,8 +15,8 @@ pub fn apply_weight_perturbation(
     rng: &mut Wyrand,
     range: f32,
     perturb_disabled: bool,
-) {
-    neural.mutate_perturb_random_connection_weight(range, perturb_disabled, rng);
+) -> Result<(), NeuralError> {
+    neural.mutate_perturb_random_connection_weight(range, perturb_disabled, rng)
 }
 
 pub fn apply_weight_reset(
@@ -21,8 +24,8 @@ pub fn apply_weight_reset(
     rng: &mut Wyrand,
     range: f32,
     perturb_disabled: bool,
-) {
-    neural.mutate_reset_random_connection_weight(range, perturb_disabled, rng);
+) -> Result<(), NeuralError> {
+    neural.mutate_reset_random_connection_weight(range, perturb_disabled, rng)
 }
 
 pub fn apply_dna_mutation(dna: &mut Dna, rng: &mut Wyrand, mutation_config: &MutationConfig) {

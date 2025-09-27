@@ -191,7 +191,10 @@ impl Brain for RandomNeuralBrain {
                 value: *value,
             })
             .collect();
-        let output = self.neural_network.run(sensor_input);
+        let output = self
+            .neural_network
+            .run(sensor_input)
+            .unwrap_or_else(|_| vec![0.0; 4]);
         // return the index with the maximum value of the output vector
         let mut max_index = 0;
         let mut max_value = 0.0;
@@ -945,7 +948,7 @@ pub fn split(
                 if (rng.next_u32() as f64) / (u32::MAX as f64)
                     < config.mutation.connection_flip_chance
                 {
-                    apply_connection_flip(&mut nn, rng);
+                    apply_connection_flip(&mut nn, rng).unwrap();
                     mutations += 1;
                 }
                 if (rng.next_u32() as f64) / (u32::MAX as f64)
@@ -956,7 +959,8 @@ pub fn split(
                         rng,
                         config.mutation.weight_perturbation_range,
                         config.mutation.perturb_disabled_connections,
-                    );
+                    )
+                    .unwrap();
                     mutations += 1;
                 }
                 if (rng.next_u32() as f64) / (u32::MAX as f64) < config.mutation.weight_reset_chance
@@ -966,7 +970,8 @@ pub fn split(
                         rng,
                         config.mutation.weight_reset_range,
                         config.mutation.perturb_disabled_connections,
-                    );
+                    )
+                    .unwrap();
                     mutations += 1;
                 }
                 let mut dna = snake.dna.clone();
@@ -1847,7 +1852,7 @@ mod tests {
         world.insert_resource(config);
 
         let mut nn = NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
-        nn.add_connection(0, 21, 2.0, true, 0);
+        nn.add_connection(0, 21, 2.0, true, 0).unwrap();
         let brain = Box::new(RandomNeuralBrain::from_neural_network(nn));
         let dna = Dna {
             genes: vec![Gene {
@@ -2106,7 +2111,7 @@ mod tests {
 
         let mut rng_resource = world.resource_mut::<crate::simulation::RngResource>();
         let mut nn = NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
-        nn.add_connection(0, 21, 2.0, true, 0);
+        nn.add_connection(0, 21, 2.0, true, 0).unwrap();
         let brain = Box::new(RandomNeuralBrain::from_neural_network(nn));
         let snake = Snake {
             direction: Direction::East,
@@ -2190,7 +2195,7 @@ mod tests {
 
         // Create normal snake
         let mut nn = NeuralNetwork::new(vec![Activation::Relu; 18], vec![Activation::Sigmoid; 4]);
-        nn.add_connection(0, 21, 2.0, true, 0);
+        nn.add_connection(0, 21, 2.0, true, 0).unwrap();
         let normal_brain = Box::new(RandomNeuralBrain::from_neural_network(nn.clone()));
         let (mut normal_snake, normal_age, normal_justborn) = create_head(
             (0, 0),

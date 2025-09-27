@@ -44,7 +44,8 @@
      - Completed: Added MutationConfigBuilder and SimulationConfigBuilder structs with fluent methods for all fields and build() methods performing validation. Validation includes range checks for probabilities (0-1), positive values for costs/ranges, and non-zero dimensions. No unexpected choices; builders use defaults from Default impls.
 20. [x] Replace `BrainType` enum with `Brain` trait.
      - Completed: Defined `Brain` trait with `decide` and `get_neural_network` methods, implemented for `RandomBrain` and `RandomNeuralBrain`. Changed `Snake.brain` to `Box<dyn Brain>`, updated all usages to use `Box::new` for brain creation. Used `&mut dyn Rand` in trait to make it object-safe. No unexpected choices; trait allows polymorphism for future brain types.
-21. [ ] Add proper error handling for neural operations.
+21. [x] Add proper error handling for neural operations.
+     - Completed: Introduced NeuralError enum with variants for InvalidActivation, InvalidNodeIndex, NoConnections. Changed Activation::apply, NodeGene::activate, NeuralNetwork::run, add_connection, flip_random_connection, mutate_perturb_random_connection_weight, mutate_reset_random_connection_weight to return Result. Updated mutation.rs functions to propagate errors. Handled Results in core.rs with unwrap_or defaults for run, unwrap for mutations and add_connection. No unexpected choices; errors are propagated where possible, with unwrap in non-Result contexts.
 22. [ ] Split MyEguiApp struct and implementation into app.rs.
 23. [ ] Extract UI state structs into ui_state.rs.
 24. [ ] Create config.rs for configuration management.
