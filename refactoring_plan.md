@@ -40,7 +40,8 @@
      - Completed: Created windows.rs with render_*_window functions for each GUI window, and components.rs with render_vision_ranges. Moved code from main.rs render_windows method. No unexpected choices; extraction was straightforward and preserved all functionality.
 18. [x] Optimize ECS queries for reduced duplication.
      - Created SensoryCache resource to cache sensory inputs computed once per frame, reducing duplication in think system and enabling potential reuse by other systems.
-19. [ ] Implement config builders and validation.
+19. [x] Implement config builders and validation.
+     - Completed: Added MutationConfigBuilder and SimulationConfigBuilder structs with fluent methods for all fields and build() methods performing validation. Validation includes range checks for probabilities (0-1), positive values for costs/ranges, and non-zero dimensions. No unexpected choices; builders use defaults from Default impls.
 20. [ ] Replace `BrainType` enum with `Brain` trait.
 21. [ ] Add proper error handling for neural operations.
 22. [ ] Split MyEguiApp struct and implementation into app.rs.

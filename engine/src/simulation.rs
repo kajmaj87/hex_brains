@@ -157,6 +157,254 @@ impl Default for MutationConfig {
     }
 }
 
+#[derive(Default)]
+pub struct MutationConfigBuilder {
+    scent_sensing_enabled: Option<bool>,
+    plant_vision_enabled: Option<bool>,
+    meat_vision_enabled: Option<bool>,
+    obstacle_vision_enabled: Option<bool>,
+    chaos_input_enabled: Option<bool>,
+    plant_vision_front_range: Option<u32>,
+    plant_vision_left_range: Option<u32>,
+    plant_vision_right_range: Option<u32>,
+    meat_vision_front_range: Option<u32>,
+    meat_vision_left_range: Option<u32>,
+    meat_vision_right_range: Option<u32>,
+    obstacle_vision_front_range: Option<u32>,
+    obstacle_vision_left_range: Option<u32>,
+    obstacle_vision_right_range: Option<u32>,
+    weight_perturbation_range: Option<f32>,
+    weight_perturbation_chance: Option<f64>,
+    perturb_disabled_connections: Option<bool>,
+    connection_flip_chance: Option<f64>,
+    dna_mutation_chance: Option<f64>,
+    weight_reset_chance: Option<f64>,
+    weight_reset_range: Option<f32>,
+    disable_muscle: Option<bool>,
+    disable_solid: Option<bool>,
+    disable_solar: Option<bool>,
+    disable_stomach: Option<bool>,
+}
+
+impl MutationConfigBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn scent_sensing_enabled(mut self, v: bool) -> Self {
+        self.scent_sensing_enabled = Some(v);
+        self
+    }
+
+    pub fn plant_vision_enabled(mut self, v: bool) -> Self {
+        self.plant_vision_enabled = Some(v);
+        self
+    }
+
+    pub fn meat_vision_enabled(mut self, v: bool) -> Self {
+        self.meat_vision_enabled = Some(v);
+        self
+    }
+
+    pub fn obstacle_vision_enabled(mut self, v: bool) -> Self {
+        self.obstacle_vision_enabled = Some(v);
+        self
+    }
+
+    pub fn chaos_input_enabled(mut self, v: bool) -> Self {
+        self.chaos_input_enabled = Some(v);
+        self
+    }
+
+    pub fn plant_vision_front_range(mut self, v: u32) -> Self {
+        self.plant_vision_front_range = Some(v);
+        self
+    }
+
+    pub fn plant_vision_left_range(mut self, v: u32) -> Self {
+        self.plant_vision_left_range = Some(v);
+        self
+    }
+
+    pub fn plant_vision_right_range(mut self, v: u32) -> Self {
+        self.plant_vision_right_range = Some(v);
+        self
+    }
+
+    pub fn meat_vision_front_range(mut self, v: u32) -> Self {
+        self.meat_vision_front_range = Some(v);
+        self
+    }
+
+    pub fn meat_vision_left_range(mut self, v: u32) -> Self {
+        self.meat_vision_left_range = Some(v);
+        self
+    }
+
+    pub fn meat_vision_right_range(mut self, v: u32) -> Self {
+        self.meat_vision_right_range = Some(v);
+        self
+    }
+
+    pub fn obstacle_vision_front_range(mut self, v: u32) -> Self {
+        self.obstacle_vision_front_range = Some(v);
+        self
+    }
+
+    pub fn obstacle_vision_left_range(mut self, v: u32) -> Self {
+        self.obstacle_vision_left_range = Some(v);
+        self
+    }
+
+    pub fn obstacle_vision_right_range(mut self, v: u32) -> Self {
+        self.obstacle_vision_right_range = Some(v);
+        self
+    }
+
+    pub fn weight_perturbation_range(mut self, v: f32) -> Self {
+        self.weight_perturbation_range = Some(v);
+        self
+    }
+
+    pub fn weight_perturbation_chance(mut self, v: f64) -> Self {
+        self.weight_perturbation_chance = Some(v);
+        self
+    }
+
+    pub fn perturb_disabled_connections(mut self, v: bool) -> Self {
+        self.perturb_disabled_connections = Some(v);
+        self
+    }
+
+    pub fn connection_flip_chance(mut self, v: f64) -> Self {
+        self.connection_flip_chance = Some(v);
+        self
+    }
+
+    pub fn dna_mutation_chance(mut self, v: f64) -> Self {
+        self.dna_mutation_chance = Some(v);
+        self
+    }
+
+    pub fn weight_reset_chance(mut self, v: f64) -> Self {
+        self.weight_reset_chance = Some(v);
+        self
+    }
+
+    pub fn weight_reset_range(mut self, v: f32) -> Self {
+        self.weight_reset_range = Some(v);
+        self
+    }
+
+    pub fn disable_muscle(mut self, v: bool) -> Self {
+        self.disable_muscle = Some(v);
+        self
+    }
+
+    pub fn disable_solid(mut self, v: bool) -> Self {
+        self.disable_solid = Some(v);
+        self
+    }
+
+    pub fn disable_solar(mut self, v: bool) -> Self {
+        self.disable_solar = Some(v);
+        self
+    }
+
+    pub fn disable_stomach(mut self, v: bool) -> Self {
+        self.disable_stomach = Some(v);
+        self
+    }
+
+    pub fn build(self) -> Result<MutationConfig, String> {
+        let scent_sensing_enabled = self.scent_sensing_enabled.unwrap_or(true);
+        let plant_vision_enabled = self.plant_vision_enabled.unwrap_or(true);
+        let meat_vision_enabled = self.meat_vision_enabled.unwrap_or(true);
+        let obstacle_vision_enabled = self.obstacle_vision_enabled.unwrap_or(true);
+        let chaos_input_enabled = self.chaos_input_enabled.unwrap_or(true);
+        let plant_vision_front_range = self.plant_vision_front_range.unwrap_or(5);
+        let plant_vision_left_range = self.plant_vision_left_range.unwrap_or(3);
+        let plant_vision_right_range = self.plant_vision_right_range.unwrap_or(3);
+        let meat_vision_front_range = self.meat_vision_front_range.unwrap_or(5);
+        let meat_vision_left_range = self.meat_vision_left_range.unwrap_or(3);
+        let meat_vision_right_range = self.meat_vision_right_range.unwrap_or(3);
+        let obstacle_vision_front_range = self.obstacle_vision_front_range.unwrap_or(5);
+        let obstacle_vision_left_range = self.obstacle_vision_left_range.unwrap_or(3);
+        let obstacle_vision_right_range = self.obstacle_vision_right_range.unwrap_or(3);
+        let weight_perturbation_range = self.weight_perturbation_range.unwrap_or(0.1);
+        let weight_perturbation_chance = self.weight_perturbation_chance.unwrap_or(0.75);
+        let perturb_disabled_connections = self.perturb_disabled_connections.unwrap_or(false);
+        let connection_flip_chance = self.connection_flip_chance.unwrap_or(0.3);
+        let dna_mutation_chance = self.dna_mutation_chance.unwrap_or(0.5);
+        let weight_reset_chance = self.weight_reset_chance.unwrap_or(0.1);
+        let weight_reset_range = self.weight_reset_range.unwrap_or(1.0);
+        let disable_muscle = self.disable_muscle.unwrap_or(false);
+        let disable_solid = self.disable_solid.unwrap_or(false);
+        let disable_solar = self.disable_solar.unwrap_or(false);
+        let disable_stomach = self.disable_stomach.unwrap_or(false);
+
+        // Validation
+        if plant_vision_front_range == 0
+            || plant_vision_left_range == 0
+            || plant_vision_right_range == 0
+            || meat_vision_front_range == 0
+            || meat_vision_left_range == 0
+            || meat_vision_right_range == 0
+            || obstacle_vision_front_range == 0
+            || obstacle_vision_left_range == 0
+            || obstacle_vision_right_range == 0
+        {
+            return Err("Vision ranges must be greater than 0".to_string());
+        }
+        if weight_perturbation_range <= 0.0 {
+            return Err("Weight perturbation range must be greater than 0".to_string());
+        }
+        if !(0.0..=1.0).contains(&weight_perturbation_chance) {
+            return Err("Weight perturbation chance must be between 0 and 1".to_string());
+        }
+        if !(0.0..=1.0).contains(&connection_flip_chance) {
+            return Err("Connection flip chance must be between 0 and 1".to_string());
+        }
+        if !(0.0..=1.0).contains(&dna_mutation_chance) {
+            return Err("DNA mutation chance must be between 0 and 1".to_string());
+        }
+        if !(0.0..=1.0).contains(&weight_reset_chance) {
+            return Err("Weight reset chance must be between 0 and 1".to_string());
+        }
+        if weight_reset_range <= 0.0 {
+            return Err("Weight reset range must be greater than 0".to_string());
+        }
+
+        Ok(MutationConfig {
+            scent_sensing_enabled,
+            plant_vision_enabled,
+            meat_vision_enabled,
+            obstacle_vision_enabled,
+            chaos_input_enabled,
+            plant_vision_front_range,
+            plant_vision_left_range,
+            plant_vision_right_range,
+            meat_vision_front_range,
+            meat_vision_left_range,
+            meat_vision_right_range,
+            obstacle_vision_front_range,
+            obstacle_vision_left_range,
+            obstacle_vision_right_range,
+            weight_perturbation_range,
+            weight_perturbation_chance,
+            perturb_disabled_connections,
+            connection_flip_chance,
+            dna_mutation_chance,
+            weight_reset_chance,
+            weight_reset_range,
+            disable_muscle,
+            disable_solid,
+            disable_solar,
+            disable_stomach,
+        })
+    }
+}
+
 #[derive(Debug, Resource, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SimulationConfig {
     pub rows: usize,
@@ -203,6 +451,215 @@ impl Default for SimulationConfig {
             meat_energy_content: 20.0,
             plant_energy_content: 10.0,
         }
+    }
+}
+
+#[derive(Default)]
+pub struct SimulationConfigBuilder {
+    rows: Option<usize>,
+    columns: Option<usize>,
+    starting_snakes: Option<usize>,
+    starting_food: Option<usize>,
+    food_per_step: Option<usize>,
+    plant_matter_per_segment: Option<f32>,
+    wait_cost: Option<f32>,
+    move_cost: Option<f32>,
+    new_segment_cost: Option<f32>,
+    size_to_split: Option<usize>,
+    species_threshold: Option<f32>,
+    mutation: Option<MutationConfig>,
+    add_walls: Option<bool>,
+    scent_diffusion_rate: Option<f32>,
+    scent_dispersion_per_step: Option<f32>,
+    create_scents: Option<bool>,
+    snake_max_age: Option<u32>,
+    meat_energy_content: Option<f32>,
+    plant_energy_content: Option<f32>,
+}
+
+impl SimulationConfigBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn rows(mut self, v: usize) -> Self {
+        self.rows = Some(v);
+        self
+    }
+
+    pub fn columns(mut self, v: usize) -> Self {
+        self.columns = Some(v);
+        self
+    }
+
+    pub fn starting_snakes(mut self, v: usize) -> Self {
+        self.starting_snakes = Some(v);
+        self
+    }
+
+    pub fn starting_food(mut self, v: usize) -> Self {
+        self.starting_food = Some(v);
+        self
+    }
+
+    pub fn food_per_step(mut self, v: usize) -> Self {
+        self.food_per_step = Some(v);
+        self
+    }
+
+    pub fn plant_matter_per_segment(mut self, v: f32) -> Self {
+        self.plant_matter_per_segment = Some(v);
+        self
+    }
+
+    pub fn wait_cost(mut self, v: f32) -> Self {
+        self.wait_cost = Some(v);
+        self
+    }
+
+    pub fn move_cost(mut self, v: f32) -> Self {
+        self.move_cost = Some(v);
+        self
+    }
+
+    pub fn new_segment_cost(mut self, v: f32) -> Self {
+        self.new_segment_cost = Some(v);
+        self
+    }
+
+    pub fn size_to_split(mut self, v: usize) -> Self {
+        self.size_to_split = Some(v);
+        self
+    }
+
+    pub fn species_threshold(mut self, v: f32) -> Self {
+        self.species_threshold = Some(v);
+        self
+    }
+
+    pub fn mutation(mut self, v: MutationConfig) -> Self {
+        self.mutation = Some(v);
+        self
+    }
+
+    pub fn add_walls(mut self, v: bool) -> Self {
+        self.add_walls = Some(v);
+        self
+    }
+
+    pub fn scent_diffusion_rate(mut self, v: f32) -> Self {
+        self.scent_diffusion_rate = Some(v);
+        self
+    }
+
+    pub fn scent_dispersion_per_step(mut self, v: f32) -> Self {
+        self.scent_dispersion_per_step = Some(v);
+        self
+    }
+
+    pub fn create_scents(mut self, v: bool) -> Self {
+        self.create_scents = Some(v);
+        self
+    }
+
+    pub fn snake_max_age(mut self, v: u32) -> Self {
+        self.snake_max_age = Some(v);
+        self
+    }
+
+    pub fn meat_energy_content(mut self, v: f32) -> Self {
+        self.meat_energy_content = Some(v);
+        self
+    }
+
+    pub fn plant_energy_content(mut self, v: f32) -> Self {
+        self.plant_energy_content = Some(v);
+        self
+    }
+
+    pub fn build(self) -> Result<SimulationConfig, String> {
+        let rows = self.rows.unwrap_or(10);
+        let columns = self.columns.unwrap_or(10);
+        let starting_snakes = self.starting_snakes.unwrap_or(0);
+        let starting_food = self.starting_food.unwrap_or(0);
+        let food_per_step = self.food_per_step.unwrap_or(1);
+        let plant_matter_per_segment = self.plant_matter_per_segment.unwrap_or(10.0);
+        let wait_cost = self.wait_cost.unwrap_or(0.0);
+        let move_cost = self.move_cost.unwrap_or(1.0);
+        let new_segment_cost = self.new_segment_cost.unwrap_or(50.0);
+        let size_to_split = self.size_to_split.unwrap_or(2);
+        let species_threshold = self.species_threshold.unwrap_or(0.3);
+        let mutation = self.mutation.unwrap_or_default();
+        let add_walls = self.add_walls.unwrap_or(false);
+        let scent_diffusion_rate = self.scent_diffusion_rate.unwrap_or(0.01);
+        let scent_dispersion_per_step = self.scent_dispersion_per_step.unwrap_or(0.01);
+        let create_scents = self.create_scents.unwrap_or(false);
+        let snake_max_age = self.snake_max_age.unwrap_or(10000);
+        let meat_energy_content = self.meat_energy_content.unwrap_or(20.0);
+        let plant_energy_content = self.plant_energy_content.unwrap_or(10.0);
+
+        // Validation
+        if rows == 0 {
+            return Err("Rows must be greater than 0".to_string());
+        }
+        if columns == 0 {
+            return Err("Columns must be greater than 0".to_string());
+        }
+        if plant_matter_per_segment <= 0.0 {
+            return Err("Plant matter per segment must be greater than 0".to_string());
+        }
+        if wait_cost < 0.0 {
+            return Err("Wait cost must be non-negative".to_string());
+        }
+        if move_cost < 0.0 {
+            return Err("Move cost must be non-negative".to_string());
+        }
+        if new_segment_cost < 0.0 {
+            return Err("New segment cost must be non-negative".to_string());
+        }
+        if size_to_split == 0 {
+            return Err("Size to split must be greater than 0".to_string());
+        }
+        if !(0.0..=1.0).contains(&species_threshold) {
+            return Err("Species threshold must be between 0 and 1".to_string());
+        }
+        if !(0.0..=1.0).contains(&scent_diffusion_rate) {
+            return Err("Scent diffusion rate must be between 0 and 1".to_string());
+        }
+        if !(0.0..=1.0).contains(&scent_dispersion_per_step) {
+            return Err("Scent dispersion per step must be between 0 and 1".to_string());
+        }
+        if snake_max_age == 0 {
+            return Err("Snake max age must be greater than 0".to_string());
+        }
+        if meat_energy_content <= 0.0 {
+            return Err("Meat energy content must be greater than 0".to_string());
+        }
+        if plant_energy_content <= 0.0 {
+            return Err("Plant energy content must be greater than 0".to_string());
+        }
+
+        Ok(SimulationConfig {
+            rows,
+            columns,
+            starting_snakes,
+            starting_food,
+            food_per_step,
+            plant_matter_per_segment,
+            wait_cost,
+            move_cost,
+            new_segment_cost,
+            size_to_split,
+            species_threshold,
+            mutation,
+            add_walls,
+            scent_diffusion_rate,
+            scent_dispersion_per_step,
+            create_scents,
+            snake_max_age,
+            meat_energy_content,
+            plant_energy_content,
+        })
     }
 }
 
