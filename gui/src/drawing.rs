@@ -1,13 +1,15 @@
+use bevy_ecs::prelude::*;
 use eframe::emath::{Pos2, Rect, Vec2};
 use eframe::epaint::{Color32, Fonts};
 use eframe::{egui, emath};
 use egui::epaint::CircleShape;
 use egui::Shape::Circle;
 use egui::{Align2, FontFamily, FontId, Frame, Response, Sense, Shape, Stroke, Ui};
+use hex_brains_engine::core::{Food, Position, Scent, ScentMap, Snake, Solid};
 use hex_brains_engine::dna::SegmentType;
 use hex_brains_engine::neural;
 use hex_brains_engine::neural::{ConnectionGene, NodeGene, NodeType};
-use hex_brains_engine::simulation::{Hex, HexType};
+use hex_brains_engine::simulation::{EngineEvent, EngineEvents, EngineState, Hex, HexType, Stats};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -306,4 +308,85 @@ pub fn u32_to_color(u: u32) -> Color32 {
     let b = hash as u8;
 
     Color32::from_rgb(r, g, b)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn draw_simulation(
+    engine_events: ResMut<EngineEvents>,
+    positions: Query<&Position>,
+    scents: Query<(Entity, &Scent)>,
+    scent_map: Res<ScentMap>,
+    heads: Query<(Entity, &Snake)>,
+    solids: Query<(Entity, &Solid), Without<SegmentType>>,
+    segments: Query<(Entity, &SegmentType), With<SegmentType>>,
+    food: Query<(Entity, &Food)>,
+    stats: Res<Stats>,
+    engine_state: Res<EngineState>,
+) {
+    puffin::profile_function!();
+    let all_hexes: Vec<Hex> = solids
+        .iter()
+        .map(|(solid, _)| {
+            let position = positions.get(solid).unwrap();
+            Hex {
+                x: position.x as usize,
+                y: position.y as usize,
+                hex_type: HexType::SnakeTail,
+            }
+        })
+        .chain(food.iter().map(|(food_id, food)| {
+            let position = positions.get(food_id).unwrap();
+            if food.is_meat() {
+                Hex {
+                    x: position.x as usize,
+                    y: position.y as usize,
+                    hex_type: HexType::Meat,
+                }
+            } else {
+                Hex {
+                    x: position.x as usize,
+                    y: position.y as usize,
+                    hex_type: HexType::Food,
+                }
+            }
+        }))
+        .chain(heads.iter().map(|(head, snake)| {
+            let position = positions.get(head).unwrap();
+            Hex {
+                x: position.x as usize,
+                y: position.y as usize,
+                hex_type: HexType::SnakeHead {
+                    specie: snake.species.unwrap_or(0),
+                },
+            }
+        }))
+        .chain(segments.iter().map(|(segment_id, segment_type)| {
+            let position = positions.get(segment_id).unwrap();
+            Hex {
+                x: position.x as usize,
+                y: position.y as usize,
+                hex_type: HexType::Segment {
+                    segment_type: segment_type.clone(),
+                },
+            }
+        }))
+        .chain(scents.iter().map(|(scent, _)| {
+            let position = positions.get(scent).unwrap();
+            let value = scent_map.map.get(position);
+            Hex {
+                x: position.x as usize,
+                y: position.y as usize,
+                hex_type: HexType::Scent { value: *value },
+            }
+        }))
+        .collect();
+    let _ = engine_events.events.lock().send(EngineEvent::DrawData {
+        hexes: all_hexes,
+        stats: stats.clone(),
+        frames: engine_state.frames,
+    });
+}
+
+pub fn should_draw_simulation(engine_state: Res<EngineState>) -> bool {
+    engine_state.repaint_needed
 }

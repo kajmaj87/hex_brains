@@ -52,7 +52,8 @@
     - Completed: Created ui_state.rs with UiState and PerformanceStats structs. Moved from app.rs, added mod in main.rs, updated imports. No unexpected choices; extraction was straightforward and preserved all functionality.
 24. [x] Create config.rs for configuration management.
      - Completed: Created gui/src/config.rs with Config struct for drawing, load_config/save_config functions for SimulationConfig, only_star_fields_differ function, and create_drawing_config helper. Moved config-related code from main.rs and app.rs to centralize configuration management. No unexpected choices; functions are simple wrappers for loading/saving and validation.
-25. [ ] Move main function and entry point to minimal main.rs.
+25. [x] Move main function and entry point to minimal main.rs.
+    - Completed: Moved constants, start_simulation, draw_simulation, should_draw_simulation, EguiEcsContext, and tests to appropriate modules (app.rs, drawing.rs, tests.rs). Updated main.rs to keep only minimal entry point with eframe setup. No unexpected choices; all code moved to existing modules without creating new ones unnecessarily.
 
 ## Detailed Task Descriptions
 

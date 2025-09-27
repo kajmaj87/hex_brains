@@ -1,7 +1,19 @@
+// Constants for magic numbers to improve maintainability and tuning
+pub const INITIAL_WINDOW_WIDTH: f32 = 1200.0;
+pub const INITIAL_WINDOW_HEIGHT: f32 = 1200.0;
+pub const SPEED_LIMIT: f32 = 200.0;
+pub const HISTORY_LIMIT: usize = 1000;
+pub const SMOOTHING_WINDOW: usize = 100;
+pub const PERFORMANCE_UPDATE_INTERVAL_MS: u128 = 1000;
+pub const DEFAULT_SNAKES_TO_ADD: usize = 10;
+
+use bevy_ecs::prelude::*;
 use eframe::egui;
 use eframe::epaint::{Color32, Fonts};
 use egui::{FontData, FontDefinitions, FontFamily, Key, ScrollArea, Ui};
-use hex_brains_engine::simulation::{EngineCommand, EngineEvent, Hex, SimulationConfig, Stats};
+use hex_brains_engine::simulation::{
+    EngineCommand, EngineEvent, EngineState, Hex, Simulation, SimulationConfig, Stats,
+};
 use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::sync::mpsc::{Receiver, Sender};
@@ -11,6 +23,7 @@ use std::time::Instant;
 use crate::config;
 use crate::drawing::draw_hexes;
 use crate::ui_state::{PerformanceStats, UiState};
+use std::thread;
 
 pub struct CommandDispatcher {
     sender: Sender<EngineCommand>,
@@ -148,8 +161,8 @@ impl MyEguiApp {
                 previous_simulation_config: simulation_config,
                 stats: Stats::default(),
                 stats_history: VecDeque::new(),
-                history_limit: super::HISTORY_LIMIT,
-                smoothing_window: super::SMOOTHING_WINDOW,
+                history_limit: HISTORY_LIMIT,
+                smoothing_window: SMOOTHING_WINDOW,
                 hexes: vec![],
                 fonts: Fonts::new(1.0, 2 * 1024, font_definitions),
             },
@@ -157,7 +170,7 @@ impl MyEguiApp {
     }
     fn handle_events(&mut self, _ctx: &egui::Context) {
         if !self.ui_state.started {
-            super::start_simulation(
+            start_simulation(
                 &self.engine_events_sender,
                 Arc::clone(&self.engine_commands_receiver),
                 _ctx.clone(),
@@ -165,7 +178,7 @@ impl MyEguiApp {
             );
             self.ui_state.started = true;
             self.command_dispatcher
-                .send_create_snakes(super::DEFAULT_SNAKES_TO_ADD);
+                .send_create_snakes(DEFAULT_SNAKES_TO_ADD);
         }
         self.engine_events_receiver
             .try_iter()
@@ -203,8 +216,7 @@ impl MyEguiApp {
                     }
                 }
             });
-        if self.performance_stats.last_second.elapsed().as_millis()
-            > super::PERFORMANCE_UPDATE_INTERVAL_MS
+        if self.performance_stats.last_second.elapsed().as_millis() > PERFORMANCE_UPDATE_INTERVAL_MS
         {
             self.performance_stats.last_second = Instant::now();
             self.performance_stats.updates_per_second = self.performance_stats.updates_last_second;
@@ -314,7 +326,7 @@ impl MyEguiApp {
             // Add snakes
             if ui.button("🐍").on_hover_text("Add 10 snakes (S)").clicked() {
                 self.command_dispatcher
-                    .send_create_snakes(super::DEFAULT_SNAKES_TO_ADD);
+                    .send_create_snakes(DEFAULT_SNAKES_TO_ADD);
             }
             // Play/Pause button
             let play_pause_icon = if self.ui_state.paused { "▶" } else { "⏸" };
@@ -392,7 +404,7 @@ impl MyEguiApp {
                 .send_update_simulation_config(self.config_state.simulation_config);
             self.command_dispatcher.send_reset_world();
             self.command_dispatcher
-                .send_create_snakes(super::DEFAULT_SNAKES_TO_ADD);
+                .send_create_snakes(DEFAULT_SNAKES_TO_ADD);
             self.ui_state.paused = false;
         }
         if ctx.input(|i| i.key_pressed(Key::E)) {
@@ -415,13 +427,51 @@ impl MyEguiApp {
         }
         if ctx.input(|i| i.key_pressed(Key::S)) {
             self.command_dispatcher
-                .send_create_snakes(super::DEFAULT_SNAKES_TO_ADD);
+                .send_create_snakes(DEFAULT_SNAKES_TO_ADD);
         }
         if ctx.input(|i| i.key_pressed(Key::Space)) {
             self.ui_state.paused = !self.ui_state.paused;
             self.command_dispatcher.send_flip_running_state();
         }
     }
+}
+
+fn start_simulation(
+    engine_events_sender: &Sender<EngineEvent>,
+    engine_commands_receiver: Arc<Mutex<Receiver<EngineCommand>>>,
+    context: egui::Context,
+    simulation_config: SimulationConfig,
+) {
+    let config = config::create_drawing_config(&simulation_config);
+    let mut simulation = Simulation::new(
+        "Main".to_string(),
+        engine_events_sender.clone(),
+        Some(Arc::clone(&engine_commands_receiver)),
+        simulation_config,
+    );
+    let egui_context = EguiEcsContext { _context: context };
+    simulation.insert_resource(egui_context);
+    simulation.insert_resource(config);
+    simulation.insert_resource(EngineState {
+        repaint_needed: false,
+        speed_limit: Some(SPEED_LIMIT),
+        running: true,
+        frames_left: 0.0,
+        frames: 0,
+        updates_done: 0,
+        ignore_speed_limit: false,
+        finished: false,
+    });
+    simulation
+        .add_system(crate::drawing::draw_simulation.run_if(crate::drawing::should_draw_simulation));
+    thread::spawn(move || {
+        simulation.run();
+    });
+}
+
+#[derive(Resource)]
+struct EguiEcsContext {
+    _context: egui::Context,
 }
 
 impl eframe::App for MyEguiApp {
