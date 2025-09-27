@@ -1,8 +1,9 @@
 use egui_plot::{Bar, BarChart, Line, Plot, PlotPoints};
 
+use crate::app::MyEguiApp;
+use crate::components;
 use crate::drawing::u32_to_color;
 use crate::ui_helpers::{add_checkbox, add_drag_value};
-use crate::{components, MyEguiApp};
 
 pub fn render_environment_settings_window(app: &mut MyEguiApp, ctx: &egui::Context) {
     egui::Window::new("Environment Settings")
