@@ -10,7 +10,8 @@
      - Completed: Created functions apply_connection_flip, apply_weight_perturbation, apply_weight_reset, apply_dna_mutation. Used &mut Wyrand for RNG to match neural methods. In split, replaced inline mutation calls with function calls, passing config values as needed. No unexpected choices; functions are simple wrappers for clarity and modularity.
  4. [x] Extract shared helper for available segment types in `engine/src/dna.rs`.
       - Completed: Added get_available_segment_types helper function to centralize config-based filtering of segment types, reducing duplication in random and mutate_internal methods. No unexpected choices; function simply encapsulates the filter logic.
- 5. [ ] Extract shared helper for random connection index in `engine/src/neural.rs`.
+ 5. [x] Extract shared helper for random connection index in `engine/src/neural.rs`.
+      - Completed: Added select_random_connection_index helper function to standardize random index selection from connection slices, used in mutation methods for all connections case. No unexpected choices; helper returns Option for safety.
  6. [ ] Split long test function in `engine/src/core.rs`.
  7. [ ] Break `update` method into sub-methods in `gui/src/main.rs`.
  8. [ ] Extract UI helper functions for sliders and checkboxes in `gui/src/main.rs`.

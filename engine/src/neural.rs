@@ -190,7 +190,7 @@ impl NeuralNetwork {
         let mut index;
         let active_connections = self.get_active_connections();
         if perturb_disabled_connections || active_connections.is_empty() {
-            index = rng.next_range(0..self.connections.len());
+            index = NeuralNetwork::select_random_connection_index(&self.connections, rng).unwrap();
         } else {
             index = rng.next_range(0..self.get_active_connections().len());
             index = self
@@ -218,7 +218,7 @@ impl NeuralNetwork {
         let mut index;
         let active_connections = self.get_active_connections();
         if perturb_disabled_connections || active_connections.is_empty() {
-            index = rng.next_range(0..self.connections.len());
+            index = NeuralNetwork::select_random_connection_index(&self.connections, rng).unwrap();
         } else {
             index = rng.next_range(0..self.get_active_connections().len());
             index = self
@@ -293,6 +293,17 @@ impl NeuralNetwork {
                 }
             })
             .collect()
+    }
+
+    fn select_random_connection_index(
+        connections: &[ConnectionGene],
+        rng: &mut impl Rand,
+    ) -> Option<usize> {
+        if connections.is_empty() {
+            None
+        } else {
+            Some(rng.next_range(0..connections.len()))
+        }
     }
 }
 
