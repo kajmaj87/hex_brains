@@ -648,20 +648,12 @@ impl MyEguiApp {
             smoothing_window: 100,
         }
     }
-}
-
-impl eframe::App for MyEguiApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        puffin::profile_scope!("gui::update");
-        if puffin::are_scopes_on() {
-            puffin_egui::profiler_window(ctx);
-            puffin::GlobalProfiler::lock().new_frame();
-        }
+    fn handle_events(&mut self, _ctx: &egui::Context) {
         if !self.started {
             start_simulation(
                 &self.engine_events_sender,
                 Arc::clone(&self.engine_commands_receiver),
-                ctx.clone(),
+                _ctx.clone(),
                 self.simulation_config,
             );
             self.started = true;
@@ -712,6 +704,9 @@ impl eframe::App for MyEguiApp {
             self.updates_last_second = 0;
             self.frames_last_second = 0;
         }
+    }
+
+    fn render_windows(&mut self, ctx: &egui::Context) {
         egui::Window::new("Environment Settings")
             .open(&mut self.show_simulation_settings)
             .show(ctx, |ui| {
@@ -1311,6 +1306,241 @@ impl eframe::App for MyEguiApp {
                         .on_hover_text(format!("Total energy: {}", self.stats.total_energy));
                 });
             });
+    }
+
+    fn render_toolbar(&mut self, ui: &mut Ui) {
+        ui.horizontal_wrapped(|ui| {
+            ui.menu_button("View", |ui| {
+                ui.menu_button("Display Settings", |ui| {
+                    ui.horizontal(|ui| {
+                        egui::stroke_ui(ui, &mut self.config.bg_color, "Background Color");
+                        egui::stroke_ui(ui, &mut self.config.scent_color, "Scent Color");
+                        egui::stroke_ui(ui, &mut self.config.tail_color, "Tail Color");
+                        egui::stroke_ui(ui, &mut self.config.food_color, "Food Color");
+                    });
+                });
+            })
+            .response
+            .on_hover_text("Configure display settings");
+            ui.menu_button("Help", |ui| {
+                let checked = self.show_info;
+                if ui
+                    .selectable_label(checked, if checked { "✓ Info" } else { "Info" })
+                    .on_hover_text("Toggle help and keyboard shortcuts window (F1)")
+                    .clicked()
+                {
+                    self.show_info = !self.show_info;
+                }
+            })
+            .response
+            .on_hover_text("Get help and information (F1)");
+            if ui
+                .button("🔄")
+                .on_hover_text("Restart simulation (Ctrl+R)")
+                .clicked()
+            {
+                self.engine_commands_sender
+                    .send(EngineCommand::UpdateSimulationConfig(
+                        self.simulation_config,
+                    ))
+                    .unwrap();
+                self.engine_commands_sender
+                    .send(EngineCommand::ResetWorld)
+                    .unwrap();
+                self.engine_commands_sender
+                    .send(EngineCommand::CreateSnakes(10))
+                    .unwrap();
+                self.paused = false;
+            }
+            if ui
+                .button("🌍")
+                .on_hover_text("Toggle environment settings window (E)")
+                .clicked()
+            {
+                self.show_simulation_settings = !self.show_simulation_settings;
+            }
+            if ui
+                .button("")
+                .on_hover_text("Toggle mutation settings window (M)")
+                .clicked()
+            {
+                self.show_mutation_settings = !self.show_mutation_settings;
+            }
+            if ui
+                .button("🧬")
+                .on_hover_text("Toggle DNA settings window (D)")
+                .clicked()
+            {
+                self.show_dna_settings = !self.show_dna_settings;
+            }
+            if ui
+                .button("🐾")
+                .on_hover_text("Toggle species window (P)")
+                .clicked()
+            {
+                self.show_species = !self.show_species;
+            }
+            if ui
+                .button("󰧑 ")
+                .on_hover_text("Toggle neural networks window (N)")
+                .clicked()
+            {
+                self.show_networks = !self.show_networks;
+            }
+            if ui
+                .button("📊")
+                .on_hover_text("Toggle statistics window (T)")
+                .clicked()
+            {
+                self.show_statistics = !self.show_statistics;
+            }
+            // Add snakes
+            if ui.button("🐍").on_hover_text("Add 10 snakes (S)").clicked() {
+                self.engine_commands_sender
+                    .send(EngineCommand::CreateSnakes(10))
+                    .unwrap();
+            }
+            // Play/Pause button
+            let play_pause_icon = if self.paused { "▶" } else { "⏸" };
+            let play_button = egui::Button::new(play_pause_icon).fill(if self.paused {
+                Color32::from_rgb(0, 128, 0) // Dark green for better contrast
+            } else {
+                Color32::from_rgb(128, 0, 0) // Dark red for better contrast
+            });
+            if ui
+                .add(play_button)
+                .on_hover_text(if self.paused {
+                    "Play simulation (Space)"
+                } else {
+                    "Pause simulation (Space)"
+                })
+                .clicked()
+            {
+                self.paused = !self.paused;
+                self.engine_commands_sender
+                    .send(EngineCommand::FlipRunningState)
+                    .unwrap();
+            }
+            if ui
+                .small_button("-")
+                .on_hover_text("Decrease speed (-)")
+                .clicked()
+            {
+                self.engine_commands_sender
+                    .send(EngineCommand::DecreaseSpeed)
+                    .unwrap();
+            }
+            if ui
+                .small_button("+")
+                .on_hover_text("Increase speed (+)")
+                .clicked()
+            {
+                self.engine_commands_sender
+                    .send(EngineCommand::IncreaseSpeed)
+                    .unwrap();
+            }
+            ui.label(format!(
+                "x{:.1}",
+                self.updates_per_second as f32 / self.frames_per_second as f32
+            ));
+        });
+    }
+
+    fn render_central_panel(&mut self, _ctx: &egui::Context, ui: &mut Ui) {
+        draw_hexes(ui, &self.hexes, &self.config);
+        ScrollArea::vertical()
+            .auto_shrink([false; 2])
+            .stick_to_bottom(true)
+            .show(ui, |ui| {
+                ui.label(&self.text);
+            });
+    }
+
+    fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
+        if ctx.input(|i| i.key_pressed(Key::PlusEquals)) {
+            self.engine_commands_sender
+                .send(EngineCommand::IncreaseSpeed)
+                .unwrap();
+        }
+        if ctx.input(|i| i.key_pressed(Key::Minus)) {
+            self.engine_commands_sender
+                .send(EngineCommand::DecreaseSpeed)
+                .unwrap();
+        }
+        if ctx.input(|i| i.key_pressed(Key::Tab)) {
+            self.engine_commands_sender
+                .send(EngineCommand::IgnoreSpeedLimit)
+                .unwrap();
+        }
+        if ctx.input(|i| i.key_pressed(Key::O)) {
+            self.engine_commands_sender
+                .send(EngineCommand::CreateSnakes(1))
+                .unwrap();
+        }
+        if ctx.input(|i| i.key_pressed(Key::A)) {
+            self.engine_commands_sender
+                .send(EngineCommand::AdvanceOneFrame)
+                .unwrap();
+        }
+        // New shortcuts for toolbar buttons
+        if ctx.input(|i| i.key_pressed(Key::F1)) {
+            self.show_info = !self.show_info;
+        }
+        if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::R)) {
+            self.engine_commands_sender
+                .send(EngineCommand::UpdateSimulationConfig(
+                    self.simulation_config,
+                ))
+                .unwrap();
+            self.engine_commands_sender
+                .send(EngineCommand::ResetWorld)
+                .unwrap();
+            self.engine_commands_sender
+                .send(EngineCommand::CreateSnakes(10))
+                .unwrap();
+            self.paused = false;
+        }
+        if ctx.input(|i| i.key_pressed(Key::E)) {
+            self.show_simulation_settings = !self.show_simulation_settings;
+        }
+        if ctx.input(|i| i.key_pressed(Key::M)) {
+            self.show_mutation_settings = !self.show_mutation_settings;
+        }
+        if ctx.input(|i| i.key_pressed(Key::D)) {
+            self.show_dna_settings = !self.show_dna_settings;
+        }
+        if ctx.input(|i| i.key_pressed(Key::P)) {
+            self.show_species = !self.show_species;
+        }
+        if ctx.input(|i| i.key_pressed(Key::N)) {
+            self.show_networks = !self.show_networks;
+        }
+        if ctx.input(|i| i.key_pressed(Key::T)) {
+            self.show_statistics = !self.show_statistics;
+        }
+        if ctx.input(|i| i.key_pressed(Key::S)) {
+            self.engine_commands_sender
+                .send(EngineCommand::CreateSnakes(10))
+                .unwrap();
+        }
+        if ctx.input(|i| i.key_pressed(Key::Space)) {
+            self.paused = !self.paused;
+            self.engine_commands_sender
+                .send(EngineCommand::FlipRunningState)
+                .unwrap();
+        }
+    }
+}
+
+impl eframe::App for MyEguiApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        puffin::profile_scope!("gui::update");
+        if puffin::are_scopes_on() {
+            puffin_egui::profiler_window(ctx);
+            puffin::GlobalProfiler::lock().new_frame();
+        }
+        self.handle_events(ctx);
+        self.render_windows(ctx);
         if self.simulation_config != self.previous_simulation_config {
             self.save_config();
             if !only_star_fields_differ(&self.simulation_config, &self.previous_simulation_config)
@@ -1325,223 +1555,10 @@ impl eframe::App for MyEguiApp {
             self.previous_simulation_config = self.simulation_config;
         }
         egui::CentralPanel::default().show(ctx, |ui| {
-            // Primary Toolbar
-            ui.horizontal_wrapped(|ui| {
-                ui.menu_button("View", |ui| {
-                    ui.menu_button("Display Settings", |ui| {
-                        ui.horizontal(|ui| {
-                            egui::stroke_ui(ui, &mut self.config.bg_color, "Background Color");
-                            egui::stroke_ui(ui, &mut self.config.scent_color, "Scent Color");
-                            egui::stroke_ui(ui, &mut self.config.tail_color, "Tail Color");
-                            egui::stroke_ui(ui, &mut self.config.food_color, "Food Color");
-                        });
-                    });
-                })
-                .response
-                .on_hover_text("Configure display settings");
-                ui.menu_button("Help", |ui| {
-                    let checked = self.show_info;
-                    if ui
-                        .selectable_label(checked, if checked { "✓ Info" } else { "Info" })
-                        .on_hover_text("Toggle help and keyboard shortcuts window (F1)")
-                        .clicked()
-                    {
-                        self.show_info = !self.show_info;
-                    }
-                })
-                .response
-                .on_hover_text("Get help and information (F1)");
-                if ui
-                    .button("🔄")
-                    .on_hover_text("Restart simulation (Ctrl+R)")
-                    .clicked()
-                {
-                    self.engine_commands_sender
-                        .send(EngineCommand::UpdateSimulationConfig(
-                            self.simulation_config,
-                        ))
-                        .unwrap();
-                    self.engine_commands_sender
-                        .send(EngineCommand::ResetWorld)
-                        .unwrap();
-                    self.engine_commands_sender
-                        .send(EngineCommand::CreateSnakes(10))
-                        .unwrap();
-                    self.paused = false;
-                }
-                if ui
-                    .button("🌍")
-                    .on_hover_text("Toggle environment settings window (E)")
-                    .clicked()
-                {
-                    self.show_simulation_settings = !self.show_simulation_settings;
-                }
-                if ui
-                    .button("")
-                    .on_hover_text("Toggle mutation settings window (M)")
-                    .clicked()
-                {
-                    self.show_mutation_settings = !self.show_mutation_settings;
-                }
-                if ui
-                    .button("🧬")
-                    .on_hover_text("Toggle DNA settings window (D)")
-                    .clicked()
-                {
-                    self.show_dna_settings = !self.show_dna_settings;
-                }
-                if ui
-                    .button("🐾")
-                    .on_hover_text("Toggle species window (P)")
-                    .clicked()
-                {
-                    self.show_species = !self.show_species;
-                }
-                if ui
-                    .button("󰧑 ")
-                    .on_hover_text("Toggle neural networks window (N)")
-                    .clicked()
-                {
-                    self.show_networks = !self.show_networks;
-                }
-                if ui
-                    .button("📊")
-                    .on_hover_text("Toggle statistics window (T)")
-                    .clicked()
-                {
-                    self.show_statistics = !self.show_statistics;
-                }
-                // Add snakes
-                if ui.button("🐍").on_hover_text("Add 10 snakes (S)").clicked() {
-                    self.engine_commands_sender
-                        .send(EngineCommand::CreateSnakes(10))
-                        .unwrap();
-                }
-                // Play/Pause button
-                let play_pause_icon = if self.paused { "▶" } else { "⏸" };
-                let play_button = egui::Button::new(play_pause_icon).fill(if self.paused {
-                    Color32::from_rgb(0, 128, 0) // Dark green for better contrast
-                } else {
-                    Color32::from_rgb(128, 0, 0) // Dark red for better contrast
-                });
-                if ui
-                    .add(play_button)
-                    .on_hover_text(if self.paused {
-                        "Play simulation (Space)"
-                    } else {
-                        "Pause simulation (Space)"
-                    })
-                    .clicked()
-                {
-                    self.paused = !self.paused;
-                    self.engine_commands_sender
-                        .send(EngineCommand::FlipRunningState)
-                        .unwrap();
-                }
-                if ui
-                    .small_button("-")
-                    .on_hover_text("Decrease speed (-)")
-                    .clicked()
-                {
-                    self.engine_commands_sender
-                        .send(EngineCommand::DecreaseSpeed)
-                        .unwrap();
-                }
-                if ui
-                    .small_button("+")
-                    .on_hover_text("Increase speed (+)")
-                    .clicked()
-                {
-                    self.engine_commands_sender
-                        .send(EngineCommand::IncreaseSpeed)
-                        .unwrap();
-                }
-                ui.label(format!(
-                    "x{:.1}",
-                    self.updates_per_second as f32 / self.frames_per_second as f32
-                ));
-            });
-            draw_hexes(ui, &self.hexes, &self.config);
-            ScrollArea::vertical()
-                .auto_shrink([false; 2])
-                .stick_to_bottom(true)
-                .show(ui, |ui| {
-                    ui.label(&self.text);
-                });
-
-            if ctx.input(|i| i.key_pressed(Key::PlusEquals)) {
-                self.engine_commands_sender
-                    .send(EngineCommand::IncreaseSpeed)
-                    .unwrap();
-            }
-            if ctx.input(|i| i.key_pressed(Key::Minus)) {
-                self.engine_commands_sender
-                    .send(EngineCommand::DecreaseSpeed)
-                    .unwrap();
-            }
-            if ctx.input(|i| i.key_pressed(Key::Tab)) {
-                self.engine_commands_sender
-                    .send(EngineCommand::IgnoreSpeedLimit)
-                    .unwrap();
-            }
-            if ctx.input(|i| i.key_pressed(Key::O)) {
-                self.engine_commands_sender
-                    .send(EngineCommand::CreateSnakes(1))
-                    .unwrap();
-            }
-            if ctx.input(|i| i.key_pressed(Key::A)) {
-                self.engine_commands_sender
-                    .send(EngineCommand::AdvanceOneFrame)
-                    .unwrap();
-            }
-            // New shortcuts for toolbar buttons
-            if ctx.input(|i| i.key_pressed(Key::F1)) {
-                self.show_info = !self.show_info;
-            }
-            if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::R)) {
-                self.engine_commands_sender
-                    .send(EngineCommand::UpdateSimulationConfig(
-                        self.simulation_config,
-                    ))
-                    .unwrap();
-                self.engine_commands_sender
-                    .send(EngineCommand::ResetWorld)
-                    .unwrap();
-                self.engine_commands_sender
-                    .send(EngineCommand::CreateSnakes(10))
-                    .unwrap();
-                self.paused = false;
-            }
-            if ctx.input(|i| i.key_pressed(Key::E)) {
-                self.show_simulation_settings = !self.show_simulation_settings;
-            }
-            if ctx.input(|i| i.key_pressed(Key::M)) {
-                self.show_mutation_settings = !self.show_mutation_settings;
-            }
-            if ctx.input(|i| i.key_pressed(Key::D)) {
-                self.show_dna_settings = !self.show_dna_settings;
-            }
-            if ctx.input(|i| i.key_pressed(Key::P)) {
-                self.show_species = !self.show_species;
-            }
-            if ctx.input(|i| i.key_pressed(Key::N)) {
-                self.show_networks = !self.show_networks;
-            }
-            if ctx.input(|i| i.key_pressed(Key::T)) {
-                self.show_statistics = !self.show_statistics;
-            }
-            if ctx.input(|i| i.key_pressed(Key::S)) {
-                self.engine_commands_sender
-                    .send(EngineCommand::CreateSnakes(10))
-                    .unwrap();
-            }
-            if ctx.input(|i| i.key_pressed(Key::Space)) {
-                self.paused = !self.paused;
-                self.engine_commands_sender
-                    .send(EngineCommand::FlipRunningState)
-                    .unwrap();
-            }
+            self.render_toolbar(ui);
+            self.render_central_panel(ctx, ui);
         });
+        self.handle_keyboard_shortcuts(ctx);
         if self.can_draw_frame {
             ctx.request_repaint();
             self.can_draw_frame = false;
@@ -1552,7 +1569,6 @@ impl eframe::App for MyEguiApp {
             .send(EngineCommand::RepaintRequested);
     }
 }
-
 fn u32_to_color(u: u32) -> Color32 {
     let mut hasher = DefaultHasher::new();
     u.hash(&mut hasher);
